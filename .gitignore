@@ -1,0 +1,25 @@
+# Environment / secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Large media files
+*.mp4
+*.pptx
+
+# macOS
+.DS_Store
+
+# Logs / data
+sentinel_ai/logs/
+sentinel_ai/data/
+
+# Misc
+=1.0.0

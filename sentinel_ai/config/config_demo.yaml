@@ -1,0 +1,140 @@
+# Sentinel AI - Demo Configuration
+# Optimized for easy anomaly detection and automatic recovery
+
+system:
+  name: "Sentinel AI Demo"
+  version: "1.0.0"
+  device_id: "${DEVICE_ID:-demo-device-001}"
+  environment: "${ENVIRONMENT:-demo}"
+  log_level: "${LOG_LEVEL:-INFO}"
+
+monitoring:
+  # Faster collection for demo
+  collection_interval: 3
+  health_check_interval: 5
+
+  metrics:
+    cpu:
+      enabled: true
+      threshold_percent: 70  # Lower threshold for easier detection
+    memory:
+      enabled: true
+      threshold_percent: 75  # Lower threshold
+    disk:
+      enabled: true
+      threshold_percent: 90
+    network:
+      enabled: true
+      max_packet_loss_percent: 5
+      ping_hosts:
+        - "8.8.8.8"
+    mqtt:
+      enabled: false  # Disabled for demo
+    sensors:
+      enabled: false  # Disabled for demo
+
+anomaly_detection:
+  enabled: true
+
+  methods:
+    z_score:
+      enabled: true
+      threshold: 2.5  # Lower for easier detection
+      window_size: 50  # Smaller window
+    spike_detection:
+      enabled: true
+      multiplier: 2.0  # Lower multiplier
+    threshold:
+      enabled: true
+
+  ml:
+    enabled: true
+    model: "isolation_forest"
+    contamination: 0.15  # Higher contamination for demo
+    retrain_interval_hours: 24
+    min_samples_for_training: 100  # Lower for faster training
+
+  baseline:
+    window_size: 100
+    update_interval_minutes: 5
+
+diagnosis:
+  enabled: true
+
+  rules:
+    enabled: true
+    config_path: "config/diagnosis_rules.yaml"
+
+  llm:
+    enabled: false  # Disabled for demo (no AWS needed)
+
+recovery:
+  enabled: true
+  auto_recovery: true  # ENABLED for automatic recovery
+  max_retries: 3
+  retry_delay_seconds: 3
+  cooldown_period_seconds: 60  # Shorter cooldown for demo
+
+  actions:
+    # Note: Most actions are simulated in demo mode
+    restart_mqtt:
+      enabled: false
+    kill_process:
+      enabled: true  # Enabled but simulated
+      max_memory_mb: 500
+      timeout_seconds: 10
+    reconnect_sensor:
+      enabled: false
+    failover:
+      enabled: false
+    clear_cache:
+      enabled: true
+      paths:
+        - "/tmp/sentinel_cache"
+    restart_service:
+      enabled: false
+
+learning:
+  enabled: true
+
+  local_db:
+    path: "data/sentinel.db"
+    backup_interval_hours: 24
+    retention_days: 30  # Shorter retention for demo
+
+  aws_sync:
+    enabled: false  # Disabled for demo
+
+  adaptation:
+    enabled: true
+    threshold_adjustment: true
+    strategy_refinement: true
+    min_incidents_for_learning: 3  # Lower for demo
+
+event_bus:
+  type: "in_memory"
+  buffer_size: 1000
+  max_retries: 3
+
+aws:
+  enabled: false  # Disabled for demo
+
+simulation:
+  enabled: false  # Manual simulation via scripts
+
+logging:
+  level: "${LOG_LEVEL:-INFO}"
+  format: "json"
+
+  handlers:
+    console:
+      enabled: true
+      level: "INFO"
+    file:
+      enabled: true
+      level: "DEBUG"
+      path: "logs/sentinel.log"
+      max_bytes: 104857600
+      backup_count: 5
+    cloudwatch:
+      enabled: false

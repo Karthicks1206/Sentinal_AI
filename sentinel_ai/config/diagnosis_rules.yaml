@@ -1,0 +1,251 @@
+# Diagnosis Rules - Rule-based reasoning for root cause analysis
+
+rules:
+  # High CPU Usage Rules
+  - id: "cpu_high_with_process"
+    name: "High CPU with specific process"
+    conditions:
+      - metric: "cpu_percent"
+        operator: ">"
+        value: 80
+      - metric: "top_process_cpu"
+        operator: ">"
+        value: 50
+    diagnosis: "High CPU usage caused by process {top_process_name} consuming {top_process_cpu}%"
+    severity: "high"
+    recommended_actions:
+      - "kill_process"
+      - "restart_service"
+
+  - id: "cpu_sustained_high"
+    name: "Sustained high CPU"
+    conditions:
+      - metric: "cpu_percent"
+        operator: ">"
+        value: 85
+        duration_minutes: 5
+    diagnosis: "Sustained high CPU usage detected for over 5 minutes"
+    severity: "critical"
+    recommended_actions:
+      - "investigate_processes"
+      - "scale_resources"
+
+  # Memory Issues
+  - id: "memory_leak"
+    name: "Potential memory leak"
+    conditions:
+      - metric: "memory_percent"
+        operator: ">"
+        value: 85
+      - metric: "memory_trend"
+        operator: "increasing"
+        window_minutes: 30
+    diagnosis: "Potential memory leak detected - memory usage increasing steadily"
+    severity: "critical"
+    recommended_actions:
+      - "kill_process"
+      - "restart_service"
+      - "clear_cache"
+
+  - id: "memory_spike"
+    name: "Sudden memory spike"
+    conditions:
+      - metric: "memory_percent"
+        operator: ">"
+        value: 80
+      - metric: "memory_change_rate"
+        operator: ">"
+        value: 30
+    diagnosis: "Sudden memory spike detected - {memory_change_rate}% increase in short time"
+    severity: "high"
+    recommended_actions:
+      - "kill_process"
+      - "clear_cache"
+
+  # MQTT Connectivity
+  - id: "mqtt_disconnected"
+    name: "MQTT broker disconnected"
+    conditions:
+      - metric: "mqtt_connected"
+        operator: "=="
+        value: false
+    diagnosis: "MQTT broker connection lost"
+    severity: "critical"
+    recommended_actions:
+      - "restart_mqtt"
+      - "failover"
+
+  - id: "mqtt_high_latency"
+    name: "MQTT high publish latency"
+    conditions:
+      - metric: "mqtt_latency_ms"
+        operator: ">"
+        value: 5000
+    diagnosis: "MQTT broker experiencing high latency: {mqtt_latency_ms}ms"
+    severity: "high"
+    recommended_actions:
+      - "check_network"
+      - "restart_mqtt"
+
+  # Network Issues
+  - id: "network_packet_loss"
+    name: "High network packet loss"
+    conditions:
+      - metric: "packet_loss_percent"
+        operator: ">"
+        value: 10
+    diagnosis: "High network packet loss detected: {packet_loss_percent}%"
+    severity: "high"
+    recommended_actions:
+      - "check_network"
+      - "failover"
+
+  - id: "network_unreachable"
+    name: "Network unreachable"
+    conditions:
+      - metric: "ping_success"
+        operator: "=="
+        value: false
+      - metric: "packet_loss_percent"
+        operator: ">"
+        value: 50
+    diagnosis: "Network connectivity severely degraded or unreachable"
+    severity: "critical"
+    recommended_actions:
+      - "check_network_interface"
+      - "restart_network"
+
+  # Disk Issues
+  - id: "disk_full"
+    name: "Disk space critical"
+    conditions:
+      - metric: "disk_percent"
+        operator: ">"
+        value: 95
+    diagnosis: "Critical disk space usage: {disk_percent}% used"
+    severity: "critical"
+    recommended_actions:
+      - "clear_cache"
+      - "cleanup_logs"
+      - "rotate_data"
+
+  - id: "disk_high"
+    name: "Disk space high"
+    conditions:
+      - metric: "disk_percent"
+        operator: ">"
+        value: 85
+    diagnosis: "High disk space usage: {disk_percent}% used"
+    severity: "medium"
+    recommended_actions:
+      - "clear_cache"
+      - "cleanup_logs"
+
+  # Sensor Issues
+  - id: "sensor_timeout"
+    name: "Sensor read timeout"
+    conditions:
+      - metric: "sensor_latency_ms"
+        operator: ">"
+        value: 5000
+    diagnosis: "Sensor read timeout - latency {sensor_latency_ms}ms exceeds threshold"
+    severity: "high"
+    recommended_actions:
+      - "reconnect_sensor"
+      - "restart_service"
+
+  - id: "sensor_failure"
+    name: "Sensor communication failure"
+    conditions:
+      - metric: "sensor_success_rate"
+        operator: "<"
+        value: 0.5
+    diagnosis: "Sensor failure - success rate below 50%"
+    severity: "critical"
+    recommended_actions:
+      - "reconnect_sensor"
+      - "hardware_check"
+
+  # Combined Issues
+  - id: "system_overload"
+    name: "System-wide overload"
+    conditions:
+      - metric: "cpu_percent"
+        operator: ">"
+        value: 80
+      - metric: "memory_percent"
+        operator: ">"
+        value: 80
+      - metric: "disk_io_wait"
+        operator: ">"
+        value: 50
+    diagnosis: "System-wide resource overload detected across CPU, memory, and disk"
+    severity: "critical"
+    recommended_actions:
+      - "kill_process"
+      - "restart_service"
+      - "scale_resources"
+
+  - id: "cascading_failure"
+    name: "Cascading failure pattern"
+    conditions:
+      - metric: "mqtt_connected"
+        operator: "=="
+        value: false
+      - metric: "sensor_success_rate"
+        operator: "<"
+        value: 0.7
+      - metric: "cpu_percent"
+        operator: ">"
+        value: 85
+    diagnosis: "Cascading failure detected - MQTT down, sensors failing, CPU overloaded"
+    severity: "critical"
+    recommended_actions:
+      - "full_system_restart"
+      - "failover"
+
+# Action definitions
+actions:
+  kill_process:
+    description: "Terminate high-resource consuming process"
+    risk_level: "medium"
+
+  restart_service:
+    description: "Restart Sentinel AI service"
+    risk_level: "medium"
+
+  restart_mqtt:
+    description: "Restart MQTT broker service"
+    risk_level: "low"
+
+  clear_cache:
+    description: "Clear system and application caches"
+    risk_level: "low"
+
+  failover:
+    description: "Switch to backup infrastructure"
+    risk_level: "high"
+
+  check_network:
+    description: "Run network diagnostics"
+    risk_level: "low"
+
+  reconnect_sensor:
+    description: "Reconnect to sensor"
+    risk_level: "low"
+
+  full_system_restart:
+    description: "Restart entire Sentinel system"
+    risk_level: "high"
+
+  scale_resources:
+    description: "Request resource scaling (cloud-based)"
+    risk_level: "medium"
+
+  cleanup_logs:
+    description: "Clean up old log files"
+    risk_level: "low"
+
+  rotate_data:
+    description: "Archive and rotate old data"
+    risk_level: "medium"

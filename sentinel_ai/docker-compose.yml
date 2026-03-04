@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  sentinel-ai:
+    build: .
+    container_name: sentinel-ai
+    restart: unless-stopped
+
+    environment:
+      - DEVICE_ID=${DEVICE_ID:-sentinel-docker-001}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - MQTT_BROKER=${MQTT_BROKER:-mosquitto}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # AWS credentials (if not using IAM role)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+      # IoT Core
+      - IOT_ENDPOINT=${IOT_ENDPOINT}
+      - THING_NAME=${THING_NAME}
+
+      # DynamoDB & S3
+      - DYNAMODB_TABLE=${DYNAMODB_TABLE:-sentinel-incidents}
+      - S3_BUCKET=${S3_BUCKET}
+
+    volumes:
+      # Persistent data
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+      # Configuration (read-only)
+      - ./config:/app/config:ro
+
+      # AWS IoT certificates
+      - ./certs:/app/certs:ro
+
+    networks:
+      - sentinel-network
+
+    depends_on:
+      - mosquitto
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sentinel-mosquitto
+    restart: unless-stopped
+
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+    volumes:
+      - ./deployment/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
+
+    networks:
+      - sentinel-network
+
+networks:
+  sentinel-network:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  mosquitto-logs:

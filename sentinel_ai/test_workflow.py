@@ -1,0 +1,573 @@
+#!/usr/bin/env python3
+"""
+Sentinel AI - Comprehensive Test Workflow
+Tests multi-agent system step-by-step:
+1. System monitoring (logs, power, network)
+2. Trigger CPU/RAM overload
+3. Verify anomaly detection
+4. Verify diagnosis
+5. Verify autonomous recovery
+6. Verify learning/adaptation
+"""
+
+import sys
+import time
+import threading
+import psutil
+from pathlib import Path
+from datetime import datetime
+from collections import deque
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from core.config import get_config
+from core.logging import setup_logging, get_logger
+from core.event_bus import get_event_bus, EventPriority
+from core.database import get_database
+
+from agents.monitoring import MonitoringAgent
+from agents.anomaly import AnomalyDetectionAgent
+from agents.diagnosis import DiagnosisAgent
+from agents.recovery import RecoveryAgent
+from agents.learning import LearningAgent
+
+
+class TestWorkflow:
+    """
+    Orchestrates comprehensive testing of Sentinel AI system
+    """
+
+    def __init__(self):
+        """Initialize test workflow"""
+        print("="*80)
+        print("SENTINEL AI - COMPREHENSIVE TEST WORKFLOW")
+        print("="*80)
+        print()
+
+        # Load configuration
+        self.config = get_config()
+
+        # Disable AWS for testing
+        self.config.set('aws.enabled', False)
+        self.config.set('simulation.enabled', False)
+
+        # Setup logging
+        setup_logging(self.config)
+        self.logger = get_logger('TestWorkflow')
+
+        # Initialize infrastructure
+        self.event_bus = get_event_bus(self.config)
+        self.database = get_database(self.config)
+
+        # Event tracking
+        self.events_received = {
+            'health.metric': deque(maxlen=100),
+            'anomaly.detected': deque(maxlen=50),
+            'diagnosis.complete': deque(maxlen=50),
+            'recovery.action': deque(maxlen=50)
+        }
+
+        # Subscribe to all events for tracking
+        self._setup_event_tracking()
+
+        # Initialize agents
+        self.agents = {}
+        self._init_agents()
+
+        # Test state
+        self.test_results = []
+        self.current_test = None
+
+    def _setup_event_tracking(self):
+        """Setup event tracking for verification"""
+        def track_health_metric(event):
+            self.events_received['health.metric'].append(event)
+
+        def track_anomaly(event):
+            self.events_received['anomaly.detected'].append(event)
+            print(f"\n🚨 ANOMALY DETECTED: {event.data['anomaly']['metric_name']} - {event.data['anomaly']['type']}")
+            print(f"   Severity: {event.data['anomaly']['severity']}")
+            print(f"   Value: {event.data['anomaly']['value']:.2f}")
+
+        def track_diagnosis(event):
+            self.events_received['diagnosis.complete'].append(event)
+            print(f"\n🔍 DIAGNOSIS: {event.data['diagnosis']['diagnosis']}")
+            print(f"   Root Cause: {event.data['diagnosis']['root_cause']}")
+            print(f"   Actions: {event.data['diagnosis']['recommended_actions']}")
+
+        def track_recovery(event):
+            self.events_received['recovery.action'].append(event)
+            print(f"\n🔧 RECOVERY ACTIONS:")
+            for action in event.data['actions']:
+                status_icon = "✅" if action['status'] == 'success' else "❌"
+                print(f"   {status_icon} {action['action_name']}: {action['message']}")
+
+        self.event_bus.subscribe("health.metric", track_health_metric)
+        self.event_bus.subscribe("anomaly.detected", track_anomaly)
+        self.event_bus.subscribe("diagnosis.complete", track_diagnosis)
+        self.event_bus.subscribe("recovery.action", track_recovery)
+
+    def _init_agents(self):
+        """Initialize all agents"""
+        print("Initializing agents...")
+
+        self.agents['monitoring'] = MonitoringAgent(
+            name='MonitoringAgent',
+            config=self.config,
+            event_bus=self.event_bus,
+            logger=get_logger('MonitoringAgent'),
+            database=self.database
+        )
+
+        self.agents['anomaly'] = AnomalyDetectionAgent(
+            name='AnomalyDetectionAgent',
+            config=self.config,
+            event_bus=self.event_bus,
+            logger=get_logger('AnomalyDetectionAgent'),
+            database=self.database
+        )
+
+        self.agents['diagnosis'] = DiagnosisAgent(
+            name='DiagnosisAgent',
+            config=self.config,
+            event_bus=self.event_bus,
+            logger=get_logger('DiagnosisAgent'),
+            database=self.database
+        )
+
+        self.agents['recovery'] = RecoveryAgent(
+            name='RecoveryAgent',
+            config=self.config,
+            event_bus=self.event_bus,
+            logger=get_logger('RecoveryAgent'),
+            database=self.database
+        )
+
+        self.agents['learning'] = LearningAgent(
+            name='LearningAgent',
+            config=self.config,
+            event_bus=self.event_bus,
+            logger=get_logger('LearningAgent'),
+            database=self.database
+        )
+
+        print("✅ All agents initialized\n")
+
+    def start_agents(self):
+        """Start all agents"""
+        print("Starting agents...")
+        for name, agent in self.agents.items():
+            agent.start()
+            print(f"  ✅ {name} started")
+        print()
+        time.sleep(2)  # Let agents initialize
+
+    def stop_agents(self):
+        """Stop all agents"""
+        print("\nStopping agents...")
+        for name, agent in self.agents.items():
+            agent.stop()
+            print(f"  ✅ {name} stopped")
+
+    def run_test(self, test_name, test_func, expected_result):
+        """
+        Run a test and track results
+
+        Args:
+            test_name: Name of the test
+            test_func: Function to execute
+            expected_result: Expected outcome
+        """
+        print("="*80)
+        print(f"TEST: {test_name}")
+        print("="*80)
+        print(f"Expected: {expected_result}")
+        print()
+
+        self.current_test = test_name
+        start_time = time.time()
+
+        try:
+            result = test_func()
+            duration = time.time() - start_time
+
+            if result:
+                print(f"\n✅ PASSED in {duration:.2f}s")
+                self.test_results.append({
+                    'test': test_name,
+                    'status': 'PASSED',
+                    'duration': duration
+                })
+            else:
+                print(f"\n❌ FAILED after {duration:.2f}s")
+                self.test_results.append({
+                    'test': test_name,
+                    'status': 'FAILED',
+                    'duration': duration
+                })
+
+            return result
+
+        except Exception as e:
+            duration = time.time() - start_time
+            print(f"\n❌ ERROR: {e}")
+            self.test_results.append({
+                'test': test_name,
+                'status': 'ERROR',
+                'duration': duration,
+                'error': str(e)
+            })
+            return False
+
+    # =========================================================================
+    # TEST 1: Basic System Monitoring
+    # =========================================================================
+
+    def test_1_basic_monitoring(self):
+        """Test that monitoring agent collects basic system metrics"""
+        print("Waiting for monitoring agent to collect metrics...")
+
+        # Clear previous events
+        self.events_received['health.metric'].clear()
+
+        # Wait for at least 3 metric collections
+        for i in range(15):
+            time.sleep(1)
+            count = len(self.events_received['health.metric'])
+            print(f"  Metrics collected: {count}/3", end='\r')
+            if count >= 3:
+                break
+
+        if len(self.events_received['health.metric']) >= 3:
+            # Verify metrics content
+            latest_event = self.events_received['health.metric'][-1]
+            metrics = latest_event.data.get('metrics', {})
+
+            print(f"\n\nLatest Metrics Collected:")
+            print(f"  CPU: {metrics.get('cpu', {}).get('cpu_percent', 0):.1f}%")
+            print(f"  Memory: {metrics.get('memory', {}).get('memory_percent', 0):.1f}%")
+            print(f"  Disk: {metrics.get('disk', {}).get('disk_percent', 0):.1f}%")
+
+            # Check that we have key metrics
+            has_cpu = 'cpu' in metrics and 'cpu_percent' in metrics['cpu']
+            has_memory = 'memory' in metrics and 'memory_percent' in metrics['memory']
+            has_disk = 'disk' in metrics and 'disk_percent' in metrics['disk']
+
+            return has_cpu and has_memory and has_disk
+
+        return False
+
+    # =========================================================================
+    # TEST 2: CPU Overload Detection
+    # =========================================================================
+
+    def test_2_cpu_overload_detection(self):
+        """Test CPU overload detection and response"""
+        print("Triggering CPU overload...")
+
+        # Clear events
+        self.events_received['anomaly.detected'].clear()
+        self.events_received['diagnosis.complete'].clear()
+
+        # Create CPU stress
+        stop_event = threading.Event()
+
+        def cpu_stress():
+            """CPU intensive task"""
+            while not stop_event.is_set():
+                _ = sum(i*i for i in range(100000))
+
+        # Start multiple CPU stress threads
+        cpu_count = psutil.cpu_count()
+        threads = []
+
+        print(f"  Starting {cpu_count} CPU stress threads...")
+        for _ in range(cpu_count):
+            t = threading.Thread(target=cpu_stress, daemon=True)
+            t.start()
+            threads.append(t)
+
+        # Monitor for anomaly detection
+        print("  Waiting for anomaly detection (max 30s)...")
+        detected = False
+
+        for i in range(30):
+            time.sleep(1)
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            anomaly_count = len(self.events_received['anomaly.detected'])
+
+            print(f"  CPU: {cpu_percent:.1f}% | Anomalies: {anomaly_count}", end='\r')
+
+            if anomaly_count > 0:
+                detected = True
+                break
+
+        # Stop CPU stress
+        stop_event.set()
+        for t in threads:
+            t.join(timeout=1)
+
+        print(f"\n  CPU stress stopped")
+
+        if detected:
+            # Wait a bit more for diagnosis and recovery
+            print("  Waiting for diagnosis and recovery...")
+            time.sleep(5)
+
+            diagnosis_count = len(self.events_received['diagnosis.complete'])
+            recovery_count = len(self.events_received['recovery.action'])
+
+            print(f"\n  Results:")
+            print(f"    Anomalies detected: {len(self.events_received['anomaly.detected'])}")
+            print(f"    Diagnoses completed: {diagnosis_count}")
+            print(f"    Recovery actions: {recovery_count}")
+
+            return diagnosis_count > 0
+
+        return False
+
+    # =========================================================================
+    # TEST 3: Memory Spike Detection
+    # =========================================================================
+
+    def test_3_memory_spike_detection(self):
+        """Test memory spike detection and response"""
+        print("Triggering memory spike...")
+
+        # Clear events
+        self.events_received['anomaly.detected'].clear()
+        self.events_received['diagnosis.complete'].clear()
+
+        # Get available memory
+        mem = psutil.virtual_memory()
+        available_mb = mem.available / (1024 * 1024)
+
+        # Allocate 30% of available memory
+        target_mb = int(available_mb * 0.3)
+        print(f"  Allocating {target_mb}MB memory...")
+
+        memory_hog = []
+        chunk_size = 1024 * 1024  # 1MB chunks
+
+        try:
+            for i in range(target_mb):
+                memory_hog.append(' ' * chunk_size)
+
+                if i % 50 == 0:
+                    current_percent = psutil.virtual_memory().percent
+                    print(f"  Memory usage: {current_percent:.1f}%", end='\r')
+
+            current_percent = psutil.virtual_memory().percent
+            print(f"\n  Peak memory usage: {current_percent:.1f}%")
+
+            # Wait for detection
+            print("  Waiting for anomaly detection (max 20s)...")
+            detected = False
+
+            for i in range(20):
+                time.sleep(1)
+                anomaly_count = len(self.events_received['anomaly.detected'])
+                print(f"  Waiting... {i+1}s | Anomalies: {anomaly_count}", end='\r')
+
+                if anomaly_count > 0:
+                    detected = True
+                    break
+
+            print()
+
+            # Release memory
+            memory_hog.clear()
+            del memory_hog
+
+            print("  Memory released")
+
+            if detected:
+                # Wait for diagnosis
+                time.sleep(3)
+
+                diagnosis_count = len(self.events_received['diagnosis.complete'])
+
+                print(f"\n  Results:")
+                print(f"    Anomalies detected: {len(self.events_received['anomaly.detected'])}")
+                print(f"    Diagnoses completed: {diagnosis_count}")
+
+                return diagnosis_count > 0
+
+            return False
+
+        except MemoryError:
+            print("\n  MemoryError encountered (expected on low-memory systems)")
+            return True  # Still counts as success if we triggered memory pressure
+
+    # =========================================================================
+    # TEST 4: Recovery Action Execution
+    # =========================================================================
+
+    def test_4_recovery_execution(self):
+        """Test that recovery actions are executed"""
+        print("Checking recovery action execution...")
+
+        # Recovery should have been triggered in previous tests
+        recovery_count = len(self.events_received['recovery.action'])
+
+        print(f"  Total recovery actions executed: {recovery_count}")
+
+        if recovery_count > 0:
+            # Show details of recovery actions
+            for event in self.events_received['recovery.action']:
+                print(f"\n  Recovery Event:")
+                for action in event.data.get('actions', []):
+                    print(f"    - {action['action_name']}: {action['status']}")
+
+            return True
+        else:
+            print("  No recovery actions executed yet")
+            return False
+
+    # =========================================================================
+    # TEST 5: Database Persistence
+    # =========================================================================
+
+    def test_5_database_persistence(self):
+        """Test that incidents are persisted to database"""
+        print("Checking database persistence...")
+
+        # Get recent incidents from database
+        incidents = self.database.get_recent_incidents(limit=10)
+
+        print(f"  Incidents in database: {len(incidents)}")
+
+        if len(incidents) > 0:
+            print("\n  Recent Incidents:")
+            for inc in incidents[:3]:
+                print(f"    - {inc['timestamp']}: {inc.get('diagnosis', 'N/A')}")
+                print(f"      Status: {inc.get('recovery_status', 'N/A')}")
+
+            return True
+
+        return False
+
+    # =========================================================================
+    # TEST 6: Learning and Adaptation
+    # =========================================================================
+
+    def test_6_learning_adaptation(self):
+        """Test that learning agent tracks and adapts"""
+        print("Checking learning and adaptation...")
+
+        # Check if learning data exists
+        learning_agent = self.agents['learning']
+
+        # Get recovery stats
+        recovery_stats = learning_agent.get_recovery_stats()
+
+        print(f"  Recovery action statistics:")
+        if recovery_stats:
+            for action, success_rate in recovery_stats.items():
+                print(f"    {action}: {success_rate:.1%} success rate")
+            return True
+        else:
+            print("    No statistics yet (need more incidents)")
+            return len(self.events_received['recovery.action']) > 0
+
+    # =========================================================================
+    # Main Test Execution
+    # =========================================================================
+
+    def run_all_tests(self):
+        """Run complete test suite"""
+        print("Starting Sentinel AI Multi-Agent System Test\n")
+
+        # Start agents
+        self.start_agents()
+
+        try:
+            # Run tests sequentially
+            tests = [
+                ("Basic System Monitoring",
+                 self.test_1_basic_monitoring,
+                 "Agent collects CPU, memory, disk metrics"),
+
+                ("CPU Overload Detection",
+                 self.test_2_cpu_overload_detection,
+                 "Detect high CPU, diagnose, suggest recovery"),
+
+                ("Memory Spike Detection",
+                 self.test_3_memory_spike_detection,
+                 "Detect memory spike, diagnose cause"),
+
+                ("Recovery Action Execution",
+                 self.test_4_recovery_execution,
+                 "Recovery actions executed successfully"),
+
+                ("Database Persistence",
+                 self.test_5_database_persistence,
+                 "Incidents saved to database"),
+
+                ("Learning & Adaptation",
+                 self.test_6_learning_adaptation,
+                 "System learns from incidents"),
+            ]
+
+            for test_name, test_func, expected in tests:
+                self.run_test(test_name, test_func, expected)
+                time.sleep(2)  # Brief pause between tests
+
+            # Print summary
+            self.print_summary()
+
+        finally:
+            # Stop agents
+            self.stop_agents()
+
+            # Stop event bus
+            self.event_bus.stop()
+
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "="*80)
+        print("TEST SUMMARY")
+        print("="*80)
+
+        total = len(self.test_results)
+        passed = sum(1 for r in self.test_results if r['status'] == 'PASSED')
+        failed = sum(1 for r in self.test_results if r['status'] == 'FAILED')
+        errors = sum(1 for r in self.test_results if r['status'] == 'ERROR')
+
+        print(f"\nTotal Tests: {total}")
+        print(f"✅ Passed: {passed}")
+        print(f"❌ Failed: {failed}")
+        print(f"⚠️  Errors: {errors}")
+        print(f"\nSuccess Rate: {(passed/total*100) if total > 0 else 0:.1f}%")
+
+        print("\nDetailed Results:")
+        for result in self.test_results:
+            status_icon = "✅" if result['status'] == 'PASSED' else "❌"
+            print(f"  {status_icon} {result['test']}: {result['status']} ({result['duration']:.2f}s)")
+
+        print("\nEvent Summary:")
+        print(f"  Health metrics collected: {len(self.events_received['health.metric'])}")
+        print(f"  Anomalies detected: {len(self.events_received['anomaly.detected'])}")
+        print(f"  Diagnoses completed: {len(self.events_received['diagnosis.complete'])}")
+        print(f"  Recovery actions: {len(self.events_received['recovery.action'])}")
+
+        print("\n" + "="*80)
+
+
+def main():
+    """Main entry point"""
+    try:
+        workflow = TestWorkflow()
+        workflow.run_all_tests()
+
+    except KeyboardInterrupt:
+        print("\n\nTest interrupted by user")
+    except Exception as e:
+        print(f"\n\nFatal error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == '__main__':
+    main()

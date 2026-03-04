@@ -1,0 +1,50 @@
+[Unit]
+Description=Sentinel AI - Autonomous Self-Healing IoT Infrastructure
+Documentation=https://github.com/your-org/sentinel-ai
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sentinel
+Group=sentinel
+WorkingDirectory=/opt/sentinel
+
+# Environment variables
+Environment="DEVICE_ID=raspberry-pi-001"
+Environment="ENVIRONMENT=production"
+Environment="AWS_REGION=us-east-1"
+Environment="MQTT_BROKER=localhost"
+Environment="LOG_LEVEL=INFO"
+Environment="PYTHONUNBUFFERED=1"
+
+# Load additional env vars from file
+EnvironmentFile=-/opt/sentinel/.env
+
+# Execute
+ExecStart=/usr/bin/python3 /opt/sentinel/main.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Resource limits
+MemoryLimit=512M
+CPUQuota=50%
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sentinel/data /opt/sentinel/logs
+
+# Logging
+StandardOutput=append:/opt/sentinel/logs/systemd-stdout.log
+StandardError=append:/opt/sentinel/logs/systemd-stderr.log
+SyslogIdentifier=sentinel-ai
+
+[Install]
+WantedBy=multi-user.target

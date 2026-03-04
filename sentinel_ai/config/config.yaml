@@ -1,0 +1,262 @@
+# Sentinel AI - Configuration File
+# Production-ready distributed self-healing IoT infrastructure
+
+system:
+  name: "Sentinel AI"
+  version: "1.0.0"
+  device_id: "${DEVICE_ID:-raspberry-pi-001}"
+  environment: "${ENVIRONMENT:-production}"
+  log_level: "${LOG_LEVEL:-INFO}"
+
+monitoring:
+  enabled: true
+  # Health check intervals (seconds)
+  collection_interval: 5
+  health_check_interval: 10
+
+  # Metrics to collect
+  metrics:
+    cpu:
+      enabled: true
+      threshold_percent: 80
+    memory:
+      enabled: true
+      threshold_percent: 85
+    disk:
+      enabled: true
+      threshold_percent: 90
+    network:
+      enabled: true
+      max_packet_loss_percent: 5
+      ping_hosts:
+        - "8.8.8.8"
+        - "1.1.1.1"
+    mqtt:
+      enabled: false   # disabled on macOS dev — enable on real IoT hardware
+      broker_host: "${MQTT_BROKER:-localhost}"
+      broker_port: 1883
+      timeout_seconds: 10
+    sensors:
+      enabled: false   # disabled on macOS dev — enable on real IoT hardware
+      max_latency_ms: 1000
+
+anomaly_detection:
+  enabled: true
+
+  # Persistence: anomaly must be observed for this many consecutive readings before firing
+  # At 5s collection interval, 3 readings = 15 seconds sustained
+  min_consecutive_readings: 3
+
+  # Cooldown: once an anomaly fires for a metric, wait this many minutes before re-firing
+  cooldown_minutes: 5
+
+  # Statistical methods
+  methods:
+    z_score:
+      enabled: true
+      threshold: 3.0
+      window_size: 100
+    spike_detection:
+      enabled: true
+      multiplier: 2.5
+    threshold:
+      enabled: true
+
+  # Machine Learning
+  ml:
+    enabled: true
+    model: "isolation_forest"
+    contamination: 0.1
+    retrain_interval_hours: 24
+    min_samples_for_training: 50
+
+  # Rolling baseline
+  baseline:
+    window_size: 500
+    update_interval_minutes: 15
+
+diagnosis:
+  enabled: true
+
+  # Rule-based diagnosis
+  rules:
+    enabled: true
+    config_path: "config/diagnosis_rules.yaml"
+
+  # LLM-powered diagnosis (Bedrock disabled — Ollama handles AI diagnosis)
+  llm:
+    enabled: false
+    provider: "aws_bedrock"
+    model_id: "anthropic.claude-3-sonnet-20240229-v1:0"
+    region: "${AWS_REGION:-us-east-1}"
+    max_tokens: 2048
+    temperature: 0.3
+    timeout_seconds: 30
+
+    # Context window for analysis
+    log_context_lines: 100
+    metric_history_minutes: 30
+
+recovery:
+  enabled: true
+
+  # Automatic recovery settings
+  auto_recovery: true
+  max_retries: 3
+  retry_delay_seconds: 5
+  cooldown_period_seconds: 300
+
+  # Available recovery actions
+  actions:
+    restart_mqtt:
+      enabled: true
+      command: "sudo systemctl restart mosquitto"
+      timeout_seconds: 30
+    kill_process:
+      enabled: true
+      max_memory_mb: 500
+      timeout_seconds: 10
+    reconnect_sensor:
+      enabled: true
+      timeout_seconds: 20
+    failover:
+      enabled: true
+      backup_broker: "${BACKUP_MQTT_BROKER:-}"
+    clear_cache:
+      enabled: true
+      paths:
+        - "/tmp/sentinel_cache"
+        - "/var/cache/sentinel"
+    restart_service:
+      enabled: true
+      services:
+        - "sentinel-agent"
+
+learning:
+  enabled: true
+
+  # Local persistence
+  local_db:
+    path: "data/sentinel.db"
+    backup_interval_hours: 24
+    retention_days: 90
+
+  # AWS sync
+  aws_sync:
+    enabled: true
+    dynamodb:
+      table_name: "${DYNAMODB_TABLE:-sentinel-incidents}"
+      region: "${AWS_REGION:-us-east-1}"
+    s3:
+      bucket_name: "${S3_BUCKET:-sentinel-logs}"
+      prefix: "incidents/"
+      region: "${AWS_REGION:-us-east-1}"
+    sync_interval_minutes: 15
+
+  # Adaptive learning
+  adaptation:
+    enabled: true
+    threshold_adjustment: true
+    strategy_refinement: true
+    min_incidents_for_learning: 10
+
+event_bus:
+  type: "in_memory"  # Options: in_memory, redis, kafka
+  buffer_size: 10000
+  max_retries: 3
+
+  # Event types
+  events:
+    - "health.metric"
+    - "anomaly.detected"
+    - "diagnosis.complete"
+    - "recovery.action"
+    - "learning.updated"
+
+aws:
+  enabled: true
+  region: "${AWS_REGION:-us-east-1}"
+
+  # AWS IoT Core
+  iot_core:
+    enabled: true
+    endpoint: "${IOT_ENDPOINT}"
+    cert_path: "certs/device.cert.pem"
+    key_path: "certs/device.private.key"
+    ca_path: "certs/root-CA.crt"
+    thing_name: "${THING_NAME:-sentinel-device-001}"
+
+    # MQTT topics
+    topics:
+      telemetry: "sentinel/telemetry/{device_id}"
+      anomalies: "sentinel/anomalies/{device_id}"
+      recovery: "sentinel/recovery/{device_id}"
+      policy: "sentinel/policy/{device_id}"
+
+  # CloudWatch
+  cloudwatch:
+    enabled: true
+    namespace: "SentinelAI"
+    log_group: "/sentinel/edge-devices"
+    metric_buffer_size: 100
+
+  # Lambda
+  lambda:
+    orchestrator_function: "sentinel-orchestrator"
+    region: "${AWS_REGION:-us-east-1}"
+
+ollama:
+  enabled: true
+  model: "llama3.2:3b"   # local model — free, no internet required
+  temperature: 0.2
+  num_predict: 512
+
+openai:
+  enabled: false          # disabled — no billing credits; Ollama is used instead
+  model: "gpt-4o"
+  max_tokens: 2048
+  temperature: 0.3
+  timeout_seconds: 30
+  # API key is read from the OPENAI_API_KEY environment variable
+
+simulation:
+  enabled: true
+
+  scenarios:
+    memory_spike:
+      enabled: true
+      trigger_percent: 90
+      duration_seconds: 60
+    mqtt_drop:
+      enabled: true
+      duration_seconds: 30
+    latency_increase:
+      enabled: true
+      multiplier: 5
+      duration_seconds: 45
+    sensor_failure:
+      enabled: true
+      failure_rate: 0.1
+    cpu_overload:
+      enabled: true
+      target_percent: 95
+      duration_seconds: 120
+
+logging:
+  level: "${LOG_LEVEL:-INFO}"
+  format: "json"
+
+  handlers:
+    console:
+      enabled: true
+      level: "INFO"
+    file:
+      enabled: true
+      level: "DEBUG"
+      path: "logs/sentinel.log"
+      max_bytes: 104857600  # 100MB
+      backup_count: 10
+    cloudwatch:
+      enabled: true
+      level: "WARNING"
+      batch_size: 100

@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel AI - Real-Time Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #00d4ff;
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .status-running {
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            color: #000;
+        }
+
+        .status-stopped {
+            background: #ff4444;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .card h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #00d4ff;
+            border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .metric {
+            margin: 15px 0;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #000;
+        }
+
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #ffaa00, #ff6600);
+        }
+
+        .progress-fill.danger {
+            background: linear-gradient(90deg, #ff4444, #cc0000);
+        }
+
+        .agent-status {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+        }
+
+        .agent-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+
+        .agent-indicator.running {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+
+        .agent-indicator.stopped {
+            background: #ff4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .logs-container {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-entry.INFO {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 3px solid #00d4ff;
+        }
+
+        .log-entry.WARNING {
+            background: rgba(255, 170, 0, 0.1);
+            border-left: 3px solid #ffaa00;
+        }
+
+        .log-entry.ERROR {
+            background: rgba(255, 68, 68, 0.1);
+            border-left: 3px solid #ff4444;
+        }
+
+        .log-timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+
+        .alert-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .alert-overlay.active {
+            display: flex;
+        }
+
+        .alert-box {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(255, 68, 68, 0.5);
+            animation: scaleIn 0.3s ease;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .alert-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .alert-message {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .alert-details {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .alert-details h3 {
+            color: #ffaa00;
+            margin-bottom: 10px;
+        }
+
+        .alert-close {
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .alert-close:hover {
+            background: #00d4ff;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            user-select: none;
+        }
+
+        .stat-box:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: #00d4ff;
+            transform: translateY(-2px);
+        }
+
+        .stat-box.active {
+            background: rgba(0, 212, 255, 0.15);
+            border-color: #00ff88;
+        }
+
+        .stat-toggle-hint {
+            font-size: 0.65em;
+            color: #555;
+            margin-top: 4px;
+        }
+
+        /* Statistics dropdown panel */
+        .stat-dropdown {
+            display: none;
+            margin-top: 16px;
+            border-top: 1px solid rgba(0,212,255,0.2);
+            padding-top: 14px;
+        }
+
+        .stat-dropdown.open {
+            display: block;
+        }
+
+        .stat-dropdown-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .stat-dropdown-title {
+            font-size: 1em;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .stat-dropdown-count {
+            font-size: 0.82em;
+            color: #888;
+        }
+
+        .stat-item {
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            border-left: 3px solid #444;
+            font-size: 0.88em;
+        }
+
+        .stat-item.sev-critical { border-left-color: #ff2222; }
+        .stat-item.sev-high     { border-left-color: #ff6600; }
+        .stat-item.sev-medium   { border-left-color: #ffaa00; }
+        .stat-item.sev-low      { border-left-color: #00d4ff; }
+        .stat-item.sev-success  { border-left-color: #00ff88; }
+        .stat-item.sev-failed   { border-left-color: #ff4444; }
+
+        .stat-item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item-main {
+            font-weight: 600;
+            color: #eee;
+        }
+
+        .stat-item-meta {
+            font-size: 0.82em;
+            color: #888;
+        }
+
+        .stat-item-sub {
+            color: #bbb;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .stat-empty {
+            color: #555;
+            font-size: 0.9em;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        .threshold-badge {
+            display: inline-block;
+            font-size: 0.78em;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255, 170, 0, 0.15);
+            border: 1px solid #ffaa00;
+            color: #ffaa00;
+            margin-top: 6px;
+        }
+
+        /* Incident Timeline */
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .incident-card {
+            background: rgba(255,255,255,0.04);
+            border-radius: 8px;
+            border-left: 4px solid #888;
+            padding: 14px 16px;
+            font-size: 0.9em;
+        }
+
+        .incident-card.severity-critical { border-left-color: #ff2222; }
+        .incident-card.severity-high     { border-left-color: #ff6600; }
+        .incident-card.severity-medium   { border-left-color: #ffaa00; }
+        .incident-card.severity-low      { border-left-color: #00d4ff; }
+
+        .incident-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .incident-title {
+            font-weight: bold;
+            color: #fff;
+            text-transform: capitalize;
+        }
+
+        .sev-badge {
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .sev-critical { background: #ff2222; color: #fff; }
+        .sev-high     { background: #ff6600; color: #fff; }
+        .sev-medium   { background: #ffaa00; color: #000; }
+        .sev-low      { background: #00d4ff; color: #000; }
+
+        .status-pill {
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .status-resolved { background: #00ff88; color: #000; }
+        .status-failed   { background: #ff4444; color: #fff; }
+        .status-attempted{ background: #ffaa00; color: #000; }
+        .status-detected { background: #888;    color: #fff; }
+
+        .incident-row {
+            display: flex;
+            gap: 8px;
+            margin: 4px 0;
+            align-items: flex-start;
+        }
+
+        .incident-label {
+            color: #00d4ff;
+            min-width: 100px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .incident-value {
+            color: #ddd;
+            flex: 1;
+        }
+
+        .action-chip {
+            display: inline-block;
+            margin: 2px 4px 2px 0;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.82em;
+        }
+        .chip-success  { background: rgba(0,255,136,0.15); border: 1px solid #00ff88; color: #00ff88; }
+        .chip-failed   { background: rgba(255,68,68,0.15);  border: 1px solid #ff4444; color: #ff4444; }
+        .chip-skipped  { background: rgba(136,136,136,0.15);border: 1px solid #888;    color: #aaa; }
+
+        .incident-ts {
+            font-size: 0.78em;
+            color: #666;
+            margin-top: 6px;
+        }
+
+        .incident-expand-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #888;
+            font-size: 0.78em;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        .incident-expand-btn:hover {
+            color: #00d4ff;
+            border-color: #00d4ff;
+        }
+
+        .incident-detail {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+
+        .incident-detail.open {
+            display: block;
+        }
+
+        .detail-section {
+            margin-bottom: 8px;
+        }
+
+        .detail-section h4 {
+            color: #00d4ff;
+            font-size: 0.88em;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-section p {
+            color: #ccc;
+            margin: 0;
+        }
+
+        .action-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4px;
+        }
+
+        .action-table td {
+            padding: 3px 6px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            vertical-align: top;
+        }
+
+        .action-table td:first-child {
+            color: #888;
+            font-size: 0.85em;
+            white-space: nowrap;
+        }
+
+        .chart-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+        }
+
+        .chart-card h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #00d4ff;
+            border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 260px;
+        }
+
+        /* Simulation Lab */
+        .sim-lab {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .sim-btn {
+            flex: 1;
+            min-width: 130px;
+            padding: 14px 10px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: bold;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .sim-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+        }
+
+        .sim-btn:active { transform: translateY(0); }
+
+        .sim-btn-cpu    { background: linear-gradient(135deg, #ff4444, #cc0000); color: #fff; }
+        .sim-btn-mem    { background: linear-gradient(135deg, #ffaa00, #cc7700); color: #000; }
+        .sim-btn-disk   { background: linear-gradient(135deg, #00d4ff, #0077cc); color: #000; }
+        .sim-btn-stop   { background: linear-gradient(135deg, #444, #222);       color: #ccc; }
+
+        .sim-btn.active {
+            animation: simPulse 1s infinite;
+            box-shadow: 0 0 16px rgba(255,68,68,0.7);
+        }
+
+        @keyframes simPulse {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.65; }
+        }
+
+        .sim-status-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .sim-status-chip {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: bold;
+            background: rgba(255,68,68,0.15);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sim-status-chip .sim-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: simPulse 1s infinite;
+        }
+
+        .sim-duration-bar {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 0.85em;
+            color: #aaa;
+        }
+
+        .sim-idle {
+            color: #555;
+            font-size: 0.88em;
+            padding: 8px 0;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SENTINEL AI</h1>
+        <p>Autonomous Self-Healing IoT Infrastructure</p>
+        <span id="systemStatus" class="status-badge status-running">● INITIALIZING</span>
+    </div>
+
+    <div class="container">
+        <!-- Metrics Grid -->
+        <div class="grid">
+            <!-- CPU Card -->
+            <div class="card">
+                <h2>CPU Usage</h2>
+                <div class="metric">
+                    <div class="metric-label">Current</div>
+                    <div class="metric-value" id="cpuValue">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="cpuBar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="metric-label" style="margin-top: 10px;">
+                    Top Process: <span id="topCpuProcess">-</span>
+                </div>
+                <div>
+                    <span class="threshold-badge">Adaptive: <span id="cpuThreshold">80</span>%</span>
+                </div>
+            </div>
+
+            <!-- Memory Card -->
+            <div class="card">
+                <h2>Memory Usage</h2>
+                <div class="metric">
+                    <div class="metric-label">Current</div>
+                    <div class="metric-value" id="memoryValue">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="memoryBar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="metric-label" style="margin-top: 10px;">
+                    Available: <span id="memoryAvailable">0 MB</span>
+                </div>
+                <div>
+                    <span class="threshold-badge">Adaptive: <span id="memThreshold">85</span>%</span>
+                </div>
+            </div>
+
+            <!-- Disk Card -->
+            <div class="card">
+                <h2>Disk Usage</h2>
+                <div class="metric">
+                    <div class="metric-label">Current</div>
+                    <div class="metric-value" id="diskValue">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="diskBar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="metric-label" style="margin-top: 10px;">
+                    Free: <span id="diskFree">0 GB</span>
+                </div>
+                <div>
+                    <span class="threshold-badge">Adaptive: <span id="diskThreshold">90</span>%</span>
+                </div>
+            </div>
+
+            <!-- Network Card -->
+            <div class="card">
+                <h2>Network</h2>
+                <div class="metric">
+                    <div class="metric-label">Ping Latency</div>
+                    <div class="metric-value" id="netLatencyValue">-- ms</div>
+                </div>
+                <div class="metric-label" style="margin-top: 8px;">
+                    Status: <span id="netPingStatus">-</span>
+                </div>
+                <div class="metric-label" style="margin-top: 6px;">
+                    Packet Loss: <span id="netLossValue">0%</span>
+                    &nbsp;|&nbsp; Sent: <span id="netBytesSent">0 MB</span>
+                    &nbsp;|&nbsp; Recv: <span id="netBytesRecv">0 MB</span>
+                </div>
+                <div>
+                    <span class="threshold-badge">Max Packet Loss: <span id="netThreshold">5</span>%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Graph -->
+        <div class="chart-card">
+            <h2>Live System Metrics</h2>
+            <div class="chart-wrapper">
+                <canvas id="metricsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Agent Status -->
+        <div class="card">
+            <h2>Agent Status</h2>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-monitoring"></div>
+                <div>Monitoring Agent</div>
+            </div>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-anomaly"></div>
+                <div>Anomaly Detection Agent</div>
+            </div>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-diagnosis"></div>
+                <div>Diagnosis Agent</div>
+            </div>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-recovery"></div>
+                <div>Recovery Agent</div>
+            </div>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-learning"></div>
+                <div>Learning Agent</div>
+            </div>
+
+            <!-- ML Model Status -->
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
+                <div style="font-size:0.82em;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">ML Models</div>
+                <div class="agent-status" style="flex-wrap:wrap;gap:4px;">
+                    <div class="agent-indicator running"></div>
+                    <div style="flex:1;">
+                        Isolation Forest
+                        <span style="font-size:0.78em;color:#555;margin-left:6px;">multivariate · always active</span>
+                    </div>
+                </div>
+                <div class="agent-status" style="flex-wrap:wrap;gap:4px;">
+                    <div class="agent-indicator" id="lstmIndicator"></div>
+                    <div style="flex:1;">
+                        Keras LSTM Autoencoder
+                        <span id="lstmStatusText" style="font-size:0.78em;color:#555;margin-left:6px;">initialising…</span>
+                    </div>
+                </div>
+                <div id="lstmProgressWrap" style="margin-top:6px;display:none;">
+                    <div style="font-size:0.75em;color:#888;margin-bottom:3px;">
+                        Buffer: <span id="lstmBufLen">0</span> readings · needs 79+ to train
+                    </div>
+                    <div style="background:rgba(255,255,255,0.08);border-radius:4px;height:6px;overflow:hidden;">
+                        <div id="lstmProgressBar" style="height:100%;background:linear-gradient(90deg,#00d4ff,#00ff88);width:0%;transition:width 0.5s;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="card">
+            <h2>Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-box" id="statBoxAnomalies" onclick="toggleStatPanel('anomalies')">
+                    <div class="stat-number" id="statAnomalies">0</div>
+                    <div class="stat-label">Anomalies</div>
+                    <div class="stat-toggle-hint">click to expand</div>
+                </div>
+                <div class="stat-box" id="statBoxDiagnoses" onclick="toggleStatPanel('diagnoses')">
+                    <div class="stat-number" id="statDiagnoses">0</div>
+                    <div class="stat-label">Diagnoses</div>
+                    <div class="stat-toggle-hint">click to expand</div>
+                </div>
+                <div class="stat-box" id="statBoxRecoveries" onclick="toggleStatPanel('recoveries')">
+                    <div class="stat-number" id="statRecoveries">0</div>
+                    <div class="stat-label">Recoveries</div>
+                    <div class="stat-toggle-hint">click to expand</div>
+                </div>
+                <div class="stat-box" id="statBoxLogs" onclick="toggleStatPanel('logs')">
+                    <div class="stat-number" id="statLogs">0</div>
+                    <div class="stat-label">Log Entries</div>
+                    <div class="stat-toggle-hint">click to expand</div>
+                </div>
+            </div>
+
+            <!-- Anomalies dropdown -->
+            <div class="stat-dropdown" id="statPanel-anomalies">
+                <div class="stat-dropdown-header">
+                    <span class="stat-dropdown-title">Anomaly Detections</span>
+                    <span class="stat-dropdown-count" id="statPanelCount-anomalies"></span>
+                </div>
+                <div id="statPanelContent-anomalies"><p class="stat-empty">Loading...</p></div>
+            </div>
+
+            <!-- Diagnoses dropdown -->
+            <div class="stat-dropdown" id="statPanel-diagnoses">
+                <div class="stat-dropdown-header">
+                    <span class="stat-dropdown-title">AI Diagnoses</span>
+                    <span class="stat-dropdown-count" id="statPanelCount-diagnoses"></span>
+                </div>
+                <div id="statPanelContent-diagnoses"><p class="stat-empty">Loading...</p></div>
+            </div>
+
+            <!-- Recoveries dropdown -->
+            <div class="stat-dropdown" id="statPanel-recoveries">
+                <div class="stat-dropdown-header">
+                    <span class="stat-dropdown-title">Recovery Actions</span>
+                    <span class="stat-dropdown-count" id="statPanelCount-recoveries"></span>
+                </div>
+                <div id="statPanelContent-recoveries"><p class="stat-empty">Loading...</p></div>
+            </div>
+
+            <!-- Logs dropdown -->
+            <div class="stat-dropdown" id="statPanel-logs">
+                <div class="stat-dropdown-header">
+                    <span class="stat-dropdown-title">Recent Log Entries</span>
+                    <span class="stat-dropdown-count" id="statPanelCount-logs"></span>
+                </div>
+                <div id="statPanelContent-logs"><p class="stat-empty">Loading...</p></div>
+            </div>
+        </div>
+
+        <!-- Simulation Lab -->
+        <div class="card">
+            <h2>Simulation Lab — Test Self-Healing</h2>
+            <p style="color:#888;font-size:0.85em;margin-bottom:14px;">
+                Inject a controlled instability and watch the AI agents detect, diagnose, and fix it automatically.
+            </p>
+            <div class="sim-lab">
+                <button class="sim-btn sim-btn-cpu" id="btnCpu" onclick="startSim('cpu_spike')">
+                    CPU Spike<br><small style="font-weight:normal;">Saturates all cores</small>
+                </button>
+                <button class="sim-btn sim-btn-mem" id="btnMem" onclick="startSim('memory_pressure')">
+                    Memory Pressure<br><small style="font-weight:normal;">Allocates 20% RAM</small>
+                </button>
+                <button class="sim-btn sim-btn-disk" id="btnDisk" onclick="startSim('disk_fill')">
+                    Disk Fill<br><small style="font-weight:normal;">Writes 200 MB to /tmp</small>
+                </button>
+                <button class="sim-btn sim-btn-stop" onclick="stopAllSims()">
+                    Stop All<br><small style="font-weight:normal;">Kill simulations</small>
+                </button>
+            </div>
+            <div id="simStatusArea">
+                <p class="sim-idle" id="simIdleMsg">No simulations running. Click a button above to start.</p>
+                <div class="sim-status-grid" id="simChips"></div>
+            </div>
+        </div>
+
+        <!-- Incident Timeline -->
+        <div class="card">
+            <h2>Incident Timeline — Detection — Diagnosis — Recovery</h2>
+            <div class="timeline" id="incidentTimeline">
+                <p style="color:#666;">Loading incidents...</p>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="card">
+            <h2>System Logs</h2>
+            <div class="logs-container" id="logsContainer">
+                <div class="log-entry INFO">
+                    <span class="log-timestamp">--:--:--</span>
+                    <span>Waiting for system initialization...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Overlay -->
+    <div class="alert-overlay" id="alertOverlay">
+        <div class="alert-box">
+            <div class="alert-icon">ALERT</div>
+            <div class="alert-message" id="alertMessage">Anomaly Detected!</div>
+            <div class="alert-details" id="alertDetails"></div>
+            <button class="alert-close" onclick="closeAlert()">Acknowledge</button>
+        </div>
+    </div>
+
+    <script>
+        // ── Thresholds (loaded once) ──────────────────────────────────
+        let thresholds = { cpu: 80, memory: 85, disk: 90, network: 5 };
+
+        function loadThresholds() {
+            fetch('/api/thresholds')
+                .then(r => r.json())
+                .then(t => {
+                    thresholds = t;
+                    document.getElementById('cpuThreshold').textContent  = t.cpu;
+                    document.getElementById('memThreshold').textContent  = t.memory;
+                    document.getElementById('diskThreshold').textContent = t.disk;
+                    document.getElementById('netThreshold').textContent  = t.network || 5;
+                    // Refresh threshold lines on chart (datasets[4..6], skip net threshold — different unit)
+                    const len = metricsChart.data.labels.length || 60;
+                    metricsChart.data.datasets[4].data = Array(len).fill(t.cpu);
+                    metricsChart.data.datasets[5].data = Array(len).fill(t.memory);
+                    metricsChart.data.datasets[6].data = Array(len).fill(t.disk);
+                    metricsChart.update('none');
+                });
+        }
+
+        // ── Live Chart Setup ──────────────────────────────────────────
+        const chartCtx = document.getElementById('metricsChart').getContext('2d');
+        const metricsChart = new Chart(chartCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#ff4d4d',
+                        backgroundColor: 'rgba(255,77,77,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                    },
+                    {
+                        label: 'Memory %',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0,212,255,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                    },
+                    {
+                        label: 'Disk %',
+                        data: [],
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0,255,136,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                    },
+                    // dataset[3] — Network ping latency (right y-axis)
+                    {
+                        label: 'Net Latency ms',
+                        data: [],
+                        borderColor: '#ffaa00',
+                        backgroundColor: 'rgba(255,170,0,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                        yAxisID: 'y1',
+                    },
+                    // Threshold reference lines (dashed) — datasets[4..7]
+                    {
+                        label: 'CPU Threshold',
+                        data: [],
+                        borderColor: 'rgba(255,77,77,0.5)',
+                        borderWidth: 1,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                    },
+                    {
+                        label: 'Mem Threshold',
+                        data: [],
+                        borderColor: 'rgba(0,212,255,0.5)',
+                        borderWidth: 1,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                    },
+                    {
+                        label: 'Disk Threshold',
+                        data: [],
+                        borderColor: 'rgba(0,255,136,0.5)',
+                        borderWidth: 1,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                    },
+                    {
+                        label: 'Net Threshold',
+                        data: [],
+                        borderColor: 'rgba(255,170,0,0.5)',
+                        borderWidth: 1,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        yAxisID: 'y1',
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#ccc',
+                            font: { size: 12 },
+                            filter: item => !item.text.includes('Threshold')
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.85)',
+                        titleColor: '#00d4ff',
+                        bodyColor: '#fff',
+                        callbacks: {
+                            label: ctx => {
+                                const lbl = ctx.dataset.label;
+                                const isNet = lbl.includes('Net');
+                                if (lbl.includes('Threshold'))
+                                    return ` ${lbl}: ${ctx.parsed.y}${isNet ? 'ms' : '%'}`;
+                                return ` ${lbl}: ${ctx.parsed.y.toFixed(1)}${isNet ? 'ms' : '%'}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#888', maxTicksLimit: 10, maxRotation: 0 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        min: 0,
+                        max: 100,
+                        ticks: { color: '#888', callback: v => v + '%' },
+                        grid: { color: 'rgba(255,255,255,0.08)' }
+                    },
+                    y1: {
+                        min: 0,
+                        max: 200,
+                        position: 'right',
+                        ticks: { color: '#ffaa00', callback: v => v + 'ms' },
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Ping Latency (ms)', color: '#ffaa00', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+
+        function updateChart() {
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(h => {
+                    const len = h.timestamps.length;
+                    metricsChart.data.labels = h.timestamps;
+                    metricsChart.data.datasets[0].data = h.cpu;
+                    metricsChart.data.datasets[1].data = h.memory;
+                    metricsChart.data.datasets[2].data = h.disk;
+                    metricsChart.data.datasets[3].data = h.network || [];
+                    metricsChart.data.datasets[4].data = Array(len).fill(thresholds.cpu);
+                    metricsChart.data.datasets[5].data = Array(len).fill(thresholds.memory);
+                    metricsChart.data.datasets[6].data = Array(len).fill(thresholds.disk);
+                    metricsChart.update('none');
+                });
+        }
+
+        // ── Incident Timeline ─────────────────────────────────────────
+        function severityClass(s) {
+            return { critical: 'sev-critical', high: 'sev-high', medium: 'sev-medium', low: 'sev-low' }[s] || 'sev-low';
+        }
+        function statusClass(s) {
+            return { resolved: 'status-resolved', failed: 'status-failed', attempted: 'status-attempted', detected: 'status-detected' }[s] || 'status-detected';
+        }
+        function statusLabel(s) {
+            return { resolved: 'RESOLVED', failed: 'FAILED', attempted: 'ATTEMPTED', detected: 'DETECTED' }[s] || s.toUpperCase();
+        }
+        function chipClass(s) {
+            return { success: 'chip-success', failed: 'chip-failed', skipped: 'chip-skipped' }[s] || 'chip-skipped';
+        }
+
+        function toggleIncident(id) {
+            const el = document.getElementById('detail-' + id);
+            const btn = document.getElementById('btn-' + id);
+            if (!el) return;
+            const open = el.classList.toggle('open');
+            btn.textContent = open ? '▲ Collapse' : '▼ Details';
+        }
+
+        function updateIncidents() {
+            fetch('/api/incidents')
+                .then(r => r.json())
+                .then(incidents => {
+                    const el = document.getElementById('incidentTimeline');
+                    if (!incidents.length) {
+                        el.innerHTML = '<p style="color:#666;">No incidents recorded yet.</p>';
+                        return;
+                    }
+                    el.innerHTML = incidents.map((inc, idx) => {
+                        const uid = inc.incident_id + '_' + idx;
+                        const actionChips = (inc.actions || []).map(a =>
+                            `<span class="action-chip ${chipClass(a.status)}">${a.action_name} (${a.status})</span>`
+                        ).join('') || '<span style="color:#666;">No recovery attempted</span>';
+
+                        const resTime = inc.resolution_time
+                            ? `<span style="color:#888;font-size:0.8em;"> · resolved in ${inc.resolution_time.toFixed(1)}s</span>`
+                            : '';
+
+                        // Build detailed action table
+                        const actionRows = (inc.actions || []).map(a => {
+                            const msg = a.message || a.reason || '';
+                            return `<tr>
+                                <td>${a.action_name}</td>
+                                <td><span class="action-chip ${chipClass(a.status)}">${a.status}</span></td>
+                                <td style="color:#aaa;font-size:0.85em;">${msg}</td>
+                            </tr>`;
+                        }).join('');
+
+                        return `
+                        <div class="incident-card severity-${inc.severity}">
+                            <div class="incident-header">
+                                <span class="incident-title">${inc.anomaly_type} anomaly · #${inc.incident_id}</span>
+                                <span>
+                                    <span class="sev-badge ${severityClass(inc.severity)}">${inc.severity}</span>&nbsp;
+                                    <span class="status-pill ${statusClass(inc.status)}">${statusLabel(inc.status)}</span>
+                                </span>
+                            </div>
+                            <div class="incident-row">
+                                <span class="incident-label">Detection</span>
+                                <span class="incident-value">Anomaly: <strong>${inc.anomaly_type}</strong></span>
+                            </div>
+                            <div class="incident-row">
+                                <span class="incident-label">Diagnosis</span>
+                                <span class="incident-value">${inc.diagnosis}</span>
+                            </div>
+                            <div class="incident-row">
+                                <span class="incident-label">Recovery</span>
+                                <span class="incident-value">${actionChips}${resTime}</span>
+                            </div>
+                            <div>
+                                <button class="incident-expand-btn" id="btn-${uid}" onclick="toggleIncident('${uid}')">▼ Details</button>
+                            </div>
+                            <div class="incident-detail" id="detail-${uid}">
+                                <div class="detail-section">
+                                    <h4>Root Cause</h4>
+                                    <p>${inc.root_cause || 'Unknown'}</p>
+                                </div>
+                                <div class="detail-section">
+                                    <h4>Full Diagnosis</h4>
+                                    <p>${inc.diagnosis || 'Pending'}</p>
+                                </div>
+                                ${actionRows ? `<div class="detail-section">
+                                    <h4>Recovery Actions</h4>
+                                    <table class="action-table">${actionRows}</table>
+                                </div>` : ''}
+                                <div class="detail-section">
+                                    <h4>Incident ID</h4>
+                                    <p style="font-family:monospace;color:#666;">${inc.incident_id}</p>
+                                </div>
+                                <div class="incident-ts">Detected at: ${inc.timestamp}</div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                });
+        }
+
+        // ── End Incident Timeline ─────────────────────────────────────
+
+        // Update metrics
+        function updateMetrics() {
+            fetch('/api/metrics')
+                .then(response => response.json())
+                .then(metrics => {
+                    // CPU
+                    const cpu = metrics.cpu || {};
+                    const cpuPercent = cpu.cpu_percent || 0;
+                    document.getElementById('cpuValue').textContent = cpuPercent.toFixed(1) + '%';
+                    updateProgressBar('cpuBar', cpuPercent, thresholds.cpu);
+                    document.getElementById('topCpuProcess').textContent =
+                        cpu.top_process_name || '-';
+
+                    // Memory
+                    const memory = metrics.memory || {};
+                    const memPercent = memory.memory_percent || 0;
+                    document.getElementById('memoryValue').textContent = memPercent.toFixed(1) + '%';
+                    updateProgressBar('memoryBar', memPercent, thresholds.memory);
+                    document.getElementById('memoryAvailable').textContent =
+                        (memory.memory_available_mb || 0).toFixed(0) + ' MB';
+
+                    // Disk
+                    const disk = metrics.disk || {};
+                    const diskPercent = disk.disk_percent || 0;
+                    document.getElementById('diskValue').textContent = diskPercent.toFixed(1) + '%';
+                    document.getElementById('diskFree').textContent =
+                        (disk.disk_free_gb || 0).toFixed(1) + ' GB';
+                    updateProgressBar('diskBar', diskPercent, thresholds.disk);
+
+                    // Network
+                    const net = metrics.network || {};
+                    const netLoss = net.packet_loss_percent || 0;
+                    const netLatency = net.ping_latency_ms || 0;
+                    document.getElementById('netLatencyValue').textContent =
+                        netLatency > 0 ? netLatency.toFixed(1) + ' ms' : '-- ms';
+                    document.getElementById('netLossValue').textContent = netLoss.toFixed(1) + '%';
+                    document.getElementById('netPingStatus').textContent =
+                        net.ping_success ? 'OK' : 'Down';
+                    document.getElementById('netBytesSent').textContent =
+                        (net.bytes_sent_mb || 0).toFixed(0) + ' MB';
+                    document.getElementById('netBytesRecv').textContent =
+                        (net.bytes_recv_mb || 0).toFixed(0) + ' MB';
+                });
+        }
+
+        function updateProgressBar(elementId, percent, customThreshold) {
+            const bar = document.getElementById(elementId);
+            const displayPct = Math.min(percent, 100);
+            bar.style.width = displayPct + '%';
+            bar.textContent = percent.toFixed(1) + '%';
+
+            // Color based on adaptive threshold (or fallback 80/90)
+            const warn = customThreshold !== undefined ? customThreshold * 0.85 : 80;
+            const danger = customThreshold !== undefined ? customThreshold : 90;
+            bar.className = 'progress-fill';
+            if (percent >= danger) {
+                bar.classList.add('danger');
+            } else if (percent >= warn) {
+                bar.classList.add('warning');
+            }
+        }
+
+        // Update agent status
+        function updateAgentStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(status => {
+                    // System status
+                    const badge = document.getElementById('systemStatus');
+                    badge.textContent = '● ' + status.system_status.toUpperCase();
+                    badge.className = 'status-badge ' +
+                        (status.system_status === 'running' ? 'status-running' : 'status-stopped');
+
+                    // Agent indicators
+                    Object.keys(status.agents).forEach(agent => {
+                        const indicator = document.getElementById('agent-' + agent);
+                        if (indicator) {
+                            indicator.className = 'agent-indicator ' +
+                                (status.agents[agent] ? 'running' : 'stopped');
+                        }
+                    });
+
+                    // LSTM status widget
+                    const lstm = status.lstm || {};
+                    const ind  = document.getElementById('lstmIndicator');
+                    const txt  = document.getElementById('lstmStatusText');
+                    const wrap = document.getElementById('lstmProgressWrap');
+                    const bufEl= document.getElementById('lstmBufLen');
+                    const bar  = document.getElementById('lstmProgressBar');
+
+                    if (!lstm.available) {
+                        if (ind) ind.className = 'agent-indicator stopped';
+                        if (txt) txt.textContent = 'not installed';
+                        return;
+                    }
+
+                    const NEED = 79; // WINDOW(20) + MIN_TRAIN_SEQS(60) - 1
+                    const buf  = lstm.buffer_len || 0;
+                    const pct  = Math.min(100, Math.round(buf / NEED * 100));
+
+                    if (wrap) wrap.style.display = buf < NEED ? 'block' : 'none';
+                    if (bufEl) bufEl.textContent = buf;
+                    if (bar)   bar.style.width   = pct + '%';
+
+                    if (lstm.trained) {
+                        if (ind) ind.className = 'agent-indicator running';
+                        if (txt) txt.textContent =
+                            `trained · err ${lstm.err_mean?.toFixed(4)} ± ${lstm.err_std?.toFixed(4)}`;
+                    } else if (lstm.training) {
+                        if (ind) ind.className = 'agent-indicator running';
+                        if (txt) txt.textContent = 'training…';
+                    } else {
+                        if (ind) ind.className = 'agent-indicator stopped';
+                        if (txt) txt.textContent =
+                            buf < NEED ? `collecting data (${pct}%)` : 'waiting to train';
+                    }
+                });
+        }
+
+        // Update logs
+        function updateLogs() {
+            fetch('/api/logs')
+                .then(response => response.json())
+                .then(logs => {
+                    const container = document.getElementById('logsContainer');
+
+                    // Only show last 20 logs
+                    const recentLogs = logs.slice(-20);
+
+                    container.innerHTML = recentLogs.map(log => `
+                        <div class="log-entry ${log.level}">
+                            <span class="log-timestamp">${log.timestamp}</span>
+                            <span>${log.message}</span>
+                        </div>
+                    `).join('');
+
+                    // Auto-scroll to bottom
+                    container.scrollTop = container.scrollHeight;
+                });
+        }
+
+        // Update statistics
+        function updateStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(stats => {
+                    document.getElementById('statAnomalies').textContent = stats.total_anomalies;
+                    document.getElementById('statDiagnoses').textContent = stats.total_diagnoses;
+                    document.getElementById('statRecoveries').textContent = stats.total_recoveries;
+                    document.getElementById('statLogs').textContent = stats.total_logs;
+                });
+        }
+
+        // Check for alerts
+        function checkAlerts() {
+            fetch('/api/alert')
+                .then(response => response.json())
+                .then(alert => {
+                    if (alert) {
+                        showAlert(alert);
+                    }
+                });
+        }
+
+        function showAlert(alert) {
+            const overlay = document.getElementById('alertOverlay');
+            const message = document.getElementById('alertMessage');
+            const details = document.getElementById('alertDetails');
+
+            message.textContent = alert.message;
+
+            let detailsHtml = '';
+            if (alert.severity) {
+                detailsHtml += `<p><strong>Severity:</strong> ${alert.severity.toUpperCase()}</p>`;
+            }
+            if (alert.diagnosis) {
+                detailsHtml += `<h3>Diagnosis</h3><p>${alert.diagnosis}</p>`;
+            }
+            if (alert.root_cause) {
+                detailsHtml += `<p><strong>Root Cause:</strong> ${alert.root_cause}</p>`;
+            }
+            if (alert.actions && alert.actions.length > 0) {
+                detailsHtml += `<h3>Recommended Actions</h3><ul>`;
+                alert.actions.forEach(action => {
+                    detailsHtml += `<li>${action}</li>`;
+                });
+                detailsHtml += `</ul>`;
+            }
+
+            details.innerHTML = detailsHtml;
+            overlay.classList.add('active');
+        }
+
+        function closeAlert() {
+            document.getElementById('alertOverlay').classList.remove('active');
+        }
+
+        // Server-Sent Events for real-time updates
+        const eventSource = new EventSource('/api/stream');
+
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'log') {
+                // New log received - update immediately
+                updateLogs();
+            } else if (data.type === 'anomaly') {
+                // New anomaly - check for alert
+                checkAlerts();
+                updateStats();
+            }
+        };
+
+        // ── Simulation Lab ────────────────────────────────────────────
+        const SIM_LABELS = {
+            cpu_spike:        'CPU Spike',
+            memory_pressure:  'Memory Pressure',
+            disk_fill:        'Disk Fill',
+        };
+
+        function startSim(scenario) {
+            fetch(`/api/simulate/start/${scenario}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({duration: 90})
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    console.log('Simulation started:', res.message);
+                } else {
+                    alert('Could not start simulation: ' + (res.error || res.message || 'Unknown error'));
+                }
+                updateSimStatus();
+            })
+            .catch(err => alert('Error: ' + err));
+        }
+
+        function stopAllSims() {
+            fetch('/api/simulate/stop', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+                .then(r => r.json())
+                .then(() => updateSimStatus());
+        }
+
+        function updateSimStatus() {
+            fetch('/api/simulate/status')
+                .then(r => r.json())
+                .then(status => {
+                    const chips  = document.getElementById('simChips');
+                    const idle   = document.getElementById('simIdleMsg');
+                    const names  = Object.keys(status);
+
+                    // Update button pulse states
+                    ['cpu_spike', 'memory_pressure', 'disk_fill'].forEach(s => {
+                        const btn = document.getElementById(
+                            s === 'cpu_spike' ? 'btnCpu' :
+                            s === 'memory_pressure' ? 'btnMem' : 'btnDisk'
+                        );
+                        if (btn) btn.classList.toggle('active', s in status);
+                    });
+
+                    if (!names.length) {
+                        idle.style.display = 'block';
+                        chips.innerHTML = '';
+                        return;
+                    }
+
+                    idle.style.display = 'none';
+                    chips.innerHTML = names.map(n => {
+                        const s = status[n];
+                        const pct = Math.min(100, Math.round(s.elapsed_seconds / s.duration * 100));
+                        return `
+                        <div class="sim-status-chip">
+                            <div class="sim-dot"></div>
+                            ${SIM_LABELS[n] || n}
+                            <span style="color:#aaa;font-weight:normal;">PID ${s.pid}</span>
+                            <span class="sim-duration-bar">${s.remaining_seconds}s left</span>
+                        </div>`;
+                    }).join('');
+                })
+                .catch(() => {});
+        }
+
+        // ── Statistics Dropdown Panels ────────────────────────────────
+        let activeStatPanel = null;
+        let cachedIncidents = [];
+
+        // Toggle a statistics panel open/closed
+        function toggleStatPanel(panel) {
+            const panelEl = document.getElementById('statPanel-' + panel);
+            const boxEl   = document.getElementById('statBox' + panel.charAt(0).toUpperCase() + panel.slice(1));
+
+            // Collapse any currently open panel
+            if (activeStatPanel && activeStatPanel !== panel) {
+                document.getElementById('statPanel-' + activeStatPanel).classList.remove('open');
+                const prevBox = 'statBox' + activeStatPanel.charAt(0).toUpperCase() + activeStatPanel.slice(1);
+                document.getElementById(prevBox).classList.remove('active');
+            }
+
+            const isOpen = panelEl.classList.toggle('open');
+            if (boxEl) boxEl.classList.toggle('active', isOpen);
+            activeStatPanel = isOpen ? panel : null;
+
+            if (isOpen) {
+                renderStatPanel(panel);
+            }
+        }
+
+        function renderStatPanel(panel) {
+            // For logs we fetch from /api/logs
+            if (panel === 'logs') {
+                fetch('/api/logs')
+                    .then(r => r.json())
+                    .then(logs => {
+                        const content = document.getElementById('statPanelContent-logs');
+                        const count   = document.getElementById('statPanelCount-logs');
+                        const recent  = logs.slice(-50).reverse();
+                        count.textContent = recent.length + ' entries shown';
+                        if (!recent.length) {
+                            content.innerHTML = '<p class="stat-empty">No logs yet.</p>';
+                            return;
+                        }
+                        content.innerHTML = recent.map(log => `
+                            <div class="stat-item ${log.level === 'ERROR' ? 'sev-critical' : log.level === 'WARNING' ? 'sev-medium' : ''}">
+                                <div class="stat-item-row">
+                                    <span class="stat-item-main" style="font-family:monospace;font-size:0.95em;">${log.message}</span>
+                                    <span class="stat-item-meta">${log.timestamp}</span>
+                                </div>
+                            </div>`).join('');
+                    });
+                return;
+            }
+
+            // For anomalies / diagnoses / recoveries we use /api/incidents
+            fetch('/api/incidents')
+                .then(r => r.json())
+                .then(incidents => {
+                    cachedIncidents = incidents;
+                    _populateStatPanel(panel, incidents);
+                });
+        }
+
+        function _populateStatPanel(panel, incidents) {
+            const content = document.getElementById('statPanelContent-' + panel);
+            const count   = document.getElementById('statPanelCount-' + panel);
+
+            if (!incidents || !incidents.length) {
+                count.textContent = '0 records';
+                content.innerHTML = '<p class="stat-empty">No incidents recorded yet.</p>';
+                return;
+            }
+
+            let html = '';
+
+            if (panel === 'anomalies') {
+                count.textContent = incidents.length + ' records';
+                html = incidents.map(inc => {
+                    const m = inc.metrics || {};
+                    const val  = m.value   !== undefined ? parseFloat(m.value).toFixed(1)   : '?';
+                    const exp  = m.expected_value !== undefined ? parseFloat(m.expected_value).toFixed(1) : '?';
+                    const dev  = m.deviation !== undefined ? parseFloat(m.deviation).toFixed(2) : '';
+                    const devStr = dev ? ` · deviation ${dev}σ` : '';
+                    return `
+                    <div class="stat-item sev-${inc.severity || 'low'}">
+                        <div class="stat-item-row">
+                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'} anomaly</span>
+                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                        </div>
+                        <div class="stat-item-row" style="margin-top:3px;">
+                            <span>
+                                <span class="sev-badge ${severityClass(inc.severity)}" style="font-size:0.75em;">${(inc.severity||'?').toUpperCase()}</span>
+                                &nbsp;Metric: <strong>${m.metric_name || '?'}</strong> = ${val}% (expected ${exp}%)${devStr}
+                            </span>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            else if (panel === 'diagnoses') {
+                const diagnosed = incidents.filter(i => i.diagnosis && i.diagnosis !== 'Pending');
+                count.textContent = diagnosed.length + ' diagnosed';
+                if (!diagnosed.length) {
+                    content.innerHTML = '<p class="stat-empty">No diagnoses yet.</p>';
+                    return;
+                }
+                html = diagnosed.map(inc => `
+                    <div class="stat-item sev-${inc.severity || 'low'}">
+                        <div class="stat-item-row">
+                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'}</span>
+                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                        </div>
+                        <div class="stat-item-sub">
+                            <strong style="color:#00d4ff;">Diagnosis:</strong> ${inc.diagnosis || 'Pending'}<br>
+                            <strong style="color:#00d4ff;">Root Cause:</strong> ${inc.root_cause || 'Unknown'}
+                        </div>
+                    </div>`).join('');
+            }
+
+            else if (panel === 'recoveries') {
+                const recovered = incidents.filter(i => i.actions && i.actions.length > 0);
+                count.textContent = recovered.length + ' with actions';
+                if (!recovered.length) {
+                    content.innerHTML = '<p class="stat-empty">No recovery actions yet.</p>';
+                    return;
+                }
+                html = recovered.map(inc => {
+                    const chips = (inc.actions || []).map(a =>
+                        `<span class="action-chip ${chipClass(a.status)}">${a.action_name} (${a.status})</span>`
+                    ).join('');
+                    const statusCls = inc.status === 'success' ? 'sev-success' : inc.status === 'failed' ? 'sev-failed' : '';
+                    return `
+                    <div class="stat-item ${statusCls}">
+                        <div class="stat-item-row">
+                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'} → <span class="status-pill ${statusClass(inc.status)}" style="font-size:0.8em;">${(inc.status||'?').toUpperCase()}</span></span>
+                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                        </div>
+                        <div class="stat-item-sub" style="margin-top:4px;">${chips || '<span style="color:#555">No actions</span>'}</div>
+                    </div>`;
+                }).join('');
+            }
+
+            content.innerHTML = html;
+        }
+
+        // ── End Statistics Dropdown Panels ────────────────────────────
+
+        // Regular updates
+        setInterval(updateMetrics, 2000);    // Every 2 seconds
+        setInterval(updateAgentStatus, 3000);// Every 3 seconds
+        setInterval(updateLogs, 1000);       // Every 1 second
+        setInterval(updateStats, 5000);      // Every 5 seconds
+        setInterval(checkAlerts, 2000);      // Every 2 seconds
+        setInterval(updateChart, 2000);      // Every 2 seconds
+        setInterval(updateIncidents, 5000);  // Every 5 seconds
+        setInterval(loadThresholds, 30000);  // Recalculate adaptive thresholds every 30s
+        setInterval(updateSimStatus, 3000);  // Simulation status every 3 seconds
+
+        // Initial load
+        loadThresholds();
+        updateSimStatus();
+        updateMetrics();
+        updateAgentStatus();
+        updateLogs();
+        updateStats();
+        updateChart();
+        updateIncidents();
+    </script>
+</body>
+</html>
