@@ -1059,6 +1059,172 @@
         .modal-metric-tile .m-label { font-size: 0.75em; color: #888; margin-bottom: 3px; }
         .modal-metric-tile .m-val   { font-size: 1.2em; font-weight: 600; color: #00ff88; }
 
+        /* ── Tab Navigation ───────────────────────────────────────── */
+        .tab-bar {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .tab-btn {
+            padding: 10px 32px;
+            border-radius: 25px;
+            border: 2px solid rgba(0,212,255,0.3);
+            background: rgba(255,255,255,0.04);
+            color: #aaa;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            letter-spacing: 0.03em;
+        }
+
+        .tab-btn:hover {
+            border-color: rgba(0,212,255,0.7);
+            color: #fff;
+            background: rgba(0,212,255,0.08);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(90deg,#00d4ff,#00ff88);
+            border-color: transparent;
+            color: #000;
+            box-shadow: 0 4px 18px rgba(0,212,255,0.35);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Distributed View ─────────────────────────────────────── */
+        .dist-layout {
+            display: flex;
+            gap: 18px;
+            align-items: flex-start;
+        }
+
+        .dist-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+        }
+
+        .dist-sidebar-title {
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+
+        .dist-device-pill {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 14px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.07);
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .dist-device-pill:hover {
+            border-color: rgba(0,212,255,0.4);
+            background: rgba(0,212,255,0.06);
+        }
+
+        .dist-device-pill.selected {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.12);
+            box-shadow: 0 0 12px rgba(0,212,255,0.2);
+        }
+
+        .dist-device-pill .dp-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dp-dot.connected { background:#00ff88; box-shadow:0 0 6px #00ff88; animation:pulse 2s infinite; }
+        .dp-dot.stale     { background:#ffaa00; }
+        .dp-dot.offline   { background:#ff4444; }
+
+        .dist-device-pill .dp-name {
+            font-size: 0.88em;
+            font-weight: 600;
+            color: #ddd;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dist-device-pill .dp-plat {
+            font-size: 0.7em;
+            color: #555;
+        }
+
+        .dist-main { flex: 1; min-width: 0; }
+
+        .dist-device-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+            padding: 14px 18px;
+            background: rgba(0,212,255,0.06);
+            border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 10px;
+        }
+
+        .dist-device-header .dh-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+        }
+
+        .dist-device-header .dh-name {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .dist-device-header .dh-meta {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .dist-device-header .dh-status {
+            margin-left: auto;
+            font-size: 0.82em;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+
+        .dh-status.connected { background:rgba(0,255,136,0.15); color:#00ff88; border:1px solid rgba(0,255,136,0.3); }
+        .dh-status.stale     { background:rgba(255,170,0,0.15);  color:#ffaa00; border:1px solid rgba(255,170,0,0.3); }
+        .dh-status.offline   { background:rgba(255,68,68,0.15);  color:#ff4444; border:1px solid rgba(255,68,68,0.3); }
+
+        .dist-no-selection {
+            text-align: center;
+            padding: 80px 20px;
+            color: #555;
+        }
+
+        .dist-no-selection .ns-icon { font-size: 3em; margin-bottom: 14px; }
+        .dist-no-selection .ns-text { font-size: 1em; }
+        .dist-no-selection .ns-hint { font-size: 0.85em; margin-top: 8px; color: #444; }
+
+        .dist-no-devices {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+        }
+
+        .dist-no-devices .nd-icon { font-size: 2.5em; margin-bottom: 12px; }
+
         /* Scrollbar styling */
         ::-webkit-scrollbar {
             width: 8px;
@@ -1083,8 +1249,14 @@
         <h1>SENTINEL AI</h1>
         <p>Autonomous Self-Healing IoT Infrastructure</p>
         <span id="systemStatus" class="status-badge status-running">● INITIALIZING</span>
+        <div class="tab-bar">
+            <button class="tab-btn active" id="tabBtnLocal"       onclick="switchTab('local')">💻 Local Device</button>
+            <button class="tab-btn"        id="tabBtnDistributed" onclick="switchTab('distributed')">🌐 Distributed Devices</button>
+        </div>
     </div>
 
+    <!-- ══ LOCAL DEVICE TAB ══════════════════════════════════════════════ -->
+    <div id="tab-local" class="tab-content active">
     <div class="container">
         <!-- Metrics Grid -->
         <div class="grid">
@@ -1212,44 +1384,6 @@
                 <div class="sec-feed" id="secFeed" style="max-height:160px;">
                     <p class="sec-empty">No threats detected — system is clean.</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Connected Devices -->
-        <div class="devices-panel">
-            <h2>
-                🖥️ Connected Devices
-                <span class="devices-count-badge" id="devicesCountBadge">0 online</span>
-            </h2>
-            <div class="devices-grid" id="devicesGrid">
-                <div class="devices-empty">
-                    <div class="devices-empty-icon">📡</div>
-                    <div>No remote devices connected yet.</div>
-                    <div style="margin-top:6px;font-size:0.85em;color:#444;">
-                        Run <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;">python sentinel_client.py</code> on any machine to start monitoring it.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Device Detail Modal -->
-        <div class="modal-overlay" id="deviceModal" onclick="if(event.target===this)closeDeviceModal()">
-            <div class="modal-box">
-                <button class="modal-close" onclick="closeDeviceModal()">×</button>
-                <div class="modal-title" id="modalDeviceName">Device</div>
-                <div class="modal-subtitle" id="modalDeviceSubtitle"></div>
-
-                <div class="modal-section-title">CPU</div>
-                <div class="modal-metric-grid" id="modalCpuMetrics"></div>
-
-                <div class="modal-section-title">Memory</div>
-                <div class="modal-metric-grid" id="modalMemMetrics"></div>
-
-                <div class="modal-section-title">Disk</div>
-                <div class="modal-metric-grid" id="modalDiskMetrics"></div>
-
-                <div class="modal-section-title">Network</div>
-                <div class="modal-metric-grid" id="modalNetMetrics"></div>
             </div>
         </div>
 
@@ -1428,6 +1562,116 @@
             </div>
         </div>
     </div>
+
+    </div><!-- /container -->
+    </div><!-- /tab-local -->
+
+    <!-- ══ DISTRIBUTED DEVICES TAB ══════════════════════════════════════ -->
+    <div id="tab-distributed" class="tab-content">
+    <div class="container">
+
+        <!-- Distributed layout: sidebar (device list) + main (metrics) -->
+        <div class="dist-layout">
+
+            <!-- Left sidebar: device list -->
+            <div class="dist-sidebar">
+                <div class="dist-sidebar-title">Connected Devices</div>
+                <div id="distDeviceList">
+                    <div class="dist-no-devices">
+                        <div class="nd-icon">📡</div>
+                        <div>No devices connected.</div>
+                        <div style="font-size:0.8em;color:#444;margin-top:6px;">
+                            Run <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">python sentinel_client.py</code> on any machine.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right main: metrics for selected device -->
+            <div class="dist-main">
+
+                <!-- No-selection placeholder -->
+                <div id="distNoSelection" class="dist-no-selection">
+                    <div class="ns-icon">👈</div>
+                    <div class="ns-text">Select a device from the list</div>
+                    <div class="ns-hint">Click any connected device to see its full metrics dashboard.</div>
+                </div>
+
+                <!-- Device metrics view (hidden until a device is selected) -->
+                <div id="distDeviceView" style="display:none;">
+
+                    <!-- Device header bar -->
+                    <div class="dist-device-header">
+                        <div class="dh-dot" id="distDotIndicator"></div>
+                        <div>
+                            <div class="dh-name" id="distDeviceName">—</div>
+                            <div class="dh-meta" id="distDeviceMeta">—</div>
+                        </div>
+                        <div class="dh-status" id="distDeviceStatus">—</div>
+                    </div>
+
+                    <!-- Metrics cards -->
+                    <div class="grid">
+                        <div class="card">
+                            <h2>CPU Usage</h2>
+                            <div class="metric">
+                                <div class="metric-label">Current</div>
+                                <div class="metric-value" id="distCpuVal">0%</div>
+                                <div class="progress-bar"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div></div>
+                            </div>
+                            <div class="metric-label" style="margin-top:10px;">Top Process: <span id="distCpuProc">—</span></div>
+                            <div class="metric-label" style="margin-top:4px;">Cores: <span id="distCpuCores">—</span> &nbsp;|&nbsp; Load 1m: <span id="distCpuLoad">—</span></div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Memory Usage</h2>
+                            <div class="metric">
+                                <div class="metric-label">Current</div>
+                                <div class="metric-value" id="distMemVal">0%</div>
+                                <div class="progress-bar"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div></div>
+                            </div>
+                            <div class="metric-label" style="margin-top:10px;">Available: <span id="distMemAvail">—</span></div>
+                            <div class="metric-label" style="margin-top:4px;">Swap: <span id="distMemSwap">—</span> &nbsp;|&nbsp; Top: <span id="distMemProc">—</span></div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Disk Usage</h2>
+                            <div class="metric">
+                                <div class="metric-label">Current</div>
+                                <div class="metric-value" id="distDiskVal">0%</div>
+                                <div class="progress-bar"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div></div>
+                            </div>
+                            <div class="metric-label" style="margin-top:10px;">Free: <span id="distDiskFree">—</span> &nbsp;|&nbsp; Total: <span id="distDiskTotal">—</span></div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Network</h2>
+                            <div class="metric">
+                                <div class="metric-label">Ping Latency</div>
+                                <div class="metric-value" id="distNetLatency">— ms</div>
+                            </div>
+                            <div class="metric-label" style="margin-top:8px;">Status: <span id="distNetStatus">—</span></div>
+                            <div class="metric-label" style="margin-top:6px;">
+                                Sent: <span id="distNetSent">—</span> &nbsp;|&nbsp; Recv: <span id="distNetRecv">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live chart for selected device -->
+                    <div class="chart-card" style="margin-top:0;">
+                        <h2>Live Metrics — <span id="distChartLabel" style="color:#00ff88;font-size:0.85em;"></span></h2>
+                        <div class="chart-wrapper">
+                            <canvas id="distChart"></canvas>
+                        </div>
+                    </div>
+
+                </div><!-- /distDeviceView -->
+
+            </div><!-- /dist-main -->
+        </div><!-- /dist-layout -->
+
+    </div><!-- /container -->
+    </div><!-- /tab-distributed -->
 
     <!-- Toast Notification Container (top-right, auto-dismiss) -->
     <div class="toast-container" id="toastContainer"></div>
@@ -2573,6 +2817,228 @@
 
         // ── End Connected Devices ──────────────────────────────────────
 
+        // ══ TAB SWITCHING ════════════════════════════════════════════════
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.getElementById('tabBtn' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+            if (tab === 'distributed') updateDistributed();
+        }
+
+        // ══ DISTRIBUTED DASHBOARD ════════════════════════════════════════
+        let selectedDistDevice = null;
+        let distChart = null;
+        const distChartHistory = {};   // deviceId → {labels:[], cpu:[], mem:[], disk:[]}
+        const DIST_CHART_MAX = 40;
+
+        function _initDistChart() {
+            if (distChart) return;
+            const ctx = document.getElementById('distChart').getContext('2d');
+            distChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'CPU %',    data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
+                        { label: 'Mem %',    data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
+                        { label: 'Disk %',   data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)',  tension: 0.4, fill: false, pointRadius: 0 },
+                    ]
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#aaa', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { min: 0, max: 100, ticks: { color: '#aaa', callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    },
+                    plugins: { legend: { labels: { color: '#ccc', boxWidth: 12 } } }
+                }
+            });
+        }
+
+        function _pushDistChartPoint(deviceId, label, cpu, mem, disk) {
+            if (!distChartHistory[deviceId]) distChartHistory[deviceId] = { labels:[], cpu:[], mem:[], disk:[] };
+            const h = distChartHistory[deviceId];
+            h.labels.push(label);
+            h.cpu.push(cpu);
+            h.mem.push(mem);
+            h.disk.push(disk);
+            if (h.labels.length > DIST_CHART_MAX) { h.labels.shift(); h.cpu.shift(); h.mem.shift(); h.disk.shift(); }
+        }
+
+        function _refreshDistChart(deviceId) {
+            if (!distChart) return;
+            const h = distChartHistory[deviceId] || { labels:[], cpu:[], mem:[], disk:[] };
+            distChart.data.labels = [...h.labels];
+            distChart.data.datasets[0].data = [...h.cpu];
+            distChart.data.datasets[1].data = [...h.mem];
+            distChart.data.datasets[2].data = [...h.disk];
+            distChart.update('none');
+        }
+
+        function _barColor(pct) {
+            if (pct >= 90) return '#ff4444';
+            if (pct >= 70) return '#ffd93d';
+            return '#00ff88';
+        }
+
+        function _setBar(id, pct) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const p = Math.min(100, Math.max(0, pct || 0));
+            el.style.width = p + '%';
+            el.style.background = _barColor(p);
+            el.textContent = p.toFixed(1) + '%';
+        }
+
+        function _setText(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val ?? '—';
+        }
+
+        function renderDistSidebar(devices) {
+            const list = document.getElementById('distDeviceList');
+            if (!devices || devices.length === 0) {
+                list.innerHTML = `<div class="dist-no-devices">
+                    <div class="nd-icon">📡</div>
+                    <div>No devices connected.</div>
+                    <div style="font-size:0.8em;color:#666;margin-top:6px;">
+                        Run <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">python sentinel_client.py</code> on any machine.
+                    </div></div>`;
+                return;
+            }
+            list.innerHTML = devices.map(d => {
+                const active = d.device_id === selectedDistDevice;
+                const statusDot = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+                const cpu = d.metrics?.cpu?.cpu_percent ?? 0;
+                const mem = d.metrics?.memory?.memory_percent ?? 0;
+                const disk = d.metrics?.disk?.disk_percent ?? 0;
+                return `<div class="dist-device-pill${active ? ' selected' : ''}" onclick="selectDistDevice('${d.device_id}', window._distDevices)">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <span style="width:9px;height:9px;border-radius:50%;background:${statusDot};display:inline-block;flex-shrink:0;"></span>
+                        <span style="font-weight:600;font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.device_id}">${d.device_id}</span>
+                        <span style="margin-left:auto;font-size:0.75em;color:#888;">${d.platform || ''}</span>
+                    </div>
+                    <div style="display:flex;gap:6px;font-size:0.75em;color:#aaa;">
+                        <span>CPU <b style="color:#00d4ff">${cpu.toFixed(0)}%</b></span>
+                        <span>MEM <b style="color:#ff6b6b">${mem.toFixed(0)}%</b></span>
+                        <span>DISK <b style="color:#ffd93d">${disk.toFixed(0)}%</b></span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function selectDistDevice(deviceId, devices) {
+            selectedDistDevice = deviceId;
+            _initDistChart();
+
+            // Re-render sidebar to show active pill
+            renderDistSidebar(devices);
+
+            // Show device view
+            document.getElementById('distNoSelection').style.display = 'none';
+            document.getElementById('distDeviceView').style.display = 'block';
+
+            // Populate header
+            const d = (devices || []).find(x => x.device_id === deviceId) || { device_id: deviceId };
+            const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+            const dot = document.getElementById('distDotIndicator');
+            if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
+            _setText('distDeviceName', d.device_id);
+            _setText('distDeviceMeta', `${d.hostname || ''}${d.platform ? ' · ' + d.platform : ''}${d.ip ? ' · ' + d.ip : ''}`);
+            _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
+            document.getElementById('distChartLabel').textContent = deviceId;
+
+            // Populate metrics
+            const m = d.metrics || {};
+            _updateDistMetrics(m);
+
+            // Push chart point
+            const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            _pushDistChartPoint(deviceId, now,
+                m.cpu?.cpu_percent ?? 0,
+                m.memory?.memory_percent ?? 0,
+                m.disk?.disk_percent ?? 0);
+            _refreshDistChart(deviceId);
+        }
+
+        function _updateDistMetrics(m) {
+            const cpu = m.cpu || {};
+            const mem = m.memory || {};
+            const dsk = m.disk || {};
+            const net = m.network || {};
+
+            _setText('distCpuVal', (cpu.cpu_percent != null ? cpu.cpu_percent.toFixed(1) : '—') + '%');
+            _setBar('distCpuBar', cpu.cpu_percent);
+            _setText('distCpuProc', cpu.top_process_name);
+            _setText('distCpuCores', cpu.cpu_count);
+            _setText('distCpuLoad', cpu.load_avg_1min != null ? cpu.load_avg_1min.toFixed(2) : '—');
+
+            _setText('distMemVal', (mem.memory_percent != null ? mem.memory_percent.toFixed(1) : '—') + '%');
+            _setBar('distMemBar', mem.memory_percent);
+            _setText('distMemAvail', mem.memory_available_mb != null ? (mem.memory_available_mb / 1024).toFixed(1) + ' GB' : '—');
+            _setText('distMemSwap', mem.swap_percent != null ? mem.swap_percent.toFixed(1) + '%' : '—');
+            _setText('distMemProc', mem.top_process_name);
+
+            _setText('distDiskVal', (dsk.disk_percent != null ? dsk.disk_percent.toFixed(1) : '—') + '%');
+            _setBar('distDiskBar', dsk.disk_percent);
+            _setText('distDiskFree', dsk.disk_free_gb != null ? dsk.disk_free_gb.toFixed(1) + ' GB' : '—');
+            _setText('distDiskTotal', dsk.disk_total_gb != null ? dsk.disk_total_gb.toFixed(1) + ' GB' : '—');
+
+            _setText('distNetLatency', net.ping_latency_ms != null ? net.ping_latency_ms.toFixed(1) + ' ms' : '— ms');
+            _setText('distNetStatus', net.ping_success ? '✅ Connected' : '❌ Unreachable');
+            _setText('distNetSent', net.bytes_sent_mb != null ? net.bytes_sent_mb.toFixed(1) + ' MB' : '—');
+            _setText('distNetRecv', net.bytes_recv_mb != null ? net.bytes_recv_mb.toFixed(1) + ' MB' : '—');
+        }
+
+        async function updateDistributed() {
+            try {
+                const resp = await fetch('/api/devices');
+                if (!resp.ok) return;
+                const devices = await resp.json();
+
+                // Fetch latest metrics for each device
+                await Promise.all(devices.map(async d => {
+                    try {
+                        const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
+                        d.metrics = mr.ok ? await mr.json() : {};
+                    } catch { d.metrics = {}; }
+                }));
+
+                window._distDevices = devices;
+                renderDistSidebar(devices);
+
+                if (selectedDistDevice) {
+                    const d = devices.find(x => x.device_id === selectedDistDevice);
+                    if (d) {
+                        // Update header status
+                        const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+                        const dot = document.getElementById('distDotIndicator');
+                        if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
+                        _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
+
+                        // Update metrics cards
+                        _updateDistMetrics(d.metrics || {});
+
+                        // Push chart history
+                        const m = d.metrics || {};
+                        const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+                        _pushDistChartPoint(selectedDistDevice, now,
+                            m.cpu?.cpu_percent ?? 0,
+                            m.memory?.memory_percent ?? 0,
+                            m.disk?.disk_percent ?? 0);
+                        _refreshDistChart(selectedDistDevice);
+                    }
+                }
+            } catch (e) { /* silently ignore */ }
+        }
+
+        window._distDevices = [];
+
+        // ── End Distributed Dashboard ──────────────────────────────────
+
         // Regular updates
         setInterval(updateMetrics, 2000);       // Every 2 seconds
         setInterval(updateAgentStatus, 3000);   // Every 3 seconds
@@ -2584,6 +3050,7 @@
         setInterval(updateSimStatus, 3000);     // Simulation status every 3 seconds
         setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
         setInterval(updateDevices, 5000);       // Connected devices every 5 seconds
+        setInterval(updateDistributed, 3000);  // Distributed tab every 3 seconds
 
         // Initial load
         loadThresholds();
@@ -2596,6 +3063,7 @@
         updateIncidents();
         updateSecurityPanel();
         updateDevices();
+        updateDistributed();
     </script>
 </body>
 </html>
