@@ -31,6 +31,19 @@ from typing import Dict, List, Optional, Any
 
 _IS_MACOS = platform.system() == 'Darwin'
 
+# Algorithmic engine (imported lazily so startup is not blocked)
+_algo_engine = None
+_algo_engine_lock = threading.Lock()
+
+def _get_algo_engine(logger=None, ollama_model='llama3.2:3b'):
+    global _algo_engine
+    if _algo_engine is None:
+        with _algo_engine_lock:
+            if _algo_engine is None:
+                from agents.recovery.algorithmic_engine import AlgorithmicRecoveryEngine
+                _algo_engine = AlgorithmicRecoveryEngine(logger=logger, ollama_model=ollama_model)
+    return _algo_engine
+
 _CRITICAL_PROCESSES = {
     'systemd', 'init', 'launchd', 'sshd', 'kernel_task', 'WindowServer',
     'sentinel', 'python3', 'python', 'bash', 'zsh', 'loginwindow',
@@ -57,34 +70,44 @@ class GraduatedEscalationTracker:
       4+ incidents         → Level 4 (add network reset / restart)
     """
 
-    # Additional actions added at each level, keyed by (category, level)
+    # Additional actions added at each level, keyed by (category, level).
+    # Level 1: algorithmic deep fix (first response — no killing)
+    # Level 2: non-destructive OS-level interventions
+    # Level 3: aggressive — kill/cleanup
+    # Level 4: critical — restart services / reset interfaces
     _ESCALATION_ACTIONS: Dict[str, Dict[int, List[str]]] = {
         'cpu': {
+            1: ['algorithmic_cpu_fix'],
             2: ['throttle_cpu_process'],
             3: ['kill_top_cpu_process'],
             4: ['restart_service', 'compact_memory'],
         },
         'memory': {
+            1: ['algorithmic_memory_fix'],
             2: ['compact_memory'],
             3: ['kill_top_memory_process'],
             4: ['rotate_logs', 'emergency_disk_cleanup'],
         },
         'disk': {
+            1: ['algorithmic_disk_fix'],
             2: ['emergency_disk_cleanup'],
             3: ['rotate_logs'],
             4: ['emergency_disk_cleanup', 'clear_cache'],
         },
         'network': {
+            1: ['algorithmic_network_fix'],
             2: ['flush_dns', 'check_network'],
             3: ['reset_network_interface'],
             4: ['reset_network_interface', 'check_network'],
         },
         'power': {
+            1: [],
             2: [],
             3: [],
             4: ['check_network'],
         },
         'general': {
+            1: ['algorithmic_cpu_fix'],
             2: ['compact_memory'],
             3: ['emergency_disk_cleanup'],
             4: ['rotate_logs', 'clear_cache'],
@@ -135,7 +158,7 @@ class GraduatedEscalationTracker:
         cat = self._category(metric_name)
         cat_map = self._ESCALATION_ACTIONS.get(cat, self._ESCALATION_ACTIONS['general'])
         actions: List[str] = []
-        for lvl in range(2, level + 1):
+        for lvl in range(1, level + 1):   # include level 1 (algorithmic)
             actions.extend(cat_map.get(lvl, []))
         return list(dict.fromkeys(actions))  # deduplicate, preserve order
 
@@ -368,6 +391,11 @@ class RecoveryAgent(BaseAgent):
 
     def _dispatch(self, action_name: str, diagnosis: Dict, anomaly: Dict = None) -> Dict:
         handlers = {
+            # ── Algorithmic deep-fix actions (Level 1 — first response) ──
+            'algorithmic_cpu_fix':      lambda d: self._action_algorithmic_cpu(d, anomaly),
+            'algorithmic_memory_fix':   lambda d: self._action_algorithmic_memory(d, anomaly),
+            'algorithmic_disk_fix':     lambda d: self._action_algorithmic_disk(d, anomaly),
+            'algorithmic_network_fix':  lambda d: self._action_algorithmic_network(d, anomaly),
             # ── Original actions ──────────────────────────────────────────
             'restart_mqtt':             lambda d: self._action_restart_mqtt(d),
             'kill_process':             lambda d: self._action_kill_process(d, anomaly=anomaly),
@@ -377,7 +405,7 @@ class RecoveryAgent(BaseAgent):
             'restart_service':          lambda d: self._action_restart_service(d),
             'check_network':            lambda d: self._action_check_network(d),
             'full_system_restart':      lambda d: self._action_full_system_restart(d),
-            # ── New full-scale actions ────────────────────────────────────
+            # ── Escalation actions (Level 2-4) ────────────────────────────
             'throttle_cpu_process':     lambda d: self._action_throttle_cpu_process(d),
             'kill_top_cpu_process':     lambda d: self._action_kill_top_cpu_process(d),
             'kill_top_memory_process':  lambda d: self._action_kill_top_memory_process(d),
@@ -392,6 +420,126 @@ class RecoveryAgent(BaseAgent):
         if not handler:
             return {'success': False, 'message': f"Unknown action: {action_name}"}
         return handler(diagnosis)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ALGORITHMIC LEVEL-1 ACTIONS — deep root-cause analysis + targeted fix
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _run_algorithmic(self, heal_fn, metric_category: str, anomaly: Dict) -> Dict:
+        """
+        Wrapper: calls heal_fn from the AlgorithmicRecoveryEngine in a background
+        thread with a 90s timeout. Returns a recovery result dict.
+        """
+        anomaly = anomaly or {}
+        anomaly_value = anomaly.get('value', 0.0)
+        metrics       = {}  # current metrics not available here; engine re-samples
+        diagnosis_ctx = {}
+
+        engine = _get_algo_engine(logger=self.logger,
+                                  ollama_model=self.config.get('ollama.model', 'llama3.2:3b'))
+
+        result_holder = {}
+        exc_holder    = {}
+
+        def _run():
+            try:
+                result_holder['r'] = heal_fn(engine, anomaly_value, metrics, diagnosis_ctx)
+            except Exception as e:
+                exc_holder['e'] = e
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=90)
+
+        if t.is_alive():
+            return {
+                'success': False,
+                'message': f"Algorithmic {metric_category} fix timed out (>90s) — escalation triggered",
+            }
+        if 'e' in exc_holder:
+            return {
+                'success': False,
+                'message': f"Algorithmic {metric_category} fix error: {exc_holder['e']}",
+            }
+
+        heal = result_holder.get('r')
+        if not heal:
+            return {'success': False, 'message': f"Algorithmic {metric_category} fix: no result"}
+
+        # Log every action taken by the engine
+        for act in heal.actions_taken:
+            self.logger.info(f"[Algorithmic/{metric_category}] {act}")
+
+        return {
+            'success':    heal.success,
+            'message':    heal.message,
+            'parameters': {
+                'classification':  heal.classification,
+                'algorithm':       heal.algorithm,
+                'evidence_before': heal.evidence_before,
+                'evidence_after':  heal.evidence_after,
+                'actions_taken':   heal.actions_taken,
+                **heal.parameters,
+            },
+        }
+
+    def _action_algorithmic_cpu(self, diagnosis: Dict, anomaly: Dict = None) -> Dict:
+        """
+        Level-1 CPU recovery: profile → classify (COMPUTE_BOUND / IO_WAIT_BOUND /
+        MEMORY_THRASH / TRANSIENT_SPIKE / MULTI_PROCESS) → apply targeted algorithm.
+        CPU affinity pinning, scheduling policy change, I/O priority reduction —
+        NOT kill as first response.
+        """
+        self.logger.info(
+            "Algorithmic CPU fix: profiling system (3 samples × 1.2s) to classify root cause"
+        )
+        return self._run_algorithmic(
+            lambda eng, v, m, d: eng.heal_cpu(v, m, d),
+            'cpu', anomaly,
+        )
+
+    def _action_algorithmic_memory(self, diagnosis: Dict, anomaly: Dict = None) -> Dict:
+        """
+        Level-1 memory recovery: profile → classify (MEMORY_LEAK / SWAP_PRESSURE /
+        CACHE_BLOAT / NORMAL_GROWTH) → apply targeted algorithm.
+        Leak slope detection, OOM score adjustment, swappiness tuning, cache drop —
+        NOT kill as first response.
+        """
+        self.logger.info(
+            "Algorithmic memory fix: profiling RSS growth over 4 samples × 2s to detect leaks"
+        )
+        return self._run_algorithmic(
+            lambda eng, v, m, d: eng.heal_memory(v, m, d),
+            'memory', anomaly,
+        )
+
+    def _action_algorithmic_disk(self, diagnosis: Dict, anomaly: Dict = None) -> Dict:
+        """
+        Level-1 disk recovery: profile → classify (DISK_CAPACITY / IO_THROUGHPUT_HOG /
+        INODE_EXHAUSTION / IO_LATENCY) → apply targeted algorithm.
+        ionice priority reduction, smart log compression, inode cleanup, scheduler tuning.
+        """
+        self.logger.info(
+            "Algorithmic disk fix: profiling disk I/O and capacity to classify root cause"
+        )
+        return self._run_algorithmic(
+            lambda eng, v, m, d: eng.heal_disk(v, m, d),
+            'disk', anomaly,
+        )
+
+    def _action_algorithmic_network(self, diagnosis: Dict, anomaly: Dict = None) -> Dict:
+        """
+        Level-1 network recovery: profile → classify (DNS_FAILURE / CONNECTION_LEAK /
+        HIGH_LATENCY / PACKET_LOSS / INTERFACE_ERROR) → apply targeted algorithm.
+        TCP parameter tuning, ARP flush, DNS fallback — NOT full interface reset as first response.
+        """
+        self.logger.info(
+            "Algorithmic network fix: profiling connections, latency, DNS to classify root cause"
+        )
+        return self._run_algorithmic(
+            lambda eng, v, m, d: eng.heal_network(v, m, d),
+            'network', anomaly,
+        )
 
     # ══════════════════════════════════════════════════════════════════════
     # ORIGINAL ACTIONS (kept + lightly improved)
