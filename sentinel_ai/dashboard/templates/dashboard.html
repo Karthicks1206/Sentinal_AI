@@ -1250,8 +1250,8 @@
         <p>Autonomous Self-Healing IoT Infrastructure</p>
         <span id="systemStatus" class="status-badge status-running">● INITIALIZING</span>
         <div class="tab-bar">
-            <button class="tab-btn active" id="tabBtnLocal"       onclick="switchTab('local')">💻 Local Device</button>
-            <button class="tab-btn"        id="tabBtnDistributed" onclick="switchTab('distributed')">🌐 Distributed Devices</button>
+            <button class="tab-btn active" id="tabBtnLocal"       onclick="switchTab('local')">Local Device</button>
+            <button class="tab-btn"        id="tabBtnDistributed" onclick="switchTab('distributed')">Distributed Devices</button>
         </div>
     </div>
 
@@ -1316,7 +1316,7 @@
 
             <!-- Power Card -->
             <div class="card">
-                <h2>⚡ Power</h2>
+                <h2>Power</h2>
                 <div class="metric">
                     <div class="metric-label">Input Voltage</div>
                     <div class="metric-value" id="powerVoltage">5.00 V</div>
@@ -1365,7 +1365,7 @@
 
             <!-- Cybersecurity Monitor Card (in-grid) -->
             <div class="card">
-                <h2>🛡️ Security <span style="font-size:0.55em;color:#cc44ff;background:rgba(204,68,255,0.12);border:1px solid rgba(204,68,255,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span></h2>
+                <h2>Security <span style="font-size:0.55em;color:#cc44ff;background:rgba(204,68,255,0.12);border:1px solid rgba(204,68,255,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span></h2>
 
                 <div class="sec-score-ring">
                     <div class="sec-score-circle" id="secScoreCircle">100</div>
@@ -1578,7 +1578,7 @@
                 <div class="dist-sidebar-title">Connected Devices</div>
                 <div id="distDeviceList">
                     <div class="dist-no-devices">
-                        <div class="nd-icon">📡</div>
+                        <div class="nd-icon">--</div>
                         <div>No devices connected.</div>
                         <div style="font-size:0.8em;color:#444;margin-top:6px;">
                             Run <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">python sentinel_client.py</code> on any machine.
@@ -1592,7 +1592,7 @@
 
                 <!-- No-selection placeholder -->
                 <div id="distNoSelection" class="dist-no-selection">
-                    <div class="ns-icon">👈</div>
+                    <div class="ns-icon">&larr;</div>
                     <div class="ns-text">Select a device from the list</div>
                     <div class="ns-hint">Click any connected device to see its full metrics dashboard.</div>
                 </div>
@@ -2188,12 +2188,12 @@
 
         // ── Security Monitor Panel ────────────────────────────────────
         const SEC_ICONS = {
-            brute_force:       '🔑',
-            data_exfiltration: '📤',
-            port_scan:         '🔍',
-            malware:           '🦠',
-            auth_anomaly:      '👤',
-            default:           '⚠️'
+            brute_force:       '[KEY]',
+            data_exfiltration: '[EXF]',
+            port_scan:         '[SCN]',
+            malware:           '[MAL]',
+            auth_anomaly:      '[AUTH]',
+            default:           '[!]'
         };
 
         function updateSecurityPanel() {
@@ -2288,14 +2288,14 @@
         const MAX_TOASTS = 5;
 
         const TOAST_ICONS = {
-            power:       '⚡',
-            cpu:         '💻',
-            memory:      '🧠',
-            disk:        '💾',
-            network:     '📶',
-            multivariate:'🔬',
-            security:    '🔒',
-            default:     '⚠️'
+            power:       '[PWR]',
+            cpu:         '[CPU]',
+            memory:      '[MEM]',
+            disk:        '[DSK]',
+            network:     '[NET]',
+            multivariate:'[ML]',
+            security:    '[SEC]',
+            default:     '[!]'
         };
 
         function _metricCategory(metricName) {
@@ -2370,7 +2370,7 @@
                 showToast({
                     severity: threat.severity || 'medium',
                     category: 'security',
-                    title:    '🔒 ' + (threat.title || 'Security Alert'),
+                    title:    '[SEC] ' + (threat.title || 'Security Alert'),
                     body:     threat.detail || ''
                 });
                 updateSecurityPanel();
@@ -2675,7 +2675,7 @@
             if (devices.length === 0) {
                 grid.innerHTML = `
                 <div class="devices-empty">
-                    <div class="devices-empty-icon">📡</div>
+                    <div class="devices-empty-icon">[ ]</div>
                     <div>No remote devices connected yet.</div>
                     <div style="margin-top:6px;font-size:0.85em;color:#444;">
                         Run <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;">python sentinel_client.py</code> on any machine to start monitoring it.
@@ -2832,6 +2832,8 @@
         const distChartHistory = {};   // deviceId → {labels:[], cpu:[], mem:[], disk:[]}
         const DIST_CHART_MAX = 40;
 
+        let _distChartIsolated = null; // index of isolated dataset, or null for all
+
         function _initDistChart() {
             if (distChart) return;
             const ctx = document.getElementById('distChart').getContext('2d');
@@ -2853,7 +2855,28 @@
                         x: { ticks: { color: '#aaa', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
                         y: { min: 0, max: 100, ticks: { color: '#aaa', callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                     },
-                    plugins: { legend: { labels: { color: '#ccc', boxWidth: 12 } } }
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ccc', boxWidth: 12 },
+                            onClick: function(e, legendItem) {
+                                const idx = legendItem.datasetIndex;
+                                if (_distChartIsolated === idx) {
+                                    // Second click on same: restore all
+                                    _distChartIsolated = null;
+                                    distChart.data.datasets.forEach((ds, i) => {
+                                        distChart.setDatasetVisibility(i, true);
+                                    });
+                                } else {
+                                    // Isolate this dataset, hide others
+                                    _distChartIsolated = idx;
+                                    distChart.data.datasets.forEach((ds, i) => {
+                                        distChart.setDatasetVisibility(i, i === idx);
+                                    });
+                                }
+                                distChart.update('none');
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -2902,7 +2925,7 @@
             const list = document.getElementById('distDeviceList');
             if (!devices || devices.length === 0) {
                 list.innerHTML = `<div class="dist-no-devices">
-                    <div class="nd-icon">📡</div>
+                    <div class="nd-icon">--</div>
                     <div>No devices connected.</div>
                     <div style="font-size:0.8em;color:#666;margin-top:6px;">
                         Run <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">python sentinel_client.py</code> on any machine.
@@ -2988,7 +3011,7 @@
             _setText('distDiskTotal', dsk.disk_total_gb != null ? dsk.disk_total_gb.toFixed(1) + ' GB' : '—');
 
             _setText('distNetLatency', net.ping_latency_ms != null ? net.ping_latency_ms.toFixed(1) + ' ms' : '— ms');
-            _setText('distNetStatus', net.ping_success ? '✅ Connected' : '❌ Unreachable');
+            _setText('distNetStatus', net.ping_success ? 'Connected' : 'Unreachable');
             _setText('distNetSent', net.bytes_sent_mb != null ? net.bytes_sent_mb.toFixed(1) + ' MB' : '—');
             _setText('distNetRecv', net.bytes_recv_mb != null ? net.bytes_recv_mb.toFixed(1) + ' MB' : '—');
         }
