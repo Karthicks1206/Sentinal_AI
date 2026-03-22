@@ -27,6 +27,12 @@ try:
 except ImportError:
     OLLAMA_AVAILABLE = False
 
+try:
+    from groq import Groq as _GroqClient
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+
 from agents.base_agent import BaseAgent
 from core.event_bus import EventPriority
 from core.config import load_yaml_file
@@ -75,7 +81,13 @@ class DiagnosisAgent(BaseAgent):
         if self.openai_config.get('enabled', False):
             self._init_openai_client()
 
-        # Initialize Ollama AI agent (free, local — preferred over OpenAI)
+        # Initialize Groq client (fast cloud inference — preferred over Ollama when available)
+        self.groq_client = None
+        self.groq_config = config.get_section('groq') or {}
+        if self.groq_config.get('enabled', True):
+            self._init_groq_client()
+
+        # Initialize Ollama AI agent (free, local — fallback when Groq unavailable)
         self.ollama_config = config.get_section('ollama') or {}
         self.ollama_model = self.ollama_config.get('model', 'llama3.2:3b')
         self.ollama_available = self._check_ollama()
@@ -149,6 +161,39 @@ class DiagnosisAgent(BaseAgent):
             self.logger.error(f"Failed to initialize OpenAI client: {e}")
             self.openai_client = None
 
+    def _init_groq_client(self):
+        """Initialize Groq client — reads key from env or .env file."""
+        if not GROQ_AVAILABLE:
+            self.logger.warning("groq package not installed — run: pip install groq")
+            return
+
+        import os
+        from pathlib import Path
+
+        api_key = os.environ.get('GROQ_API_KEY', '')
+
+        if not api_key:
+            env_path = Path(__file__).parent.parent.parent / '.env'
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    line = line.strip()
+                    if line.startswith('GROQ_API_KEY='):
+                        api_key = line.split('=', 1)[1].strip()
+                        os.environ['GROQ_API_KEY'] = api_key
+                        break
+
+        if not api_key:
+            self.logger.info("Groq: GROQ_API_KEY not set — Groq disabled")
+            return
+
+        try:
+            self.groq_client = _GroqClient(api_key=api_key)
+            model = self.groq_config.get('model', 'llama-3.1-8b-instant')
+            self.logger.info(f"Groq client initialized (model: {model}) — fast cloud inference active")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Groq client: {e}")
+            self.groq_client = None
+
     def _check_ollama(self) -> bool:
         """Check if Ollama is running and the model is available"""
         if not OLLAMA_AVAILABLE:
@@ -164,7 +209,12 @@ class DiagnosisAgent(BaseAgent):
                 for m in model_names
             )
             if available:
-                self.logger.info(f"Ollama AI agent ready (model: {self.ollama_model})")
+                self.logger.info(
+                    f"[AI Engine] Ollama ({self.ollama_model}) is online — "
+                    f"used for autonomous root-cause analysis when Groq is unavailable. "
+                    f"Sentinel AI will run LLM inference locally on this device to diagnose anomalies "
+                    f"without sending data to any external cloud service."
+                )
             else:
                 self.logger.warning(
                     f"Ollama model '{self.ollama_model}' not found. "
@@ -172,7 +222,11 @@ class DiagnosisAgent(BaseAgent):
                 )
             return available
         except Exception as e:
-            self.logger.warning(f"Ollama not reachable: {e}")
+            self.logger.warning(
+                f"[AI Engine] Ollama not reachable ({e}). "
+                f"Sentinel AI will fall back to rule-based diagnosis. "
+                f"To enable local LLM diagnosis: brew services start ollama && ollama pull {self.ollama_model}"
+            )
             return False
 
     def _run(self):
@@ -266,22 +320,28 @@ class DiagnosisAgent(BaseAgent):
                 self.logger.debug(f"Rule-based diagnosis: {rule_diagnosis.get('diagnosis')}")
 
         # Method 2: AI agent diagnosis
-        # Priority: Ollama (local/free) > OpenAI > AWS Bedrock
+        # Priority: Groq (fast, free tier) > Ollama (local) > OpenAI > AWS Bedrock
         llm_diagnosis = None
         context = self._gather_context(device_id, timestamp)
 
-        if self.ollama_available:
+        if self.groq_client:
+            llm_diagnosis = self._diagnose_with_groq(anomaly, context)
+            if llm_diagnosis:
+                diagnosis_result['methods_used'].append('groq_ai')
+                self.logger.debug(f"Groq diagnosis: {llm_diagnosis.get('diagnosis')}")
+
+        if not llm_diagnosis and self.ollama_available:
             llm_diagnosis = self._diagnose_with_ollama(anomaly, context)
             if llm_diagnosis:
                 diagnosis_result['methods_used'].append('ollama_ai_agent')
                 self.logger.debug(f"Ollama diagnosis: {llm_diagnosis.get('diagnosis')}")
 
-        elif self.openai_client:
+        if not llm_diagnosis and self.openai_client:
             llm_diagnosis = self._diagnose_with_openai(anomaly, context)
             if llm_diagnosis:
                 diagnosis_result['methods_used'].append('openai')
 
-        elif self.llm_config.get('enabled', False) and self.bedrock_client:
+        if not llm_diagnosis and self.llm_config.get('enabled', False) and self.bedrock_client:
             llm_diagnosis = self._diagnose_with_llm(anomaly, context)
             if llm_diagnosis:
                 diagnosis_result['methods_used'].append('llm_powered')
@@ -454,6 +514,94 @@ class DiagnosisAgent(BaseAgent):
             self.logger.error(f"Error checking trend: {e}")
 
         return False
+
+    def _diagnose_with_groq(self, anomaly: Dict, context: Dict) -> Optional[Dict]:
+        """
+        Diagnose using Groq cloud inference (llama-3.1-8b-instant).
+        Groq is ~10x faster than local Ollama and has a generous free tier.
+        Falls back to Ollama automatically on any error.
+        """
+        if not self.groq_client:
+            return None
+
+        try:
+            metric   = anomaly.get('metric_name', 'unknown')
+            value    = anomaly.get('value', 0)
+            expected = anomaly.get('expected_value', 0)
+            severity = anomaly.get('severity', 'medium')
+            atype    = anomaly.get('type', 'unknown')
+
+            recent = context.get('recent_metrics_summary', {})
+            context_lines = []
+            for mtype, stats in recent.items():
+                if isinstance(stats, dict):
+                    context_lines.append(
+                        f"  {mtype}: mean={stats.get('mean', 0):.1f}, "
+                        f"max={stats.get('max', 0):.1f}, min={stats.get('min', 0):.1f}"
+                    )
+            context_str = '\n'.join(context_lines) or '  No history available'
+
+            model       = self.groq_config.get('model', 'llama-3.1-8b-instant')
+            max_tokens  = self.groq_config.get('max_tokens', 512)
+            temperature = self.groq_config.get('temperature', 0.2)
+
+            response = self.groq_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an expert IoT infrastructure AI agent for Sentinel AI, "
+                            "a self-healing distributed monitoring system. "
+                            "Analyze anomalies, identify root causes, and recommend precise "
+                            "recovery actions. Respond ONLY with valid JSON — no markdown."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""ANOMALY on IoT device:
+- Metric: {metric}
+- Detection: {atype}
+- Value: {value:.3f}  Expected: {expected:.3f}
+- Severity: {severity}
+
+System context (1-hour averages):
+{context_str}
+
+Available recovery actions (use exact names only):
+  restart_mqtt, kill_process, reconnect_sensor, failover, clear_cache, restart_service
+
+Respond with this JSON only:
+{{
+  "root_cause": "one concise sentence",
+  "diagnosis": "clear explanation for an operator",
+  "recommended_actions": ["action1"],
+  "confidence": 0.85,
+  "reasoning": "brief step-by-step reasoning"
+}}"""
+                    }
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                response_format={"type": "json_object"}
+            )
+
+            response_text = response.choices[0].message.content
+            parsed = self._parse_llm_response(response_text)
+
+            reasoning = parsed.pop('reasoning', None)
+            if reasoning:
+                self.logger.info(f"Groq reasoning for {metric}: {reasoning[:200]}")
+
+            self.logger.info(
+                f"Groq diagnosed {metric}: {parsed.get('root_cause', '?')} "
+                f"(confidence: {parsed.get('confidence', 0):.2f})"
+            )
+            return parsed
+
+        except Exception as e:
+            self.logger.warning(f"Groq diagnosis failed (falling back to Ollama): {e}")
+            return None
 
     def _diagnose_with_ollama(self, anomaly: Dict, context: Dict) -> Optional[Dict]:
         """

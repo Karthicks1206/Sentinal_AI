@@ -1,0 +1,152 @@
+================================================================================
+  SENTINEL AI — MULTI-DEVICE MONITORING  (Zero-Config)
+================================================================================
+
+OVERVIEW
+--------
+Connect any number of machines to Sentinel AI with TWO steps per machine:
+
+  STEP 1 — one-time install (on each remote machine):
+    pip install psutil
+
+  STEP 2 — run the client:
+    python sentinel_client.py
+
+That's it.  The client auto-discovers the hub on your local network.
+No IP addresses.  No config files.  No arguments needed.
+
+--------------------------------------------------------------------------------
+HOW AUTO-DISCOVERY WORKS
+--------------------------------------------------------------------------------
+
+  When you start "python main.py" on the hub machine, it broadcasts a UDP
+  beacon every 10 seconds on the local network (port 47474).  The beacon
+  carries the hub's IP address and port automatically.
+
+  When sentinel_client.py starts on a remote machine, it listens for the
+  beacon and connects to the hub within a few seconds.
+
+  ┌──────────────────────────────────────┐
+  │          SENTINEL AI HUB             │
+  │  python main.py                      │
+  │                                      │
+  │  UDP broadcast every 10s ──────────► │ ──► all machines on LAN hear it
+  │  "I'm at http://192.168.1.x:5001"    │
+  └──────────────────────────────────────┘
+           ▲                  ▲
+           │ auto-connects    │ auto-connects
+  ┌────────┴──────┐  ┌────────┴──────┐
+  │  Machine B    │  │  Machine C    │
+  │               │  │               │
+  │  python       │  │  python       │
+  │  sentinel_    │  │  sentinel_    │
+  │  client.py    │  │  client.py    │
+  └───────────────┘  └───────────────┘
+
+--------------------------------------------------------------------------------
+FULL SETUP WALKTHROUGH
+--------------------------------------------------------------------------------
+
+ON THE HUB (your main machine — the one running main.py):
+
+  1. Start Sentinel AI normally:
+       cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+       source venv/bin/activate
+       python main.py
+
+  The hub is now broadcasting on the local network.
+  Dashboard: http://localhost:5001
+
+ON EACH REMOTE MACHINE:
+
+  1. Copy sentinel_client.py to the remote machine (USB, AirDrop, scp, etc.)
+
+       macOS/Linux easy copy:
+         scp /Users/karthi/Desktop/Sentinal_AI/sentinel_ai/sentinel_client.py  user@remote:~/
+
+       Or just copy the file manually — it's a single standalone Python file.
+
+  2. Install the one dependency:
+       pip install psutil
+
+  3. Run the client:
+       python sentinel_client.py
+
+  You'll see:
+    ========================================================
+      Sentinel AI Remote Client
+    ========================================================
+      Device   : macbook-pro
+      Platform : Darwin 23.4.0
+      Interval : 5s
+    ========================================================
+
+    Searching for Sentinel AI hub on local network...
+      Found hub at http://192.168.1.100:5001  (via 192.168.1.100)
+
+    Registering with hub...
+      Registered successfully as 'macbook-pro'
+
+    Streaming metrics to hub.  Press Ctrl+C to stop.
+
+    [14:32:01] CPU=12.5%  MEM=68.3%  DISK=45.1%
+    [14:32:06] CPU=14.1%  MEM=68.4%  DISK=45.1%
+
+--------------------------------------------------------------------------------
+OPTIONAL ARGUMENTS
+--------------------------------------------------------------------------------
+
+  Give the device a custom name on the dashboard:
+    python sentinel_client.py --device lab-server
+
+  Change the metric collection interval (default 5s):
+    python sentinel_client.py --interval 10
+
+  Override hub URL manually (if auto-discovery fails on different subnet):
+    python sentinel_client.py --hub http://192.168.1.100:5001
+
+  All together:
+    python sentinel_client.py --device raspberry-pi-1 --interval 5
+
+--------------------------------------------------------------------------------
+VIEW CONNECTED DEVICES (dashboard API)
+--------------------------------------------------------------------------------
+
+  Once clients are running, check the hub dashboard:
+    http://localhost:5001
+
+  The anomaly and recovery events in the dashboard all carry the device_id
+  so you can see which machine triggered each alert.
+
+  REST endpoints:
+    GET /api/devices                         — list all connected devices + status
+    GET /api/devices/<device_id>/metrics     — latest metrics for one device
+
+  Device status values:
+    connected — data received within the last 30 seconds
+    stale     — no data for 30–60 seconds
+    offline   — no data for > 60 seconds
+
+--------------------------------------------------------------------------------
+IF AUTO-DISCOVERY DOESN'T WORK
+--------------------------------------------------------------------------------
+
+  Auto-discovery uses UDP broadcast which works on standard home / lab networks.
+  It will NOT work if:
+    • Machines are on different subnets (e.g. different VLANs)
+    • A firewall is blocking UDP port 47474
+    • You're connecting over a VPN
+
+  In those cases, just provide the hub IP manually:
+    python sentinel_client.py --hub http://<HUB_IP>:5001
+
+  Find the hub's IP:
+    macOS:   ipconfig getifaddr en0
+    Linux:   hostname -I | awk '{print $1}'
+    Windows: ipconfig | findstr IPv4
+
+  To open UDP port 47474 on the hub (if blocked by firewall):
+    macOS:  usually open by default
+    Linux:  sudo ufw allow 47474/udp
+
+================================================================================

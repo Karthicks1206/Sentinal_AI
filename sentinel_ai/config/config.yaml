@@ -18,6 +18,9 @@ monitoring:
   metrics:
     cpu:
       enabled: true
+      # NOTE: threshold_percent is DISPLAY-ONLY — the anomaly detection agent
+      # no longer uses any hardcoded threshold. All detection bounds are learned
+      # from the live data stream via AdaptiveMetricBaseline (IQR + z-score).
       threshold_percent: 80
     memory:
       enabled: true
@@ -39,28 +42,41 @@ monitoring:
     sensors:
       enabled: false   # disabled on macOS dev — enable on real IoT hardware
       max_latency_ms: 1000
+    power:
+      enabled: true
+      nominal_voltage_v: 5.0       # Nominal input voltage (5 V for RPi, 12/24 V for industrial)
+      voltage_tolerance_pct: 10     # Alert when deviation exceeds 10 % of nominal
+      max_current_a: 3.0            # Max acceptable current draw (A)
+      max_watts: 15.0               # Max acceptable power consumption (W)
 
 anomaly_detection:
   enabled: true
 
-  # Persistence: anomaly must be observed for this many consecutive readings before firing
-  # At 5s collection interval, 3 readings = 15 seconds sustained
-  min_consecutive_readings: 3
+  # ── Adaptive detection — no hardcoded thresholds ───────────────────────
+  # All detection bounds are computed at runtime from the live data stream.
+  # Methods: IQR outlier, adaptive z-score, trend elevation, rate-of-change.
 
-  # Cooldown: once an anomaly fires for a metric, wait this many minutes before re-firing
+  # Persistence: metric must be anomalous for this many consecutive readings
+  # before an alert fires.  At 5s collection interval, 2 readings = 10s.
+  min_consecutive_readings: 2
+
+  # Cooldown: once an anomaly fires for a metric, suppress re-fires for N min.
   cooldown_minutes: 5
 
-  # Statistical methods
+  # Statistical method tuning (all bounds still derive from learned data)
   methods:
     z_score:
       enabled: true
-      threshold: 3.0
+      threshold: 2.5        # base z-score threshold; auto-increases for volatile metrics
       window_size: 100
     spike_detection:
-      enabled: true
-      multiplier: 2.5
+      enabled: true         # rate-of-change spike — multiplier learned from data
+    iqr_outlier:
+      enabled: true         # Tukey-fence IQR — all bounds from percentiles of live data
+    trend_elevation:
+      enabled: true         # sustained elevation above mean+1.5σ for 5 consecutive readings
     threshold:
-      enabled: true
+      enabled: false        # DISABLED — replaced by adaptive IQR / z-score
 
   # Machine Learning
   ml:
@@ -70,9 +86,10 @@ anomaly_detection:
     retrain_interval_hours: 24
     min_samples_for_training: 50
 
-  # Rolling baseline
+  # Rolling baseline window per metric (number of readings)
+  # 300 readings × 5s interval = 25 minutes of adaptive memory
   baseline:
-    window_size: 500
+    window_size: 300
     update_interval_minutes: 15
 
 diagnosis:
@@ -106,8 +123,13 @@ recovery:
   retry_delay_seconds: 5
   cooldown_period_seconds: 300
 
+  # Graduated escalation: window (minutes) for counting repeated incidents
+  escalation_window_minutes: 30
+
   # Available recovery actions
+  # Any action not listed here is enabled by default (enabled: true).
   actions:
+    # ── Original actions ────────────────────────────────────────────────
     restart_mqtt:
       enabled: true
       command: "sudo systemctl restart mosquitto"
@@ -131,6 +153,34 @@ recovery:
       enabled: true
       services:
         - "sentinel-agent"
+    # ── New full-scale actions ───────────────────────────────────────────
+    throttle_cpu_process:
+      enabled: true        # renice highest-CPU process to +10 (non-destructive)
+    kill_top_cpu_process:
+      enabled: true        # terminate highest-CPU process (escalation level 3+)
+    kill_top_memory_process:
+      enabled: true        # terminate highest-memory process (escalation level 3+)
+    compact_memory:
+      enabled: true        # drop OS page cache (purge / drop_caches)
+    emergency_disk_cleanup:
+      enabled: true        # delete old /tmp files + compress rotated logs
+    reset_network_interface:
+      enabled: true        # bring NIC down/up (network anomalies)
+    flush_dns:
+      enabled: true        # flush OS DNS resolver cache
+    rotate_logs:
+      enabled: true        # compress + delete old log files
+    restart_process_by_name:
+      enabled: false       # set to true + configure below if needed
+      process_name: ""     # e.g. "nginx"
+      restart_command: ""  # e.g. "nginx"
+
+# Multi-device monitoring — hub accepts metric pushes from sentinel_client.py
+multi_device:
+  enabled: true
+  # Devices pushing metrics to this hub are automatically registered.
+  # Run on remote machines:
+  #   python sentinel_client.py --hub http://<this-hub-ip>:5001 --device my-device
 
 learning:
   enabled: true
@@ -205,9 +255,16 @@ aws:
     orchestrator_function: "sentinel-orchestrator"
     region: "${AWS_REGION:-us-east-1}"
 
+groq:
+  enabled: true
+  model: "llama-3.1-8b-instant"   # fast, free-tier Groq model (primary AI provider)
+  max_tokens: 512
+  temperature: 0.2
+  # API key read from GROQ_API_KEY env var or .env file
+
 ollama:
   enabled: true
-  model: "llama3.2:3b"   # local model — free, no internet required
+  model: "llama3.2:3b"   # local fallback — used when Groq is unavailable
   temperature: 0.2
   num_predict: 512
 
@@ -241,6 +298,12 @@ simulation:
       enabled: true
       target_percent: 95
       duration_seconds: 120
+
+security:
+  enabled: true
+  scan_interval_seconds: 30      # How often to run threat checks
+  demo_mode: true                # Inject synthetic threats for demo visibility
+  allowlist_ports: [22, 80, 443, 1883, 5001, 8883]  # Expected listening ports
 
 logging:
   level: "${LOG_LEVEL:-INFO}"

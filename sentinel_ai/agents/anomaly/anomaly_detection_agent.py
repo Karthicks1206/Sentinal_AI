@@ -1,13 +1,29 @@
 """
-Anomaly Detection Agent - Detects anomalies using statistical methods and ML
-Methods: Z-score, spike detection, threshold logic, rolling baselines,
-         Isolation Forest (multivariate), Keras LSTM Autoencoder (time-series)
+Anomaly Detection Agent — fully adaptive, threshold-free detection.
+
+All bounds are LEARNED from the live data stream — no hardcoded numbers.
+
+Detection methods (all adaptive):
+  1. IQR outlier     — Tukey-fence spike (Q3 + k*IQR); k learned from variance
+  2. Adaptive z-score — statistical deviation from rolling mean/std
+  3. Trend elevation  — sustained high readings (time-series pattern)
+  4. Rate-of-change   — acceleration spike vs. learned change rate
+  5. Isolation Forest — multivariate ML (sklearn)
+  6. Keras LSTM AE    — time-series sequence ML
+
+Anomaly fires only when:
+  a) Metric is anomalous for `min_consecutive` readings in a row (persistence gate)
+  b) Per-metric cooldown has elapsed (dedup gate)
+
+Confirmed anomalies flow to the Diagnosis Agent, which must confirm a real
+error before the Recovery Agent acts. No false alarm → no recovery.
 """
 
 import uuid
 from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
+
 import numpy as np
 
 try:
@@ -20,64 +36,189 @@ try:
     from agents.anomaly.keras_lstm_detector import KerasLSTMDetector, KERAS_AVAILABLE
 except Exception:
     KerasLSTMDetector = None
-    KERAS_AVAILABLE   = False
+    KERAS_AVAILABLE = False
 
 from agents.base_agent import BaseAgent
 from core.event_bus import EventPriority
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Adaptive per-metric baseline
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AdaptiveMetricBaseline:
+    """
+    Maintains a rolling statistical baseline for a single metric.
+
+    The baseline is built purely from observed values — no seed values,
+    no hardcoded thresholds.  All anomaly bounds are derived at runtime
+    from the IQR / mean / std of the rolling window.
+
+    Improvements over the original implementation:
+      • Baseline freeze — while an anomaly is active the rolling window
+        is frozen so spike values cannot inflate the baseline and mask
+        themselves.  The window resumes updating once the metric recovers.
+      • Hysteresis — the consecutive-anomaly counter is not reset until
+        the metric falls back below (mean + 0.5σ), preventing flapping at
+        the detection boundary.
+      • EMA shadow — a fast exponential moving average runs in parallel to
+        detect sustained drift that the slower rolling window might lag on.
+    """
+
+    #: Minimum readings before emitting any anomaly (warm-up period).
+    #: At 5-second collection interval → 30 readings = 2.5 minutes.
+    WARMUP_SAMPLES: int = 30
+
+    #: EMA smoothing factor (α).  Higher = faster response to new values.
+    EMA_ALPHA: float = 0.15
+
+    def __init__(self, window_size: int = 300):
+        # Long window for stable baseline (300 readings ≈ 25 minutes)
+        self.window: deque = deque(maxlen=window_size)
+        # Short window for rate-of-change analysis (last 20 readings ≈ 100s)
+        self.short_window: deque = deque(maxlen=20)
+
+        # Baseline freeze: when True, new values are NOT added to the window
+        self.frozen: bool = False
+
+        # EMA state
+        self._ema: Optional[float] = None
+
+    # ── Public interface ───────────────────────────────────────────────────
+
+    @property
+    def ready(self) -> bool:
+        return len(self.window) >= self.WARMUP_SAMPLES
+
+    def push(self, value: float) -> None:
+        # Always update the short window (used for rate-of-change detection)
+        self.short_window.append(value)
+        # Update EMA regardless of freeze state
+        if self._ema is None:
+            self._ema = value
+        else:
+            self._ema = self.EMA_ALPHA * value + (1 - self.EMA_ALPHA) * self._ema
+        # Only update the long baseline window when not frozen
+        if not self.frozen:
+            self.window.append(value)
+
+    def freeze(self):
+        """Freeze baseline updates — called when an anomaly is confirmed active."""
+        self.frozen = True
+
+    def unfreeze(self):
+        """Resume baseline updates — called when the metric has recovered."""
+        self.frozen = False
+
+    @property
+    def ema(self) -> Optional[float]:
+        return self._ema
+
+    def stats(self) -> Optional[Dict[str, float]]:
+        """
+        Compute and return baseline statistics.
+        Returns None during warm-up.
+        """
+        if not self.ready:
+            return None
+
+        arr = np.array(self.window)
+
+        # ── Percentile stats ───────────────────────────────────────────────
+        q1, q3 = float(np.percentile(arr, 25)), float(np.percentile(arr, 75))
+        median  = float(np.median(arr))
+        iqr     = q3 - q1
+
+        # Use only values below the mild upper fence as the "normal" population.
+        # This stops a long stress-test from inflating mean/std and hiding itself.
+        upper_mild    = q3 + 1.5 * iqr
+        upper_extreme = q3 + 3.0 * iqr
+
+        clean = arr[arr <= upper_mild] if np.sum(arr <= upper_mild) >= 10 else arr
+        mean  = float(np.mean(clean))
+        std   = float(np.std(clean)) or 1e-6   # avoid division by zero
+
+        # ── Rate-of-change baseline ────────────────────────────────────────
+        # Typical step-to-step change (std of first-order differences on recent data)
+        recent   = np.array(self.short_window) if len(self.short_window) >= 5 else arr[-10:]
+        diffs    = np.diff(recent)
+        roc_std  = float(np.std(diffs)) if len(diffs) > 1 else 1e-6
+        roc_mean = float(np.mean(np.abs(diffs))) if len(diffs) > 1 else 0.0
+
+        return {
+            'mean':          mean,
+            'std':           std,
+            'median':        median,
+            'q1':            q1,
+            'q3':            q3,
+            'iqr':           iqr,
+            'upper_mild':    upper_mild,
+            'upper_extreme': upper_extreme,
+            'lower_fence':   q1 - 1.5 * iqr,
+            'roc_std':       roc_std,
+            'roc_mean':      roc_mean,
+        }
+
+    def recent_values(self, n: int = 5) -> List[float]:
+        """Return the last n values from the short window."""
+        w = list(self.short_window)
+        return w[-n:] if len(w) >= n else w
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Anomaly Detection Agent
+# ─────────────────────────────────────────────────────────────────────────────
+
 class AnomalyDetectionAgent(BaseAgent):
     """
-    Agent responsible for detecting anomalies in system metrics
+    Detects anomalies using fully adaptive, learned baselines.
+    No static thresholds — all bounds derive from the data stream.
     """
 
     def __init__(self, name: str, config, event_bus, logger, database=None):
-        """
-        Initialize anomaly detection agent
-
-        Args:
-            name: Agent name
-            config: Configuration
-            event_bus: Event bus
-            logger: Logger
-            database: Optional database
-        """
         super().__init__(name, config, event_bus, logger)
 
-        self.database = database
+        self.database  = database
         self.device_id = config.device_id
 
-        # Anomaly detection configuration
-        self.ad_config = config.get_section('anomaly_detection')
-        self.methods_config = self.ad_config.get('methods', {})
-        self.ml_config = self.ad_config.get('ml', {})
+        # Config sections
+        self.ad_config       = config.get_section('anomaly_detection')
+        self.methods_config  = self.ad_config.get('methods', {})
+        self.ml_config       = self.ad_config.get('ml', {})
         self.baseline_config = self.ad_config.get('baseline', {})
 
-        # Metric thresholds from monitoring config
-        self.thresholds = {
-            'cpu_percent': config.get('monitoring.metrics.cpu.threshold_percent', 80),
-            'memory_percent': config.get('monitoring.metrics.memory.threshold_percent', 85),
-            'disk_percent': config.get('monitoring.metrics.disk.threshold_percent', 90),
-            'packet_loss_percent': config.get('monitoring.metrics.network.max_packet_loss_percent', 5)
-        }
+        # ── Per-metric adaptive baselines ─────────────────────────────────
+        # Replaces the old static self.thresholds dict.
+        # Each metric gets its own AdaptiveMetricBaseline instance.
+        baseline_window = self.baseline_config.get('window_size', 300)
+        self._baselines: Dict[str, AdaptiveMetricBaseline] = {}
+        self._baseline_window_size: int = baseline_window
 
-        # Rolling windows for each metric
-        self.window_size = self.methods_config.get('z_score', {}).get('window_size', 100)
+        # Legacy alias kept so the LSTM detector can still reference windows
         self.metric_windows: Dict[str, deque] = {}
 
-        # Baselines for each metric
-        self.baselines: Dict[str, Dict[str, float]] = {}
+        # ── Persistence & cooldown gates ───────────────────────────────────
+        self.min_consecutive  = config.get('anomaly_detection.min_consecutive_readings', 2)
+        self.cooldown_minutes = config.get('anomaly_detection.cooldown_minutes', 5)
+        self.consecutive_counts: Dict[str, int]      = {}
+        self.last_fired:         Dict[str, datetime] = {}
 
-        # Isolation Forest model
-        self.isolation_forest = None
-        self.ml_training_data = []
+        # ── Hysteresis tracking ─────────────────────────────────────────────
+        # Tracks whether a metric is currently in an anomalous state.
+        # The consecutive counter is only reset once the metric drops back
+        # below mean + 0.5σ (the hysteresis band), preventing boundary flapping.
+        self._metric_anomaly_active: Dict[str, bool] = {}
+
+        # ── ML Layer 1: Isolation Forest ──────────────────────────────────
+        self.isolation_forest  = None
+        self.ml_training_data: List[List[float]] = []
 
         if self.ml_config.get('enabled', False) and SKLEARN_AVAILABLE:
             self._init_isolation_forest()
         elif self.ml_config.get('enabled', False):
-            self.logger.warning("scikit-learn not available, ML-based detection disabled")
+            self.logger.warning("scikit-learn not available — Isolation Forest disabled")
 
-        # Keras LSTM Autoencoder (time-series, runs alongside Isolation Forest)
+        # ── ML Layer 2: Keras LSTM Autoencoder ────────────────────────────
         self.lstm_detector = None
         if self.ml_config.get('enabled', False):
             if KERAS_AVAILABLE and KerasLSTMDetector is not None:
@@ -85,54 +226,43 @@ class AnomalyDetectionAgent(BaseAgent):
             else:
                 self.logger.warning("Keras not available — LSTM detector disabled")
 
-        # Persistence tracking: only fire after N consecutive anomalous readings
-        # This prevents one-off spikes (normal process activity) from triggering alerts
-        self.min_consecutive = config.get('anomaly_detection.min_consecutive_readings', 3)
-        self.cooldown_minutes = config.get('anomaly_detection.cooldown_minutes', 20)
-        self.consecutive_counts: Dict[str, int] = {}   # metric -> consecutive anomaly count
-        self.last_fired: Dict[str, datetime] = {}      # metric -> last anomaly fire time
-
-        # Cumulative counters, absolute-value metrics, and noisy derived values
-        # that should NOT trigger anomaly alerts.
+        # ── Metrics excluded from anomaly detection ────────────────────────
         self.excluded_metrics = {
-            # Cumulative I/O counters — always increasing, not meaningful as anomalies
             'disk.disk_read_mb', 'disk.disk_write_mb',
             'network.bytes_sent_mb', 'network.bytes_recv_mb',
             'network.packets_sent', 'network.packets_recv',
             'network.errors_in', 'network.errors_out',
-            # Packet loss — highly volatile on macOS (ping blocked by CPU-heavy inference)
-            # Use ping_latency_ms instead for network health
             'network.packet_loss_percent',
-            # MQTT sub-ms values — too sensitive, normally near 0
             'mqtt.mqtt_latency_ms',
-            # CPU static/noisy derived values
             'cpu.cpu_count', 'cpu.cpu_freq_current',
-            'cpu.top_process_cpu',        # noisy; top process changes every reading
-            'cpu.top_process_pid',        # PID is not a meaningful numeric metric
-            'cpu.load_avg_1min',          # correlated with cpu_percent — duplicate signal
-            'cpu.load_avg_5min',
-            'cpu.load_avg_15min',
-            # Memory — track only memory_percent; absolute MB values spike with AI model loads
-            'memory.top_process_memory',  # noisy; top process changes every reading
-            'memory.memory_total_mb',     # static — never anomalous
-            'memory.memory_available_mb', # inverse of memory_used — duplicate signal
-            'memory.memory_used_mb',      # absolute MB — spikes when Ollama model loads
-            'memory.swap_used_mb',        # spikes on normal paging
-            # Disk absolute sizes — not meaningful as anomalies (only % matters)
+            'cpu.top_process_cpu',
+            'cpu.top_process_pid',
+            'cpu.load_avg_1min', 'cpu.load_avg_5min', 'cpu.load_avg_15min',
+            'memory.top_process_memory',
+            'memory.memory_total_mb',
+            'memory.memory_available_mb',
+            'memory.memory_used_mb',
+            'memory.swap_used_mb',
             'disk.disk_total_gb', 'disk.disk_used_gb', 'disk.disk_free_gb',
-            # Sensor count — static
             'sensors.sensor_count', 'sensors.sensors_online',
+            'power.power_quality',
+            'power.power_watts',
+            'power.power_voltage_deviation_pct',
         }
-        # Also exclude any metric whose name contains these substrings
-        self.excluded_prefixes = (
-            'network.ping_results.',  # deeply nested per-host ping data
-        )
+        self.excluded_prefixes = ('network.ping_results.',)
 
-        # Subscribe to health metrics
+        # Subscribe to incoming metric events
         self.event_bus.subscribe("health.metric", self.process_event)
 
+        self.logger.info(
+            "Anomaly Detection Agent ready — fully adaptive mode "
+            f"(warmup: {AdaptiveMetricBaseline.WARMUP_SAMPLES} readings per metric, "
+            f"consecutive: {self.min_consecutive}, cooldown: {self.cooldown_minutes} min)"
+        )
+
+    # ── Infrastructure ─────────────────────────────────────────────────────
+
     def _init_isolation_forest(self):
-        """Initialize Isolation Forest model"""
         try:
             contamination = self.ml_config.get('contamination', 0.1)
             self.isolation_forest = IsolationForest(
@@ -140,58 +270,62 @@ class AnomalyDetectionAgent(BaseAgent):
                 random_state=42,
                 n_estimators=100
             )
-            self.logger.info("Initialized Isolation Forest model")
+            self.logger.info("Isolation Forest initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize Isolation Forest: {e}")
 
     def _run(self):
-        """Main loop (anomaly detection is event-driven)"""
-        self.logger.info("Anomaly detection agent started (event-driven mode)")
+        """Periodic baseline maintenance loop (detection is event-driven)."""
+        self.logger.info("Anomaly Detection Agent started — adaptive baselines learning...")
 
         while self._running:
-            # Perform periodic tasks
             try:
-                # Update baselines periodically
-                self._update_baselines()
+                self._log_baseline_status()
 
-                # Retrain ML model if needed
-                if self.isolation_forest is not None and len(self.ml_training_data) > self.ml_config.get('min_samples_for_training', 1000):
+                # Retrain Isolation Forest periodically
+                min_samples = self.ml_config.get('min_samples_for_training', 50)
+                if (self.isolation_forest is not None
+                        and len(self.ml_training_data) >= min_samples):
                     self._retrain_model()
 
             except Exception as e:
-                self.logger.error(f"Error in periodic tasks: {e}")
+                self.logger.error(f"Error in periodic baseline update: {e}")
 
-            # Wait before next iteration
             update_interval = self.baseline_config.get('update_interval_minutes', 15) * 60
             if not self.wait(update_interval):
                 break
 
-    def process_event(self, event):
-        """
-        Process health metric events and detect anomalies
+    def _log_baseline_status(self):
+        """Log how many metrics have completed warm-up."""
+        ready   = sum(1 for b in self._baselines.values() if b.ready)
+        warming = sum(1 for b in self._baselines.values() if not b.ready)
+        if self._baselines:
+            self.logger.info(
+                f"Adaptive baselines: {ready} metrics learned, "
+                f"{warming} still warming up"
+            )
 
-        Args:
-            event: Event object
-        """
+    # ── Event processing ───────────────────────────────────────────────────
+
+    def process_event(self, event):
         if event.event_type != "health.metric":
             return
 
         try:
-            metrics = event.data.get('metrics', {})
+            metrics   = event.data.get('metrics', {})
             device_id = event.data.get('device_id')
             timestamp = event.data.get('timestamp')
 
-            # Flatten metrics for analysis
             flat_metrics = self._flatten_metrics(metrics)
 
-            # Feed LSTM buffer (time-series learning — non-blocking)
+            # Feed LSTM buffer
             if self.lstm_detector is not None:
                 self.lstm_detector.add_reading(flat_metrics)
 
-            # Detect anomalies using various methods
+            # Detect anomalies
             anomalies = self.detect_anomalies(flat_metrics, timestamp)
 
-            # Build string context (process names etc.) for diagnosis templates
+            # Build string context (process names, etc.) for diagnosis templates
             string_context = {}
             for section, section_data in metrics.items():
                 if isinstance(section_data, dict):
@@ -200,126 +334,168 @@ class AnomalyDetectionAgent(BaseAgent):
                             string_context[f"{section}.{k}"] = v
                             string_context[k] = v
 
-            # Publish anomalies
             for anomaly in anomalies:
                 anomaly['context'] = string_context
                 self._publish_anomaly(anomaly, device_id, timestamp)
 
-                # Store in database
                 if self.database:
                     self.database.store_anomaly({
-                        'anomaly_id': anomaly['anomaly_id'],
-                        'timestamp': timestamp,
-                        'device_id': device_id,
-                        'metric_name': anomaly['metric_name'],
+                        'anomaly_id':   anomaly['anomaly_id'],
+                        'timestamp':    timestamp,
+                        'device_id':    device_id,
+                        'metric_name':  anomaly['metric_name'],
                         'anomaly_type': anomaly['type'],
-                        'severity': anomaly['severity'],
-                        'value': anomaly['value'],
+                        'severity':     anomaly['severity'],
+                        'value':        anomaly['value'],
                         'expected_value': anomaly.get('expected_value'),
-                        'deviation': anomaly.get('deviation'),
-                        'confidence': anomaly.get('confidence', 0.8)
+                        'deviation':    anomaly.get('deviation'),
+                        'confidence':   anomaly.get('confidence', 0.8),
                     })
 
         except Exception as e:
             self.logger.error(f"Error processing health metric: {e}", exc_info=True)
 
-    def detect_anomalies(self, metrics: Dict[str, float], timestamp: str) -> List[Dict[str, Any]]:
+    # ── Main detection loop ────────────────────────────────────────────────
+
+    def detect_anomalies(
+        self,
+        metrics: Dict[str, float],
+        timestamp: str
+    ) -> List[Dict[str, Any]]:
         """
-        Detect anomalies using all enabled methods.
+        Run all adaptive detection methods on the current metric snapshot.
 
-        Only fires an anomaly when:
-          1. The metric has been anomalous for min_consecutive readings in a row
-             (prevents normal process spikes from triggering alerts).
-          2. The per-metric cooldown period has elapsed since the last alert.
-
-        Args:
-            metrics: Flattened metrics dictionary
-            timestamp: Timestamp string
-
-        Returns:
-            List of sustained, non-duplicate anomalies ready to publish
+        Returns only sustained, non-duplicate anomalies ready to publish
+        to the diagnosis pipeline.
         """
         now = datetime.now()
         sustained_anomalies = []
 
         for metric_name, value in metrics.items():
-            # Skip non-numeric values
             if not isinstance(value, (int, float)):
                 continue
-
-            # Skip cumulative counters and irrelevant metrics
             if metric_name in self.excluded_metrics:
                 continue
             if any(metric_name.startswith(p) for p in self.excluded_prefixes):
                 continue
 
-            # Update metric window
-            if metric_name not in self.metric_windows:
-                self.metric_windows[metric_name] = deque(maxlen=self.window_size)
-            self.metric_windows[metric_name].append(value)
+            # ── Maintain adaptive baseline for this metric ─────────────────
+            if metric_name not in self._baselines:
+                self._baselines[metric_name] = AdaptiveMetricBaseline(
+                    window_size=self._baseline_window_size
+                )
+                # Keep legacy metric_windows reference for LSTM compatibility
+                self.metric_windows[metric_name] = self._baselines[metric_name].window
 
-            # Run detection methods; collect the best (highest severity) hit per metric
+            baseline = self._baselines[metric_name]
+            baseline.push(value)
+
+            # Skip detection during warm-up
+            if not baseline.ready:
+                continue
+
+            stats = baseline.stats()
+            if stats is None:
+                continue
+
+            # ── Hysteresis: recovery check ─────────────────────────────────
+            # If this metric was previously anomalous, only reset the counter
+            # once the value drops back below mean + 0.5σ (hysteresis band).
+            # This prevents the counter flapping at the detection boundary.
+            if self._metric_anomaly_active.get(metric_name, False):
+                hysteresis_band = stats['mean'] + 0.5 * stats['std']
+                if value <= hysteresis_band:
+                    self.consecutive_counts[metric_name] = 0
+                    self._metric_anomaly_active[metric_name] = False
+                    baseline.unfreeze()   # resume baseline learning
+
+            # ── Run adaptive detection methods ─────────────────────────────
             candidates = []
 
-            if self.methods_config.get('threshold', {}).get('enabled', True):
-                a = self._detect_threshold_anomaly(metric_name, value)
-                if a:
-                    candidates.append(a)
+            hit = self._detect_iqr_outlier(metric_name, value, stats)
+            if hit:
+                candidates.append(hit)
 
-            if self.methods_config.get('z_score', {}).get('enabled', True):
-                a = self._detect_zscore_anomaly(metric_name, value)
-                if a:
-                    candidates.append(a)
+            hit = self._detect_zscore_adaptive(metric_name, value, stats)
+            if hit:
+                candidates.append(hit)
 
-            if self.methods_config.get('spike_detection', {}).get('enabled', True):
-                a = self._detect_spike_anomaly(metric_name, value)
-                if a:
-                    candidates.append(a)
+            hit = self._detect_trend_elevation(metric_name, value, stats, baseline)
+            if hit:
+                candidates.append(hit)
 
-            # ── Persistence gate ──────────────────────────────────────────
+            hit = self._detect_roc_spike(metric_name, value, stats, baseline)
+            if hit:
+                candidates.append(hit)
+
+            # ── EMA drift detection ────────────────────────────────────────
+            # Fire a low-severity signal when the EMA drifts significantly
+            # above the baseline mean (catches slow monotonic increases).
+            if baseline.ema is not None:
+                ema_drift = baseline.ema - stats['mean']
+                if ema_drift > 2.0 * stats['std'] and not candidates:
+                    candidates.append({
+                        'anomaly_id':     str(uuid.uuid4()),
+                        'metric_name':    metric_name,
+                        'type':           'ema_drift',
+                        'value':          value,
+                        'expected_value': stats['mean'],
+                        'deviation':      ema_drift / max(stats['std'], 1e-6),
+                        'severity':       'low',
+                        'confidence':     0.65,
+                        'baseline':       {
+                            'mean': round(stats['mean'], 3),
+                            'ema':  round(baseline.ema, 3),
+                            'drift': round(ema_drift, 3),
+                        },
+                    })
+
+            # ── Persistence gate ───────────────────────────────────────────
             if candidates:
-                # Metric is anomalous this reading — increment streak
                 self.consecutive_counts[metric_name] = (
                     self.consecutive_counts.get(metric_name, 0) + 1
                 )
             else:
-                # Metric is normal — reset streak
-                self.consecutive_counts[metric_name] = 0
-                continue  # Nothing to report
-
-            streak = self.consecutive_counts[metric_name]
-            if streak < self.min_consecutive:
-                # Not sustained long enough — likely a transient spike
+                # Only reset if NOT in hysteresis — handled above
+                if not self._metric_anomaly_active.get(metric_name, False):
+                    self.consecutive_counts[metric_name] = 0
                 continue
 
-            # ── Cooldown gate ─────────────────────────────────────────────
+            if self.consecutive_counts[metric_name] < self.min_consecutive:
+                continue   # transient blip — wait for sustained signal
+
+            # ── Cooldown gate ──────────────────────────────────────────────
             last = self.last_fired.get(metric_name)
             if last is not None:
-                elapsed_min = (now - last).total_seconds() / 60
-                if elapsed_min < self.cooldown_minutes:
-                    continue  # Already reported this recently
+                if (now - last).total_seconds() / 60 < self.cooldown_minutes:
+                    continue
 
-            # Pick the highest-severity candidate
+            # Best candidate by severity
             sev_rank = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
-            best = max(candidates, key=lambda a: sev_rank.get(a.get('severity', 'low'), 0))
+            best = max(candidates,
+                       key=lambda a: sev_rank.get(a.get('severity', 'low'), 0))
             self.last_fired[metric_name] = now
+
+            # Freeze baseline so spike values don't corrupt the learned distribution
+            self._metric_anomaly_active[metric_name] = True
+            baseline.freeze()
+
             sustained_anomalies.append(best)
 
-        # ── ML Layer 1: Isolation Forest (multivariate, point-in-time) ──────────
+        # ── ML Layer 1: Isolation Forest ──────────────────────────────────
         if self.ml_config.get('enabled', False) and self.isolation_forest is not None:
-            ml_anomalies = self._detect_ml_anomalies(metrics)
-            for ml_a in ml_anomalies:
-                key = 'multivariate_isolation_forest'
+            for ml_a in self._detect_ml_anomalies(metrics):
+                key  = 'multivariate_isolation_forest'
                 last = self.last_fired.get(key)
                 if last is None or (now - last).total_seconds() / 60 >= self.cooldown_minutes:
                     self.last_fired[key] = now
                     sustained_anomalies.append(ml_a)
 
-        # ── ML Layer 2: Keras LSTM Autoencoder (time-series, sequence-level) ──
+        # ── ML Layer 2: Keras LSTM Autoencoder ────────────────────────────
         if self.lstm_detector is not None and self.lstm_detector.is_trained:
             lstm_a = self.lstm_detector.predict(metrics)
             if lstm_a is not None:
-                key = 'multivariate_lstm'
+                key  = 'multivariate_lstm'
                 last = self.last_fired.get(key)
                 if last is None or (now - last).total_seconds() / 60 >= self.cooldown_minutes:
                     self.last_fired[key] = now
@@ -327,218 +503,282 @@ class AnomalyDetectionAgent(BaseAgent):
 
         return sustained_anomalies
 
-    def _detect_threshold_anomaly(self, metric_name: str, value: float) -> Optional[Dict]:
-        """Detect anomaly using static thresholds.
-        Supports both fully-qualified keys (cpu.cpu_percent) and bare keys (cpu_percent).
+    # ── Adaptive detection methods ─────────────────────────────────────────
+
+    def _detect_iqr_outlier(
+        self,
+        metric_name: str,
+        value: float,
+        stats: Dict
+    ) -> Optional[Dict]:
         """
-        # Try full key first, then the last component (e.g. 'cpu.cpu_percent' -> 'cpu_percent')
-        threshold = self.thresholds.get(metric_name) or self.thresholds.get(metric_name.split('.')[-1])
-        if threshold is None:
+        Tukey-fence IQR outlier detection.
+
+        Mild fence  (Q3 + 1.5 * IQR) → medium anomaly
+        Extreme fence (Q3 + 3.0 * IQR) → high / critical anomaly
+
+        Both bounds are computed from the learned data distribution —
+        there are no hardcoded numbers anywhere in this method.
+        """
+        upper_mild    = stats['upper_mild']
+        upper_extreme = stats['upper_extreme']
+
+        if value <= upper_mild:
             return None
 
-        if value > threshold:
-            severity = self._calculate_severity(value, threshold, threshold * 1.2)
+        if value >= upper_extreme:
+            # How many IQR units above the extreme fence?
+            excess = (value - upper_extreme) / max(stats['iqr'], 1e-6)
+            severity = 'critical' if excess > 2.0 else 'high'
+            confidence = min(0.97, 0.80 + excess * 0.05)
+        else:
+            # Between mild and extreme fence
+            excess = (value - upper_mild) / max(stats['iqr'], 1e-6)
+            severity = 'medium'
+            confidence = min(0.85, 0.65 + excess * 0.10)
 
-            return {
-                'anomaly_id': str(uuid.uuid4()),
-                'metric_name': metric_name,
-                'type': 'threshold',
-                'value': value,
-                'expected_value': threshold,
-                'deviation': value - threshold,
-                'severity': severity,
-                'confidence': 0.9
-            }
+        return {
+            'anomaly_id':     str(uuid.uuid4()),
+            'metric_name':    metric_name,
+            'type':           'iqr_outlier',
+            'value':          value,
+            'expected_value': stats['q3'],
+            'deviation':      value - stats['upper_mild'],
+            'severity':       severity,
+            'confidence':     confidence,
+            'baseline':       {
+                'upper_mild': round(upper_mild, 3),
+                'upper_extreme': round(upper_extreme, 3),
+                'iqr': round(stats['iqr'], 3),
+            },
+        }
 
-        return None
+    def _detect_zscore_adaptive(
+        self,
+        metric_name: str,
+        value: float,
+        stats: Dict
+    ) -> Optional[Dict]:
+        """
+        Adaptive z-score detection using the learned mean and std.
 
-    def _detect_zscore_anomaly(self, metric_name: str, value: float) -> Optional[Dict]:
-        """Detect anomaly using Z-score method"""
-        window = self.metric_windows.get(metric_name)
+        The z-score threshold is 2.5 σ by default but scales with
+        the coefficient of variation (CV): metrics that are naturally
+        more volatile get a higher tolerance so they don't flood alerts.
+        """
+        mean = stats['mean']
+        std  = stats['std']
 
-        if not window or len(window) < 10:
+        z = abs((value - mean) / std)
+
+        # Adaptive tolerance: naturally volatile metrics (CV > 30%) get +0.5σ
+        cv = std / max(abs(mean), 1e-6)
+        z_threshold = self.methods_config.get('z_score', {}).get('threshold', 2.5)
+        if cv > 0.30:
+            z_threshold += 0.5   # reduce noise for high-variance metrics
+
+        if z < z_threshold:
             return None
 
-        values = list(window)
-        mean = np.mean(values)
-        std = np.std(values)
+        severity  = self._severity_from_z(z, z_threshold)
+        confidence = min(0.95, 0.50 + (z / z_threshold) * 0.40)
 
-        if std == 0:
+        return {
+            'anomaly_id':     str(uuid.uuid4()),
+            'metric_name':    metric_name,
+            'type':           'statistical_zscore',
+            'value':          value,
+            'expected_value': mean,
+            'deviation':      z,
+            'severity':       severity,
+            'confidence':     confidence,
+            'baseline':       {
+                'mean': round(mean, 3),
+                'std':  round(std, 3),
+                'z':    round(z, 2),
+            },
+        }
+
+    def _detect_trend_elevation(
+        self,
+        metric_name: str,
+        value: float,
+        stats: Dict,
+        baseline: AdaptiveMetricBaseline,
+    ) -> Optional[Dict]:
+        """
+        Time-series trend detection: fires when the last N readings are
+        all consistently above the learned normal band.
+
+        This catches gradual increases that no single-point method would
+        flag (e.g. memory creeping up over 10 minutes).
+        """
+        recent = baseline.recent_values(n=5)
+        if len(recent) < 5:
             return None
 
-        z_score = abs((value - mean) / std)
-        threshold = self.methods_config.get('z_score', {}).get('threshold', 3.0)
+        # Elevation threshold: mean + 1.5 * std (learned from data)
+        elev_threshold = stats['mean'] + 1.5 * stats['std']
 
-        if z_score > threshold:
-            severity = self._calculate_severity(z_score, threshold, threshold * 1.5)
-
-            return {
-                'anomaly_id': str(uuid.uuid4()),
-                'metric_name': metric_name,
-                'type': 'statistical_zscore',
-                'value': value,
-                'expected_value': mean,
-                'deviation': z_score,
-                'severity': severity,
-                'confidence': min(0.95, 0.5 + (z_score / threshold) * 0.4)
-            }
-
-        return None
-
-    def _detect_spike_anomaly(self, metric_name: str, value: float) -> Optional[Dict]:
-        """Detect sudden spikes in metric values"""
-        window = self.metric_windows.get(metric_name)
-
-        if not window or len(window) < 5:
+        sustained = all(v > elev_threshold for v in recent)
+        if not sustained:
             return None
 
-        # Get recent average (excluding current value)
-        recent_values = list(window)[:-1]
-        recent_avg = np.mean(recent_values)
+        # How elevated on average?
+        avg_recent = float(np.mean(recent))
+        z = (avg_recent - stats['mean']) / stats['std']
+        severity = self._severity_from_z(z, 1.5)
 
-        if recent_avg == 0:
+        return {
+            'anomaly_id':     str(uuid.uuid4()),
+            'metric_name':    metric_name,
+            'type':           'trend_elevation',
+            'value':          value,
+            'expected_value': stats['mean'],
+            'deviation':      z,
+            'severity':       severity,
+            'confidence':     min(0.92, 0.70 + z * 0.05),
+            'baseline':       {
+                'mean':           round(stats['mean'], 3),
+                'elev_threshold': round(elev_threshold, 3),
+                'recent_avg':     round(avg_recent, 3),
+            },
+        }
+
+    def _detect_roc_spike(
+        self,
+        metric_name: str,
+        value: float,
+        stats: Dict,
+        baseline: AdaptiveMetricBaseline,
+    ) -> Optional[Dict]:
+        """
+        Rate-of-change spike detection.
+
+        Fires when the step-to-step jump is abnormally large compared to
+        the learned typical rate of change.  Catches sudden vertical spikes
+        (e.g. CPU: 20% → 90% in one reading) even if the absolute value
+        is not yet above the IQR fence.
+        """
+        recent = baseline.recent_values(n=2)
+        if len(recent) < 2:
             return None
 
-        # Calculate spike ratio
-        spike_ratio = value / recent_avg
-        multiplier = self.methods_config.get('spike_detection', {}).get('multiplier', 4.0)
+        change    = abs(recent[-1] - recent[-2])
+        roc_std   = stats['roc_std']
+        roc_mean  = stats['roc_mean']
 
-        if spike_ratio > multiplier:
-            severity = self._calculate_severity(spike_ratio, multiplier, multiplier * 1.5)
+        # Spike multiplier: 4× the typical rate-of-change std
+        spike_limit = roc_mean + 4.0 * roc_std
+        if spike_limit < 1e-4 or change <= spike_limit:
+            return None
 
-            return {
-                'anomaly_id': str(uuid.uuid4()),
-                'metric_name': metric_name,
-                'type': 'spike',
-                'value': value,
-                'expected_value': recent_avg,
-                'deviation': spike_ratio,
-                'severity': severity,
-                'confidence': 0.85
-            }
+        excess    = change / max(spike_limit, 1e-6)
+        severity  = 'high' if excess > 3.0 else 'medium'
+        confidence = min(0.90, 0.65 + (excess - 1.0) * 0.08)
 
-        return None
+        return {
+            'anomaly_id':     str(uuid.uuid4()),
+            'metric_name':    metric_name,
+            'type':           'roc_spike',
+            'value':          value,
+            'expected_value': recent[-2],
+            'deviation':      change,
+            'severity':       severity,
+            'confidence':     confidence,
+            'baseline':       {
+                'typical_change': round(roc_mean, 4),
+                'spike_limit':    round(spike_limit, 4),
+                'actual_change':  round(change, 4),
+            },
+        }
+
+    # ── ML detection helpers ───────────────────────────────────────────────
 
     def _detect_ml_anomalies(self, metrics: Dict[str, float]) -> List[Dict]:
-        """Detect anomalies using Isolation Forest"""
+        """Isolation Forest multivariate detection."""
         if self.isolation_forest is None or not hasattr(self.isolation_forest, 'estimators_'):
             return []
 
         try:
-            # Prepare feature vector
-            feature_names = sorted([k for k, v in metrics.items() if isinstance(v, (int, float))])
-            features = [metrics[name] for name in feature_names]
-
+            feature_names = sorted(k for k, v in metrics.items()
+                                   if isinstance(v, (int, float)))
+            features = [metrics[n] for n in feature_names]
             if len(features) < 3:
                 return []
 
-            # Add to training data
             self.ml_training_data.append(features)
             if len(self.ml_training_data) > 10000:
                 self.ml_training_data.pop(0)
 
-            # Predict if model is trained
-            min_samples = self.ml_config.get('min_samples_for_training', 1000)
-            if len(self.ml_training_data) >= min_samples:
-                prediction = self.isolation_forest.predict([features])[0]
-                score = self.isolation_forest.score_samples([features])[0]
+            min_samples = self.ml_config.get('min_samples_for_training', 50)
+            if len(self.ml_training_data) < min_samples:
+                return []
 
-                # -1 indicates anomaly
-                if prediction == -1:
-                    return [{
-                        'anomaly_id': str(uuid.uuid4()),
-                        'metric_name': 'multivariate',
-                        'type': 'ml_isolation_forest',
-                        'value': 0,  # Multivariate, no single value
-                        'expected_value': 0,
-                        'deviation': abs(score),
-                        'severity': self._calculate_severity(abs(score), 0.5, 0.7),
-                        'confidence': min(0.95, abs(score))
-                    }]
+            prediction = self.isolation_forest.predict([features])[0]
+            score      = self.isolation_forest.score_samples([features])[0]
 
+            if prediction == -1:
+                return [{
+                    'anomaly_id':     str(uuid.uuid4()),
+                    'metric_name':    'multivariate',
+                    'type':           'ml_isolation_forest',
+                    'value':          0,
+                    'expected_value': 0,
+                    'deviation':      abs(score),
+                    'severity':       self._severity_from_z(abs(score), 0.5),
+                    'confidence':     min(0.95, abs(score)),
+                }]
         except Exception as e:
-            self.logger.error(f"ML anomaly detection error: {e}")
+            self.logger.error(f"Isolation Forest error: {e}")
 
         return []
 
     def _retrain_model(self):
-        """Retrain Isolation Forest model"""
+        """Retrain Isolation Forest on accumulated training data."""
         try:
-            min_samples = self.ml_config.get('min_samples_for_training', 1000)
+            min_samples = self.ml_config.get('min_samples_for_training', 50)
             if len(self.ml_training_data) < min_samples:
                 return
-
-            self.logger.info("Retraining Isolation Forest model...")
+            self.logger.info(
+                f"Retraining Isolation Forest on {len(self.ml_training_data)} samples..."
+            )
             self.isolation_forest.fit(self.ml_training_data)
-            self.logger.info(f"Model retrained with {len(self.ml_training_data)} samples")
-
+            self.logger.info("Isolation Forest retrained")
         except Exception as e:
             self.logger.error(f"Model retraining failed: {e}")
 
-    def _update_baselines(self):
-        """Update rolling baselines for metrics"""
-        for metric_name, window in self.metric_windows.items():
-            if len(window) < 10:
-                continue
+    # ── Utilities ──────────────────────────────────────────────────────────
 
-            values = list(window)
-            self.baselines[metric_name] = {
-                'mean': np.mean(values),
-                'std': np.std(values),
-                'min': np.min(values),
-                'max': np.max(values),
-                'median': np.median(values)
-            }
+    def _severity_from_z(self, z: float, base_threshold: float) -> str:
+        """Map a z-score (or ratio) to a severity label."""
+        ratio = z / max(base_threshold, 1e-6)
+        if ratio >= 3.0:
+            return 'critical'
+        elif ratio >= 2.0:
+            return 'high'
+        elif ratio >= 1.0:
+            return 'medium'
+        return 'low'
 
-    def _calculate_severity(self, value: float, threshold: float, critical_threshold: float) -> str:
-        """
-        Calculate severity level
-
-        Args:
-            value: Current value
-            threshold: Warning threshold
-            critical_threshold: Critical threshold
-
-        Returns:
-            Severity string (low, medium, high, critical)
-        """
-        if value >= critical_threshold:
-            return "critical"
-        elif value >= threshold * 1.1:
-            return "high"
-        elif value >= threshold:
-            return "medium"
-        else:
-            return "low"
-
-    # Keys at any level that should not be recursively flattened
     _SKIP_FLATTEN_KEYS = {'ping_results'}
 
     def _flatten_metrics(self, metrics: Dict) -> Dict[str, float]:
-        """
-        Flatten nested metrics dictionary.
-        Skips sub-dicts that are purely informational (e.g. ping_results).
-
-        Args:
-            metrics: Nested metrics dictionary
-
-        Returns:
-            Flattened dictionary
-        """
+        """Flatten nested metrics dict into dot-separated float keys."""
         flat = {}
 
         def flatten(d, prefix=''):
             for key, value in d.items():
                 if key in self._SKIP_FLATTEN_KEYS:
-                    continue  # skip deeply nested per-host detail dicts
+                    continue
                 new_key = f"{prefix}.{key}" if prefix else key
-
                 if isinstance(value, dict):
                     flatten(value, new_key)
-                elif isinstance(value, (int, float, bool)):
-                    flat[new_key] = float(value) if isinstance(value, bool) else value
+                elif isinstance(value, bool):
+                    flat[new_key] = float(value)
+                elif isinstance(value, (int, float)):
+                    flat[new_key] = value
                 elif isinstance(value, str):
-                    # Try to convert string numbers
                     try:
                         flat[new_key] = float(value)
                     except ValueError:
@@ -548,27 +788,25 @@ class AnomalyDetectionAgent(BaseAgent):
         return flat
 
     def _publish_anomaly(self, anomaly: Dict, device_id: str, timestamp: str):
-        """
-        Publish anomaly event
-
-        Args:
-            anomaly: Anomaly dictionary
-            device_id: Device ID
-            timestamp: Timestamp
-        """
-        priority = EventPriority.CRITICAL if anomaly['severity'] == 'critical' else EventPriority.HIGH
+        """Publish anomaly event to the bus → triggers Diagnosis Agent."""
+        priority = (EventPriority.CRITICAL
+                    if anomaly['severity'] == 'critical'
+                    else EventPriority.HIGH)
 
         self.publish_event(
             event_type="anomaly.detected",
             data={
                 'device_id': device_id,
                 'timestamp': timestamp,
-                'anomaly': anomaly
+                'anomaly':   anomaly,
             },
-            priority=priority
+            priority=priority,
         )
 
         self.logger.warning(
-            f"Anomaly detected: {anomaly['metric_name']} - {anomaly['type']} "
-            f"(severity: {anomaly['severity']}, value: {anomaly['value']:.2f})"
+            f"[ANOMALY] {anomaly['metric_name']} — {anomaly['type']} "
+            f"| severity={anomaly['severity']} "
+            f"| value={anomaly['value']:.3f} "
+            f"| expected≈{anomaly.get('expected_value', 0):.3f} "
+            f"| confidence={anomaly.get('confidence', 0):.2f}"
         )

@@ -54,6 +54,9 @@ class MonitoringAgent(BaseAgent):
         self.sensor_latency = 0
         self.sensor_success_rate = 1.0
 
+        # Power simulation: volts to subtract from nominal (set via trigger_power_event)
+        self._power_sim_sag = 0.0
+
         # Initialize collectors
         self._init_mqtt()
 
@@ -183,6 +186,9 @@ class MonitoringAgent(BaseAgent):
 
         if self.metrics_config.get('sensors', {}).get('enabled', False):
             metrics['sensors'] = self.collect_sensor_metrics()
+
+        if self.metrics_config.get('power', {}).get('enabled', True):
+            metrics['power'] = self.collect_power_metrics()
 
         return metrics
 
@@ -428,6 +434,81 @@ class MonitoringAgent(BaseAgent):
         except Exception as e:
             self.logger.error(f"Error collecting sensor metrics: {e}")
             return {}
+
+    def collect_power_metrics(self) -> Dict[str, float]:
+        """
+        Collect power supply metrics.
+        On macOS dev: simulated with realistic IoT power patterns.
+        On real IoT hardware: replace body with INA219/INA3221 sensor reads.
+
+        Metrics:
+          power_voltage_v           — input voltage (V)
+          power_current_a           — current draw (A)
+          power_watts               — power consumption (W)
+          power_quality             — quality score 0-100 (100 = clean supply)
+          power_voltage_deviation_pct — % deviation from nominal (for anomaly threshold)
+        """
+        import random
+
+        nominal_v = float(
+            self.metrics_config.get('power', {}).get('nominal_voltage_v', 5.0)
+        )
+
+        # Correlate current draw with CPU load (realistic IoT behaviour)
+        try:
+            cpu_pct = psutil.cpu_percent(interval=0) / 100.0
+        except Exception:
+            cpu_pct = 0.3
+
+        # ── Voltage simulation ────────────────────────────────────────────
+        # Normal: nominal ± small Gaussian noise
+        # Under load: slight sag proportional to CPU activity
+        # Simulation fault: additional sag injected by trigger_power_event()
+        load_sag  = cpu_pct * 0.08                  # up to 80 mV under full load
+        noise     = random.gauss(0, 0.025)           # ±25 mV normal noise
+        voltage   = nominal_v - load_sag + noise - self._power_sim_sag
+        voltage   = round(max(2.5, min(7.0, voltage)), 3)
+
+        # ── Current draw simulation ───────────────────────────────────────
+        # Idle ~0.5 A, full load ~2.5 A, small noise
+        current = 0.5 + cpu_pct * 2.0 + random.gauss(0, 0.04)
+        current = round(max(0.05, current), 3)
+
+        # ── Derived values ────────────────────────────────────────────────
+        watts = round(voltage * current, 2)
+
+        # Voltage deviation from nominal (% absolute) — used by threshold detector
+        voltage_dev_pct = round(abs(voltage - nominal_v) / nominal_v * 100.0, 2)
+
+        # Quality score: 100 = perfect, drops 8 points per 1% voltage deviation
+        quality = round(max(0.0, 100.0 - voltage_dev_pct * 8.0), 1)
+
+        return {
+            'power_voltage_v':            voltage,
+            'power_current_a':            current,
+            'power_watts':                watts,
+            'power_quality':              quality,
+            'power_voltage_deviation_pct': voltage_dev_pct,
+        }
+
+    def trigger_power_event(self, sag_volts: float = 0.8, duration_seconds: float = 60):
+        """
+        Inject a simulated power sag for testing purposes.
+        The sag is removed automatically after duration_seconds.
+        """
+        import threading
+
+        self._power_sim_sag = sag_volts
+        self.logger.warning(
+            f"Power sag simulation started: -{sag_volts:.2f}V for {duration_seconds}s"
+        )
+
+        def _reset():
+            time.sleep(duration_seconds)
+            self._power_sim_sag = 0.0
+            self.logger.info("Power sag simulation ended — voltage restored")
+
+        threading.Thread(target=_reset, daemon=True).start()
 
     def process_event(self, event):
         """

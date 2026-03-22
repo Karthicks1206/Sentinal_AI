@@ -61,6 +61,8 @@ class DashboardState:
         self.memory_history = deque(maxlen=60)
         self.disk_history = deque(maxlen=60)
         self.network_latency_history = deque(maxlen=60)  # ping latency ms
+        self.power_voltage_history = deque(maxlen=60)   # input voltage V
+        self.power_quality_history = deque(maxlen=60)   # power quality 0-100
         self.timestamps = deque(maxlen=60)
 
 
@@ -104,6 +106,7 @@ class SentinelDashboard:
         self.event_bus.subscribe("anomaly.detected", self._on_anomaly)
         self.event_bus.subscribe("diagnosis.complete", self._on_diagnosis)
         self.event_bus.subscribe("recovery.action", self._on_recovery)
+        self.event_bus.subscribe("security.threat", self._on_security_threat)
 
     def _on_metric(self, event):
         """Handle metric event"""
@@ -115,12 +118,17 @@ class SentinelDashboard:
         mem  = state.latest_metrics.get('memory',  {}).get('memory_percent',     0)
         disk = state.latest_metrics.get('disk',    {}).get('disk_percent',       0)
         net_latency = state.latest_metrics.get('network', {}).get('ping_latency_ms', 0)
+        power       = state.latest_metrics.get('power', {})
+        pwr_voltage = power.get('power_voltage_v', 0)
+        pwr_quality = power.get('power_quality', 100)
 
         # Append to rolling graph history
         state.cpu_history.append(round(cpu, 1))
         state.memory_history.append(round(mem, 1))
         state.disk_history.append(round(disk, 1))
         state.network_latency_history.append(round(net_latency, 1))
+        state.power_voltage_history.append(round(pwr_voltage, 3))
+        state.power_quality_history.append(round(pwr_quality, 1))
         state.timestamps.append(timestamp)
 
         state.logs.append({
@@ -189,6 +197,26 @@ class SentinelDashboard:
         })
 
         self.logger.info(f"Diagnosis complete: {diagnosis.get('diagnosis')}")
+
+    def _on_security_threat(self, event):
+        """Handle security threat event — push to logs and state for SSE."""
+        threat = event.data.get('threat', {})
+        timestamp = now_cst()
+        state.logs.append({
+            'timestamp': timestamp,
+            'level': 'ERROR' if threat.get('severity') in ('high', 'critical') else 'WARNING',
+            'message': f"[SECURITY] {threat.get('severity', '?').upper()} — "
+                       f"{threat.get('title', '?')}: {threat.get('detail', '')}"
+        })
+        # Attach to current_alert for SSE stream pickup
+        state.security_threats = getattr(state, 'security_threats', [])
+        state.security_threats.append({
+            'timestamp': timestamp,
+            'threat':    threat
+        })
+        # Keep only last 50
+        if len(state.security_threats) > 50:
+            state.security_threats = state.security_threats[-50:]
 
     def _on_recovery(self, event):
         """Handle recovery event"""
@@ -283,6 +311,25 @@ class SentinelDashboard:
         return agent.is_running() if agent else False
 
 
+def _active_ai_provider() -> str:
+    """Return which AI provider the diagnosis agent is currently using."""
+    try:
+        agent = external_agents.get('diagnosis') or (
+            dashboard.agents.get('diagnosis') if dashboard and hasattr(dashboard, 'agents') else None
+        )
+        if agent is None:
+            return 'unknown'
+        if getattr(agent, 'groq_client', None):
+            return 'groq'
+        if getattr(agent, 'ollama_available', False):
+            return 'ollama'
+        if getattr(agent, 'openai_client', None):
+            return 'openai'
+        return 'rule_based'
+    except Exception:
+        return 'unknown'
+
+
 # Global dashboard instance
 dashboard = None
 
@@ -320,10 +367,11 @@ def get_status():
         'system_status': state.system_status,
         'agents': {
             name: _agent_running(name)
-            for name in ['monitoring', 'anomaly', 'diagnosis', 'recovery', 'learning']
+            for name in ['monitoring', 'anomaly', 'diagnosis', 'recovery', 'learning', 'security']
         },
         'alert_active': state.alert_active,
         'lstm': lstm_status,
+        'ai_provider': _active_ai_provider(),
     })
 
 
@@ -343,6 +391,25 @@ def get_logs():
 def get_anomalies():
     """Get recent anomalies"""
     return jsonify(list(state.anomalies))
+
+
+@app.route('/api/diagnoses')
+def get_diagnoses():
+    """Get recent diagnoses"""
+    return jsonify(list(state.diagnoses))
+
+
+@app.route('/api/recoveries')
+def get_recoveries():
+    """Get recent recoveries"""
+    return jsonify(list(state.recoveries))
+
+
+@app.route('/api/security/threats')
+def get_security_threats():
+    """Get recent security threats"""
+    threats = getattr(state, 'security_threats', [])
+    return jsonify(list(threats))
 
 
 @app.route('/api/alert')
@@ -365,64 +432,74 @@ def get_stats():
 @app.route('/api/thresholds')
 def get_thresholds():
     """
-    Return adaptive thresholds computed from recent metric data (mean + 2*std).
-    Falls back to config defaults when there is not enough data.
-    Also returns the network packet-loss threshold for display.
+    Return the LIVE adaptive bounds learned by the anomaly detection agent.
+
+    The anomaly detection agent uses no hardcoded thresholds — all bounds
+    are computed at runtime from the rolling data stream via IQR and z-score
+    statistics.  This endpoint reads those learned values directly from the
+    agent's AdaptiveMetricBaseline instances so the dashboard always shows
+    what the detector is actually using.
+
+    Falls back to config reference values during warm-up (first ~2.5 minutes).
     """
     config = get_config()
-    cfg = {
+    # Reference values for display fallback only — NOT used for detection
+    ref = {
         'cpu':     config.get('monitoring.metrics.cpu.threshold_percent', 80),
         'memory':  config.get('monitoring.metrics.memory.threshold_percent', 85),
         'disk':    config.get('monitoring.metrics.disk.threshold_percent', 90),
         'network': config.get('monitoring.metrics.network.max_packet_loss_percent', 5),
     }
 
-    if not dashboard:
-        return jsonify({**cfg, 'adaptive': False})
+    # Map dashboard key → flattened metric name used by the anomaly agent
+    metric_map = {
+        'cpu':    'cpu.cpu_percent',
+        'memory': 'memory.memory_percent',
+        'disk':   'disk.disk_percent',
+    }
 
+    # Try to pull live bounds from the anomaly agent's baselines
     try:
-        db = dashboard.database
-        result = {}
-        metric_map = {
-            'cpu':    ('cpu',    'cpu_percent'),
-            'memory': ('memory', 'memory_percent'),
-            'disk':   ('disk',   'disk_percent'),
-        }
+        anomaly_agent = (
+            external_agents.get('anomaly')
+            or (dashboard.agents.get('anomaly') if dashboard and hasattr(dashboard, 'agents') else None)
+        )
 
-        for key, (mtype, mname) in metric_map.items():
-            rows = db.get_metrics_history(
-                device_id=config.device_id,
-                metric_type=mtype,
-                hours=1
-            )
-            vals = [r['value'] for r in rows if r['metric_name'] == mname]
+        if anomaly_agent and hasattr(anomaly_agent, '_baselines'):
+            result = {}
+            baseline_info = {}
 
-            if len(vals) >= 10:
-                # Use only the lower 60% of readings as the "normal" baseline.
-                # This excludes stress-test spikes so they don't inflate the threshold.
-                sorted_vals = sorted(vals)
-                cutoff = max(5, int(len(sorted_vals) * 0.60))
-                normal_vals = sorted_vals[:cutoff]
+            for key, flat_name in metric_map.items():
+                baseline = anomaly_agent._baselines.get(flat_name)
+                if baseline and baseline.ready:
+                    stats = baseline.stats()
+                    if stats:
+                        # Show the IQR mild-fence as the "adaptive threshold" line
+                        result[key] = round(stats['upper_mild'], 1)
+                        baseline_info[key] = {
+                            'mean':          round(stats['mean'], 1),
+                            'std':           round(stats['std'], 2),
+                            'upper_mild':    round(stats['upper_mild'], 1),
+                            'upper_extreme': round(stats['upper_extreme'], 1),
+                            'iqr':           round(stats['iqr'], 2),
+                            'warmup_done':   True,
+                        }
+                    else:
+                        result[key] = ref[key]
+                        baseline_info[key] = {'warmup_done': False}
+                else:
+                    result[key] = ref[key]
+                    baseline_info[key] = {'warmup_done': False}
 
-                mean = sum(normal_vals) / len(normal_vals)
-                variance = sum((v - mean) ** 2 for v in normal_vals) / len(normal_vals)
-                std = math.sqrt(variance)
-                adaptive = round(mean + 2 * std, 1)
-
-                # Cap at the configured threshold — adaptive must NEVER exceed the config
-                # value, otherwise anomalies caused by stress tests stop being detected.
-                adaptive = min(adaptive, cfg[key])
-                adaptive = max(adaptive, cfg[key] * 0.5)
-                result[key] = adaptive
-            else:
-                result[key] = cfg[key]
-
-        result['network'] = cfg['network']
-        result['adaptive'] = True
-        return jsonify(result)
+            result['network'] = ref['network']
+            result['adaptive'] = True
+            result['baselines'] = baseline_info
+            return jsonify(result)
 
     except Exception as e:
-        return jsonify({**cfg, 'adaptive': False, 'error': str(e)})
+        pass  # fall through to config fallback
+
+    return jsonify({**ref, 'adaptive': False, 'baselines': {}})
 
 
 @app.route('/api/incidents')
@@ -483,11 +560,13 @@ def get_incidents():
 def get_history():
     """Get rolling metric history for live graphs"""
     return jsonify({
-        'timestamps': list(state.timestamps),
-        'cpu':     list(state.cpu_history),
-        'memory':  list(state.memory_history),
-        'disk':    list(state.disk_history),
-        'network': list(state.network_latency_history),
+        'timestamps':     list(state.timestamps),
+        'cpu':            list(state.cpu_history),
+        'memory':         list(state.memory_history),
+        'disk':           list(state.disk_history),
+        'network':        list(state.network_latency_history),
+        'power_voltage':  list(state.power_voltage_history),
+        'power_quality':  list(state.power_quality_history),
     })
 
 
@@ -495,8 +574,9 @@ def get_history():
 def stream():
     """Server-sent events for real-time updates"""
     def event_stream():
-        last_log_count = 0
+        last_log_count     = 0
         last_anomaly_count = 0
+        last_threat_count  = 0
 
         while True:
             # Check for new logs
@@ -508,6 +588,12 @@ def stream():
             if len(state.anomalies) > last_anomaly_count:
                 last_anomaly_count = len(state.anomalies)
                 yield f"data: {json.dumps({'type': 'anomaly', 'data': list(state.anomalies)[-1]})}\n\n"
+
+            # Check for new security threats
+            threats = getattr(state, 'security_threats', [])
+            if len(threats) > last_threat_count:
+                last_threat_count = len(threats)
+                yield f"data: {json.dumps({'type': 'security', 'data': threats[-1]})}\n\n"
 
             # Send heartbeat
             yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now(CST).isoformat()})}\n\n"
@@ -521,9 +607,24 @@ def stream():
 def simulate_start(scenario):
     """Start a controlled instability simulation."""
     try:
-        from simulation.instability_runner import InstabilityRunner
         data = request.get_json(silent=True) or {}
         duration = float(data.get('duration', 60))
+
+        # Power sag is handled by the monitoring agent directly (no subprocess needed)
+        if scenario == 'power_sag':
+            monitoring_agent = external_agents.get('monitoring')
+            if monitoring_agent and hasattr(monitoring_agent, 'trigger_power_event'):
+                monitoring_agent.trigger_power_event(sag_volts=0.75, duration_seconds=duration)
+                ts = now_cst()
+                state.logs.append({
+                    'timestamp': ts,
+                    'level': 'WARNING',
+                    'message': f"SIM START: Power sag simulation — voltage dropping ~0.75 V for {int(duration)}s"
+                })
+                return jsonify({'success': True, 'message': f'Power sag started for {int(duration)}s'})
+            return jsonify({'success': False, 'error': 'Monitoring agent not available'})
+
+        from simulation.instability_runner import InstabilityRunner
         runner = InstabilityRunner.get_instance()
         result = runner.start(scenario, duration=duration)
 
@@ -567,6 +668,89 @@ def simulate_status():
         from simulation.instability_runner import InstabilityRunner
         runner = InstabilityRunner.get_instance()
         return jsonify(runner.get_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-Device API — remote client registration & metric ingestion
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Global remote device manager (initialized by main.py or lazily here)
+remote_device_manager = None
+
+
+def _get_remote_manager():
+    """Return (or lazily create) the RemoteDeviceManager."""
+    global remote_device_manager
+    if remote_device_manager is None:
+        from agents.monitoring.remote_device_manager import RemoteDeviceManager
+        from core.event_bus import get_event_bus
+        from core.logging import get_logger
+        eb = get_event_bus()
+        remote_device_manager = RemoteDeviceManager(eb, get_logger('RemoteDeviceManager'))
+        remote_device_manager.start()
+    return remote_device_manager
+
+
+@app.route('/api/devices/register', methods=['POST'])
+def register_device():
+    """Called by sentinel_client.py when a remote machine connects."""
+    try:
+        data      = request.get_json(silent=True) or {}
+        device_id = data.get('device_id')
+        if not device_id:
+            return jsonify({'error': 'device_id required'}), 400
+        mgr = _get_remote_manager()
+        mgr.register(device_id, data)
+        ts = now_cst()
+        state.logs.append({
+            'timestamp': ts,
+            'level':     'INFO',
+            'message':   f"Remote device connected: {device_id} "
+                         f"({data.get('hostname', '?')} / {data.get('platform', '?')})",
+        })
+        return jsonify({'status': 'registered', 'device_id': device_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/metrics/push', methods=['POST'])
+def push_metrics():
+    """Accept a metric payload from a remote sentinel_client.py instance."""
+    try:
+        data      = request.get_json(silent=True) or {}
+        device_id = data.get('device_id')
+        timestamp = data.get('timestamp', datetime.utcnow().isoformat())
+        metrics   = data.get('metrics', {})
+        if not device_id or not metrics:
+            return jsonify({'error': 'device_id and metrics required'}), 400
+        mgr = _get_remote_manager()
+        ok  = mgr.push_metrics(device_id, timestamp, metrics)
+        return jsonify({'status': 'ok' if ok else 'error', 'device_id': device_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/devices')
+def list_devices():
+    """Return all connected (and recently seen) remote devices."""
+    try:
+        mgr = _get_remote_manager()
+        return jsonify(mgr.get_all_devices())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/devices/<device_id>/metrics')
+def get_device_metrics(device_id):
+    """Return the latest metrics snapshot for a specific remote device."""
+    try:
+        mgr = _get_remote_manager()
+        m   = mgr.get_device_metrics(device_id)
+        if m is None:
+            return jsonify({'error': f'Device {device_id!r} not found'}), 404
+        return jsonify(m)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

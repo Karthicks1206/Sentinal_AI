@@ -18,12 +18,15 @@ from core.config import get_config
 from core.logging import setup_logging, get_logger
 from core.event_bus import get_event_bus
 from core.database import get_database
+from core.discovery_beacon import DiscoveryBeacon
 
 from agents.monitoring import MonitoringAgent
+from agents.monitoring.remote_device_manager import RemoteDeviceManager
 from agents.anomaly import AnomalyDetectionAgent
 from agents.diagnosis import DiagnosisAgent
 from agents.recovery import RecoveryAgent
 from agents.learning import LearningAgent
+from agents.security import SecurityAgent
 
 from cloud.aws_iot import AWSIoTClient, CloudWatchPublisher
 
@@ -58,6 +61,15 @@ class SentinelAI:
         # Initialize core infrastructure
         self.event_bus = get_event_bus(self.config)
         self.database = get_database(self.config)
+
+        # Remote device manager (accepts metric pushes from sentinel_client.py)
+        self.remote_device_manager = RemoteDeviceManager(
+            self.event_bus, get_logger('RemoteDeviceManager')
+        )
+
+        # UDP discovery beacon — allows sentinel_client.py to find the hub
+        # automatically on the LAN without any IP configuration
+        self.discovery_beacon = DiscoveryBeacon(http_port=5001)
 
         # Initialize AWS integration
         self.aws_iot = None
@@ -141,6 +153,16 @@ class SentinelAI:
                 )
                 self.logger.info("✓ Learning Agent initialized")
 
+            # Security Agent (always enabled — demo/stub mode)
+            self.agents['security'] = SecurityAgent(
+                name='SecurityAgent',
+                config=self.config,
+                event_bus=self.event_bus,
+                logger=get_logger('SecurityAgent'),
+                database=self.database
+            )
+            self.logger.info("✓ Security Agent initialized")
+
             self.logger.info(f"Successfully initialized {len(self.agents)} agents")
 
         except Exception as e:
@@ -156,6 +178,14 @@ class SentinelAI:
             for name, agent in self.agents.items():
                 agent.start()
                 self.logger.info(f"Started {name}")
+
+            # Start remote device manager
+            self.remote_device_manager.start()
+            self.logger.info("✓ Remote Device Manager started (listening for client connections)")
+
+            # Start UDP discovery beacon so clients auto-find this hub
+            self.discovery_beacon.start()
+            self.logger.info("✓ Discovery Beacon started — clients can auto-discover this hub")
 
             self.running = True
             self.logger.info("✓ All agents started successfully")
@@ -229,6 +259,17 @@ class SentinelAI:
 
         self.logger.info("Stopping Sentinel AI system...")
         self.running = False
+
+        # Stop discovery beacon and remote device manager
+        try:
+            self.discovery_beacon.stop()
+        except Exception as e:
+            self.logger.error(f"Error stopping DiscoveryBeacon: {e}")
+
+        try:
+            self.remote_device_manager.stop()
+        except Exception as e:
+            self.logger.error(f"Error stopping RemoteDeviceManager: {e}")
 
         # Stop all agents
         for name, agent in self.agents.items():
@@ -305,6 +346,18 @@ def main():
 
     args = parser.parse_args()
 
+    # Print AI stack explanation so it's clear in the terminal what Ollama is for
+    print("\n" + "="*70)
+    print("  Sentinel AI — Autonomous Self-Healing IoT Infrastructure")
+    print("="*70)
+    print("  AI Diagnosis Stack (priority order):")
+    print("    1. Groq  — fast cloud inference (llama-3.1-8b-instant, free tier)")
+    print("    2. Ollama — LOCAL LLM on this device (llama3.2:3b, no data sent out)")
+    print("       └─ Ollama is started so Sentinel AI can diagnose anomalies")
+    print("          offline, without any external API dependency.")
+    print("    3. Rule-based — instant fallback when no LLM is reachable")
+    print("="*70 + "\n")
+
     # Start dashboard in a background thread
     def start_dashboard():
         try:
@@ -327,10 +380,11 @@ def main():
     # Initialize and start system
     sentinel = SentinelAI(config_path=args.config)
 
-    # Register SentinelAI's agents with the dashboard for status display
+    # Register SentinelAI's agents and remote device manager with the dashboard
     try:
         import dashboard.app as _dash_app
         _dash_app.external_agents = sentinel.agents
+        _dash_app.remote_device_manager = sentinel.remote_device_manager
     except Exception:
         pass
 

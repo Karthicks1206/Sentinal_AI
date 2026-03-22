@@ -213,87 +213,109 @@
             margin-right: 10px;
         }
 
-        .alert-overlay {
+        /* ── Toast Notification System ─────────────────────────────── */
+        .toast-container {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .alert-overlay.active {
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
             display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 360px;
+            pointer-events: none;
         }
 
-        .alert-box {
-            background: linear-gradient(135deg, #ff4444, #cc0000);
-            padding: 40px;
-            border-radius: 20px;
-            max-width: 600px;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(255, 68, 68, 0.5);
-            animation: scaleIn 0.3s ease;
+        .toast {
+            pointer-events: all;
+            background: rgba(18, 20, 40, 0.96);
+            border-radius: 12px;
+            padding: 14px 16px 18px 16px;
+            border-left: 4px solid #ff4444;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+            backdrop-filter: blur(14px);
+            animation: toastIn 0.35s cubic-bezier(0.34,1.26,0.64,1);
+            position: relative;
+            overflow: hidden;
+            min-width: 280px;
         }
 
-        @keyframes scaleIn {
-            from {
-                transform: scale(0.8);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
+        .toast.severity-critical { border-left-color: #ff2222; }
+        .toast.severity-high     { border-left-color: #ff6600; }
+        .toast.severity-medium   { border-left-color: #ffaa00; }
+        .toast.severity-low      { border-left-color: #00d4ff; }
+        .toast.severity-info     { border-left-color: #00ff88; }
+        .toast.type-power        { border-left-color: #cc44ff; }
+        .toast.type-security     { border-left-color: #cc44ff; }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(110%) scale(0.92); }
+            to   { opacity: 1; transform: translateX(0)   scale(1); }
         }
 
-        .alert-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(0) scale(1);   max-height: 200px; margin-bottom: 0; }
+            to   { opacity: 0; transform: translateX(110%) scale(0.92); max-height: 0;   margin-bottom: -10px; }
         }
 
-        .alert-message {
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            font-weight: bold;
+        .toast.removing { animation: toastOut 0.3s ease forwards; }
+
+        .toast-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
         }
 
-        .alert-details {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
-            text-align: left;
+        .toast-icon { font-size: 1.1em; flex-shrink: 0; }
+
+        .toast-title {
+            font-weight: 700;
+            font-size: 0.93em;
+            color: #fff;
+            flex: 1;
+            line-height: 1.3;
         }
 
-        .alert-details h3 {
-            color: #ffaa00;
-            margin-bottom: 10px;
-        }
-
-        .alert-close {
-            background: #fff;
-            color: #000;
+        .toast-close {
+            background: none;
             border: none;
-            padding: 10px 30px;
-            border-radius: 5px;
+            color: #666;
             cursor: pointer;
-            font-weight: bold;
-            margin-top: 20px;
+            font-size: 1.1em;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.15s;
+            flex-shrink: 0;
         }
 
-        .alert-close:hover {
-            background: #00d4ff;
+        .toast-close:hover { color: #ccc; }
+
+        .toast-body {
+            font-size: 0.83em;
+            color: #aaa;
+            line-height: 1.4;
+            padding-left: 22px;
+        }
+
+        /* Shrinking timer bar at bottom of each toast */
+        .toast-timer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            width: 100%;
+            background: rgba(255,255,255,0.18);
+            border-radius: 0 0 12px 12px;
+            transform-origin: left;
+        }
+
+        .toast-timer-fill {
+            height: 100%;
+            width: 100%;
+            background: rgba(255,255,255,0.45);
+            border-radius: 0 0 12px 12px;
+            transition: width linear;
         }
 
         .stats-grid {
@@ -642,6 +664,7 @@
         .sim-btn-cpu    { background: linear-gradient(135deg, #ff4444, #cc0000); color: #fff; }
         .sim-btn-mem    { background: linear-gradient(135deg, #ffaa00, #cc7700); color: #000; }
         .sim-btn-disk   { background: linear-gradient(135deg, #00d4ff, #0077cc); color: #000; }
+        .sim-btn-power  { background: linear-gradient(135deg, #cc44ff, #7700cc); color: #fff; }
         .sim-btn-stop   { background: linear-gradient(135deg, #444, #222);       color: #ccc; }
 
         .sim-btn.active {
@@ -695,6 +718,111 @@
             padding: 8px 0;
         }
 
+        /* ── Cybersecurity Monitor Panel ─────────────────────────── */
+        .sec-score-ring {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .sec-score-circle {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            border: 3px solid #00ff88;
+            background: rgba(0,255,136,0.08);
+            color: #00ff88;
+            flex-shrink: 0;
+            transition: border-color 0.5s, color 0.5s, background 0.5s;
+        }
+
+        .sec-score-circle.medium {
+            border-color: #ffaa00; color: #ffaa00;
+            background: rgba(255,170,0,0.08);
+        }
+
+        .sec-score-circle.high {
+            border-color: #ff6600; color: #ff6600;
+            background: rgba(255,102,0,0.1);
+        }
+
+        .sec-score-circle.critical {
+            border-color: #ff2222; color: #ff2222;
+            background: rgba(255,34,34,0.1);
+            animation: secPulse 1.5s infinite;
+        }
+
+        @keyframes secPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(255,34,34,0.4); }
+            50%      { box-shadow: 0 0 0 10px rgba(255,34,34,0); }
+        }
+
+        .sec-score-info { flex: 1; }
+        .sec-score-label { font-size: 0.8em; color: #888; text-transform: uppercase; letter-spacing: 0.06em; }
+        .sec-score-status { font-size: 1em; font-weight: bold; color: #eee; margin-top: 2px; }
+        .sec-threat-count { font-size: 0.82em; color: #aaa; margin-top: 4px; }
+
+        .sec-feed {
+            max-height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sec-threat-item {
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            padding: 8px 12px;
+            border-left: 3px solid #444;
+            font-size: 0.83em;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .sec-threat-item.sev-critical { border-left-color: #ff2222; }
+        .sec-threat-item.sev-high     { border-left-color: #ff6600; }
+        .sec-threat-item.sev-medium   { border-left-color: #ffaa00; }
+        .sec-threat-item.sev-low      { border-left-color: #00d4ff; }
+
+        .sec-threat-icon { font-size: 1.1em; flex-shrink: 0; margin-top: 1px; }
+
+        .sec-threat-body { flex: 1; }
+        .sec-threat-title { font-weight: 600; color: #eee; }
+        .sec-threat-detail { color: #aaa; margin-top: 2px; font-size: 0.92em; }
+        .sec-threat-ts { color: #666; font-size: 0.85em; margin-top: 2px; }
+
+        .sec-empty {
+            color: #555;
+            font-size: 0.88em;
+            text-align: center;
+            padding: 24px 0;
+        }
+
+        .sec-scanning {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78em;
+            color: #555;
+            margin-top: 8px;
+        }
+
+        .sec-scan-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #00ff88;
+            animation: pulse 2s infinite;
+        }
+
         /* Scrollbar styling */
         ::-webkit-scrollbar {
             width: 8px;
@@ -738,7 +866,7 @@
                     Top Process: <span id="topCpuProcess">-</span>
                 </div>
                 <div>
-                    <span class="threshold-badge">Adaptive: <span id="cpuThreshold">80</span>%</span>
+                    <span class="threshold-badge" title="IQR upper fence learned from live data">Learned fence: <span id="cpuThreshold">…</span>%</span>
                 </div>
             </div>
 
@@ -756,7 +884,7 @@
                     Available: <span id="memoryAvailable">0 MB</span>
                 </div>
                 <div>
-                    <span class="threshold-badge">Adaptive: <span id="memThreshold">85</span>%</span>
+                    <span class="threshold-badge" title="IQR upper fence learned from live data">Learned fence: <span id="memThreshold">…</span>%</span>
                 </div>
             </div>
 
@@ -774,7 +902,36 @@
                     Free: <span id="diskFree">0 GB</span>
                 </div>
                 <div>
-                    <span class="threshold-badge">Adaptive: <span id="diskThreshold">90</span>%</span>
+                    <span class="threshold-badge" title="IQR upper fence learned from live data">Learned fence: <span id="diskThreshold">…</span>%</span>
+                </div>
+            </div>
+
+            <!-- Power Card -->
+            <div class="card">
+                <h2>⚡ Power</h2>
+                <div class="metric">
+                    <div class="metric-label">Input Voltage</div>
+                    <div class="metric-value" id="powerVoltage">5.00 V</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="powerQualityBar" style="width:100%">100%</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap;">
+                    <div>
+                        <div class="metric-label">Current</div>
+                        <div style="font-size:1.4em;font-weight:bold;color:#00ff88;" id="powerCurrent">0.0 A</div>
+                    </div>
+                    <div>
+                        <div class="metric-label">Power</div>
+                        <div style="font-size:1.4em;font-weight:bold;color:#00ff88;" id="powerWatts">0.0 W</div>
+                    </div>
+                    <div>
+                        <div class="metric-label">Quality</div>
+                        <div style="font-size:1.4em;font-weight:bold;" id="powerQualityVal">100%</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px;">
+                    <span class="threshold-badge" id="powerNominal">Nominal: 5.0 V ± 10%</span>
                 </div>
             </div>
 
@@ -795,6 +952,29 @@
                 </div>
                 <div>
                     <span class="threshold-badge">Max Packet Loss: <span id="netThreshold">5</span>%</span>
+                </div>
+            </div>
+
+            <!-- Cybersecurity Monitor Card (in-grid) -->
+            <div class="card">
+                <h2>🛡️ Security <span style="font-size:0.55em;color:#cc44ff;background:rgba(204,68,255,0.12);border:1px solid rgba(204,68,255,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span></h2>
+
+                <div class="sec-score-ring">
+                    <div class="sec-score-circle" id="secScoreCircle">100</div>
+                    <div class="sec-score-info">
+                        <div class="sec-score-label">Security Score</div>
+                        <div class="sec-score-status" id="secScoreStatus">All Clear</div>
+                        <div class="sec-threat-count" id="secThreatCount">No threats detected</div>
+                        <div class="sec-scanning">
+                            <div class="sec-scan-dot"></div>
+                            Scanning every 30s
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:0.75em;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Latest Threats</div>
+                <div class="sec-feed" id="secFeed" style="max-height:160px;">
+                    <p class="sec-empty">No threats detected — system is clean.</p>
                 </div>
             </div>
         </div>
@@ -820,7 +1000,7 @@
             </div>
             <div class="agent-status">
                 <div class="agent-indicator" id="agent-diagnosis"></div>
-                <div>Diagnosis Agent</div>
+                <div>Diagnosis Agent <span id="aiProviderBadge" style="font-size:0.72em;margin-left:6px;padding:1px 7px;border-radius:8px;background:rgba(0,212,255,0.15);color:#00d4ff;border:1px solid rgba(0,212,255,0.3);"></span></div>
             </div>
             <div class="agent-status">
                 <div class="agent-indicator" id="agent-recovery"></div>
@@ -829,6 +1009,10 @@
             <div class="agent-status">
                 <div class="agent-indicator" id="agent-learning"></div>
                 <div>Learning Agent</div>
+            </div>
+            <div class="agent-status">
+                <div class="agent-indicator" id="agent-security"></div>
+                <div>Security Agent <span style="font-size:0.75em;color:#cc44ff;margin-left:6px;">demo</span></div>
             </div>
 
             <!-- ML Model Status -->
@@ -938,6 +1122,9 @@
                 <button class="sim-btn sim-btn-disk" id="btnDisk" onclick="startSim('disk_fill')">
                     Disk Fill<br><small style="font-weight:normal;">Writes 200 MB to /tmp</small>
                 </button>
+                <button class="sim-btn sim-btn-power" id="btnPower" onclick="startSim('power_sag')">
+                    Power Sag<br><small style="font-weight:normal;">Drops voltage ~0.75 V</small>
+                </button>
                 <button class="sim-btn sim-btn-stop" onclick="stopAllSims()">
                     Stop All<br><small style="font-weight:normal;">Kill simulations</small>
                 </button>
@@ -968,18 +1155,13 @@
         </div>
     </div>
 
-    <!-- Alert Overlay -->
-    <div class="alert-overlay" id="alertOverlay">
-        <div class="alert-box">
-            <div class="alert-icon">ALERT</div>
-            <div class="alert-message" id="alertMessage">Anomaly Detected!</div>
-            <div class="alert-details" id="alertDetails"></div>
-            <button class="alert-close" onclick="closeAlert()">Acknowledge</button>
-        </div>
-    </div>
+    <!-- Toast Notification Container (top-right, auto-dismiss) -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script>
-        // ── Thresholds (loaded once) ──────────────────────────────────
+        // ── Adaptive baselines (polled every 15s) ─────────────────────
+        // These are the LIVE learned bounds from AdaptiveMetricBaseline.
+        // They change continuously as the system observes more data.
         let thresholds = { cpu: 80, memory: 85, disk: 90, network: 5 };
 
         function loadThresholds() {
@@ -987,17 +1169,47 @@
                 .then(r => r.json())
                 .then(t => {
                     thresholds = t;
-                    document.getElementById('cpuThreshold').textContent  = t.cpu;
-                    document.getElementById('memThreshold').textContent  = t.memory;
-                    document.getElementById('diskThreshold').textContent = t.disk;
-                    document.getElementById('netThreshold').textContent  = t.network || 5;
-                    // Refresh threshold lines on chart (datasets[4..6], skip net threshold — different unit)
+                    const bi = t.baselines || {};
+
+                    // CPU badge: show learned IQR fence or "learning…" during warmup
+                    const cpuEl = document.getElementById('cpuThreshold');
+                    if (bi.cpu && bi.cpu.warmup_done) {
+                        cpuEl.textContent = t.cpu;
+                        cpuEl.title = `mean=${bi.cpu.mean}%  std=±${bi.cpu.std}  IQR fence=${bi.cpu.upper_mild}%`;
+                    } else {
+                        cpuEl.textContent = '…';
+                        cpuEl.title = 'Adaptive baseline learning — wait ~2.5 min';
+                    }
+
+                    const memEl = document.getElementById('memThreshold');
+                    if (bi.memory && bi.memory.warmup_done) {
+                        memEl.textContent = t.memory;
+                        memEl.title = `mean=${bi.memory.mean}%  std=±${bi.memory.std}  IQR fence=${bi.memory.upper_mild}%`;
+                    } else {
+                        memEl.textContent = '…';
+                        memEl.title = 'Adaptive baseline learning…';
+                    }
+
+                    const diskEl = document.getElementById('diskThreshold');
+                    if (bi.disk && bi.disk.warmup_done) {
+                        diskEl.textContent = t.disk;
+                        diskEl.title = `mean=${bi.disk.mean}%  std=±${bi.disk.std}  IQR fence=${bi.disk.upper_mild}%`;
+                    } else {
+                        diskEl.textContent = '…';
+                        diskEl.title = 'Adaptive baseline learning…';
+                    }
+
+                    const netEl = document.getElementById('netThreshold');
+                    if (netEl) netEl.textContent = t.network || 5;
+
+                    // Update threshold reference lines on chart (datasets 5-7)
                     const len = metricsChart.data.labels.length || 60;
-                    metricsChart.data.datasets[4].data = Array(len).fill(t.cpu);
-                    metricsChart.data.datasets[5].data = Array(len).fill(t.memory);
-                    metricsChart.data.datasets[6].data = Array(len).fill(t.disk);
+                    metricsChart.data.datasets[5].data = Array(len).fill(t.cpu);
+                    metricsChart.data.datasets[6].data = Array(len).fill(t.memory);
+                    metricsChart.data.datasets[7].data = Array(len).fill(t.disk);
                     metricsChart.update('none');
-                });
+                })
+                .catch(() => {});
         }
 
         // ── Live Chart Setup ──────────────────────────────────────────
@@ -1049,7 +1261,18 @@
                         fill: true,
                         yAxisID: 'y1',
                     },
-                    // Threshold reference lines (dashed) — datasets[4..7]
+                    // dataset[4] — Power Quality % (left y-axis, 0-100)
+                    {
+                        label: 'Power Quality %',
+                        data: [],
+                        borderColor: '#cc44ff',
+                        backgroundColor: 'rgba(204,68,255,0.06)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                    },
+                    // Threshold reference lines (dashed) — datasets[5..8]
                     {
                         label: 'CPU Threshold',
                         data: [],
@@ -1154,9 +1377,10 @@
                     metricsChart.data.datasets[1].data = h.memory;
                     metricsChart.data.datasets[2].data = h.disk;
                     metricsChart.data.datasets[3].data = h.network || [];
-                    metricsChart.data.datasets[4].data = Array(len).fill(thresholds.cpu);
-                    metricsChart.data.datasets[5].data = Array(len).fill(thresholds.memory);
-                    metricsChart.data.datasets[6].data = Array(len).fill(thresholds.disk);
+                    metricsChart.data.datasets[4].data = h.power_quality || [];
+                    metricsChart.data.datasets[5].data = Array(len).fill(thresholds.cpu);
+                    metricsChart.data.datasets[6].data = Array(len).fill(thresholds.memory);
+                    metricsChart.data.datasets[7].data = Array(len).fill(thresholds.disk);
                     metricsChart.update('none');
                 });
         }
@@ -1188,8 +1412,8 @@
                 .then(r => r.json())
                 .then(incidents => {
                     const el = document.getElementById('incidentTimeline');
-                    if (!incidents.length) {
-                        el.innerHTML = '<p style="color:#666;">No incidents recorded yet.</p>';
+                    if (!Array.isArray(incidents) || !incidents.length) {
+                        el.innerHTML = '<p style="color:#555;font-size:0.9em;">No incidents recorded yet. Run a simulation or wait for the system to detect an anomaly.</p>';
                         return;
                     }
                     el.innerHTML = incidents.map((inc, idx) => {
@@ -1291,6 +1515,22 @@
                         (disk.disk_free_gb || 0).toFixed(1) + ' GB';
                     updateProgressBar('diskBar', diskPercent, thresholds.disk);
 
+                    // Power
+                    const pwr = metrics.power || {};
+                    const pVoltage = pwr.power_voltage_v || 0;
+                    const pCurrent = pwr.power_current_a || 0;
+                    const pWatts   = pwr.power_watts     || 0;
+                    const pQuality = pwr.power_quality   !== undefined ? pwr.power_quality : 100;
+                    document.getElementById('powerVoltage').textContent = pVoltage.toFixed(3) + ' V';
+                    document.getElementById('powerCurrent').textContent = pCurrent.toFixed(2) + ' A';
+                    document.getElementById('powerWatts').textContent   = pWatts.toFixed(1)   + ' W';
+                    document.getElementById('powerQualityVal').textContent = pQuality.toFixed(0) + '%';
+                    // Colour quality value
+                    const pqEl = document.getElementById('powerQualityVal');
+                    pqEl.style.color = pQuality >= 90 ? '#00ff88' : pQuality >= 70 ? '#ffaa00' : '#ff4444';
+                    // Progress bar shows quality (100 = good power)
+                    updateProgressBar('powerQualityBar', pQuality, 90);
+
                     // Network
                     const net = metrics.network || {};
                     const netLoss = net.packet_loss_percent || 0;
@@ -1343,6 +1583,19 @@
                                 (status.agents[agent] ? 'running' : 'stopped');
                         }
                     });
+
+                    // AI provider badge
+                    const provBadge = document.getElementById('aiProviderBadge');
+                    if (provBadge && status.ai_provider) {
+                        const pColors = {
+                            groq: '#00ff88', ollama: '#00d4ff',
+                            openai: '#ffaa00', rule_based: '#888', unknown: '#555'
+                        };
+                        provBadge.textContent = status.ai_provider;
+                        provBadge.style.color  = pColors[status.ai_provider] || '#888';
+                        provBadge.style.borderColor = pColors[status.ai_provider] || '#888';
+                        provBadge.style.background  = (pColors[status.ai_provider] || '#888') + '22';
+                    }
 
                     // LSTM status widget
                     const lstm = status.lstm || {};
@@ -1415,62 +1668,211 @@
                 });
         }
 
-        // Check for alerts
-        function checkAlerts() {
-            fetch('/api/alert')
-                .then(response => response.json())
-                .then(alert => {
-                    if (alert) {
-                        showAlert(alert);
+        // ── Security Monitor Panel ────────────────────────────────────
+        const SEC_ICONS = {
+            brute_force:       '🔑',
+            data_exfiltration: '📤',
+            port_scan:         '🔍',
+            malware:           '🦠',
+            auth_anomaly:      '👤',
+            default:           '⚠️'
+        };
+
+        function updateSecurityPanel() {
+            fetch('/api/security/threats')
+                .then(r => r.json())
+                .then(threats => {
+                    if (!Array.isArray(threats)) threats = [];
+
+                    const circle  = document.getElementById('secScoreCircle');
+                    const status  = document.getElementById('secScoreStatus');
+                    const tcCount = document.getElementById('secThreatCount');
+                    const feed    = document.getElementById('secFeed');
+
+                    // Score: start at 100, only penalise MEDIUM/HIGH/CRITICAL threats.
+                    // LOW-severity findings (routine privileged-process observations, minor
+                    // port notices) are shown in the feed as intelligence but do NOT reduce
+                    // the score — they are expected on any production IoT device.
+                    // Use only the last 6 scan cycles (~3 minutes) so the score recovers
+                    // automatically once active threats clear.
+                    const recent = threats.slice(-6);
+                    let score = 100;
+                    recent.forEach(t => {
+                        const sev = (t.threat || {}).severity || 'low';
+                        if (sev === 'critical') score -= 30;
+                        else if (sev === 'high') score -= 20;
+                        else if (sev === 'medium') score -= 10;
+                        // 'low' / 'info' → informational only, no score penalty
+                    });
+                    score = Math.max(0, score);
+
+                    circle.textContent = score;
+                    circle.className = 'sec-score-circle';
+                    if (score < 40) {
+                        circle.classList.add('critical');
+                        status.textContent = 'Under Attack';
+                    } else if (score < 70) {
+                        circle.classList.add('high');
+                        status.textContent = 'Threats Detected';
+                    } else if (score < 90) {
+                        circle.classList.add('medium');
+                        status.textContent = 'Elevated Risk';
+                    } else {
+                        status.textContent = 'All Clear';
                     }
-                });
+
+                    const activeThreats = threats.filter(t => {
+                        const s = (t.threat || {}).severity || 'low';
+                        return s === 'critical' || s === 'high' || s === 'medium';
+                    });
+                    const lowCount = threats.length - activeThreats.length;
+                    if (!threats.length) {
+                        tcCount.textContent = 'No threats detected';
+                    } else if (activeThreats.length) {
+                        tcCount.textContent = `${activeThreats.length} active threat${activeThreats.length > 1 ? 's' : ''}${lowCount ? ` · ${lowCount} informational` : ''}`;
+                    } else {
+                        tcCount.textContent = `${lowCount} informational finding${lowCount > 1 ? 's' : ''} (score unaffected)`;
+                    }
+
+                    if (!threats.length) {
+                        feed.innerHTML = '<p class="sec-empty">No threats detected — system is clean.</p>';
+                        return;
+                    }
+
+                    // Show newest 10
+                    const show = [...threats].reverse().slice(0, 10);
+                    feed.innerHTML = show.map(item => {
+                        const t   = item.threat || {};
+                        const sev = t.severity || 'low';
+                        const icon = SEC_ICONS[t.category] || SEC_ICONS.default;
+                        return `
+                        <div class="sec-threat-item sev-${sev}">
+                            <div class="sec-threat-icon">${icon}</div>
+                            <div class="sec-threat-body">
+                                <div class="sec-threat-title">${t.title || 'Unknown threat'} <span class="sev-badge ${severityClass(sev)}" style="font-size:0.7em;margin-left:4px;">${sev.toUpperCase()}</span></div>
+                                <div class="sec-threat-detail">${t.detail || ''}</div>
+                                <div class="sec-threat-ts">${item.timestamp || ''}</div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                })
+                .catch(() => {});
         }
 
-        function showAlert(alert) {
-            const overlay = document.getElementById('alertOverlay');
-            const message = document.getElementById('alertMessage');
-            const details = document.getElementById('alertDetails');
+        // ── Warmup gate: suppress anomaly toasts for first 3 min ─────
+        // This prevents noisy false-positives while baselines are establishing.
+        const WARMUP_MS = 3 * 60 * 1000;
+        const _startTime = Date.now();
+        function _warmedUp() { return (Date.now() - _startTime) >= WARMUP_MS; }
 
-            message.textContent = alert.message;
+        // ── Toast Notification System ─────────────────────────────────
+        const TOAST_DURATION = 7000;  // ms before auto-dismiss
+        const MAX_TOASTS = 5;
 
-            let detailsHtml = '';
-            if (alert.severity) {
-                detailsHtml += `<p><strong>Severity:</strong> ${alert.severity.toUpperCase()}</p>`;
-            }
-            if (alert.diagnosis) {
-                detailsHtml += `<h3>Diagnosis</h3><p>${alert.diagnosis}</p>`;
-            }
-            if (alert.root_cause) {
-                detailsHtml += `<p><strong>Root Cause:</strong> ${alert.root_cause}</p>`;
-            }
-            if (alert.actions && alert.actions.length > 0) {
-                detailsHtml += `<h3>Recommended Actions</h3><ul>`;
-                alert.actions.forEach(action => {
-                    detailsHtml += `<li>${action}</li>`;
-                });
-                detailsHtml += `</ul>`;
-            }
+        const TOAST_ICONS = {
+            power:       '⚡',
+            cpu:         '💻',
+            memory:      '🧠',
+            disk:        '💾',
+            network:     '📶',
+            multivariate:'🔬',
+            security:    '🔒',
+            default:     '⚠️'
+        };
 
-            details.innerHTML = detailsHtml;
-            overlay.classList.add('active');
+        function _metricCategory(metricName) {
+            if (!metricName) return 'default';
+            const m = metricName.toLowerCase();
+            if (m.startsWith('power'))       return 'power';
+            if (m.startsWith('cpu'))         return 'cpu';
+            if (m.startsWith('memory'))      return 'memory';
+            if (m.startsWith('disk'))        return 'disk';
+            if (m.startsWith('network'))     return 'network';
+            if (m.startsWith('multivariat')) return 'multivariate';
+            return 'default';
         }
 
-        function closeAlert() {
-            document.getElementById('alertOverlay').classList.remove('active');
+        function showToast({ severity, category, title, body }) {
+            const container = document.getElementById('toastContainer');
+            // Trim oldest if too many stacked
+            while (container.children.length >= MAX_TOASTS) {
+                dismissToast(container.firstElementChild, true);
+            }
+
+            const icon = TOAST_ICONS[category] || TOAST_ICONS.default;
+            const isPower    = (category === 'power');
+            const isSecurity = (category === 'security');
+
+            const toast = document.createElement('div');
+            toast.className = `toast severity-${severity || 'medium'}${isPower ? ' type-power' : ''}${isSecurity ? ' type-security' : ''}`;
+            toast.innerHTML = `
+                <div class="toast-header">
+                    <span class="toast-icon">${icon}</span>
+                    <span class="toast-title">${title}</span>
+                    <button class="toast-close" onclick="dismissToast(this.closest('.toast'))">&#x2715;</button>
+                </div>
+                <div class="toast-body">${body || ''}</div>
+                <div class="toast-timer"><div class="toast-timer-fill" id="tf-${Date.now()}"></div></div>
+            `;
+            container.appendChild(toast);
+
+            // Start shrinking timer bar
+            const fill = toast.querySelector('.toast-timer-fill');
+            requestAnimationFrame(() => {
+                fill.style.transition = `width ${TOAST_DURATION}ms linear`;
+                fill.style.width = '0%';
+            });
+
+            const tid = setTimeout(() => dismissToast(toast), TOAST_DURATION);
+            toast._tid = tid;
         }
 
-        // Server-Sent Events for real-time updates
+        function dismissToast(toast, immediate) {
+            if (!toast || toast._removing) return;
+            toast._removing = true;
+            clearTimeout(toast._tid);
+            if (immediate) {
+                toast.remove();
+            } else {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 310);
+            }
+        }
+
+        // ── Server-Sent Events for real-time updates ──────────────────
         const eventSource = new EventSource('/api/stream');
 
         eventSource.onmessage = function(event) {
             const data = JSON.parse(event.data);
 
             if (data.type === 'log') {
-                // New log received - update immediately
                 updateLogs();
+            } else if (data.type === 'security') {
+                const threat = (data.data || {}).threat || {};
+                showToast({
+                    severity: threat.severity || 'medium',
+                    category: 'security',
+                    title:    '🔒 ' + (threat.title || 'Security Alert'),
+                    body:     threat.detail || ''
+                });
+                updateSecurityPanel();
             } else if (data.type === 'anomaly') {
-                // New anomaly - check for alert
-                checkAlerts();
+                // Suppress noisy startup alerts — wait until baselines are stable
+                if (_warmedUp()) {
+                    const anomaly = (data.data || {}).anomaly || {};
+                    const cat   = _metricCategory(anomaly.metric_name || '');
+                    const sev   = anomaly.severity || 'medium';
+                    const val   = (anomaly.value !== undefined) ? parseFloat(anomaly.value).toFixed(2) : '?';
+                    const mname = anomaly.metric_name || 'unknown metric';
+                    const atype = (anomaly.type || 'anomaly').replace(/_/g, ' ');
+
+                    showToast({
+                        severity: sev,
+                        category: cat,
+                        title:    `${mname} · ${sev.toUpperCase()}`,
+                        body:     `${atype} — value: ${val}`
+                    });
+                }
                 updateStats();
             }
         };
@@ -1482,28 +1884,50 @@
             disk_fill:        'Disk Fill',
         };
 
+        const SIM_DURATIONS = { cpu_spike: 90, memory_pressure: 90, disk_fill: 90, power_sag: 60 };
+
         function startSim(scenario) {
+            const duration = SIM_DURATIONS[scenario] || 90;
             fetch(`/api/simulate/start/${scenario}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({duration: 90})
+                body: JSON.stringify({duration})
             })
             .then(r => r.json())
             .then(res => {
                 if (res.success) {
-                    console.log('Simulation started:', res.message);
+                    showToast({
+                        severity: 'high',
+                        category: scenario.startsWith('power') ? 'power' :
+                                  scenario.startsWith('cpu')   ? 'cpu'   :
+                                  scenario.startsWith('mem')   ? 'memory': 'disk',
+                        title:    `Simulation started`,
+                        body:     res.message || scenario
+                    });
                 } else {
-                    alert('Could not start simulation: ' + (res.error || res.message || 'Unknown error'));
+                    showToast({ severity: 'medium', category: 'default',
+                        title: 'Simulation failed', body: res.error || res.message || 'Unknown error' });
                 }
                 updateSimStatus();
             })
-            .catch(err => alert('Error: ' + err));
+            .catch(err => showToast({ severity: 'medium', category: 'default',
+                title: 'Network error', body: String(err) }));
         }
 
         function stopAllSims() {
-            fetch('/api/simulate/stop', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
-                .then(r => r.json())
-                .then(() => updateSimStatus());
+            fetch('/api/simulate/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            })
+            .then(r => r.json())
+            .then(res => {
+                const stopped = (res.stopped || []).join(', ') || 'none';
+                showToast({ severity: 'low', category: 'default',
+                    title: 'Simulations stopped', body: `Stopped: ${stopped}` });
+                updateSimStatus();
+            })
+            .catch(() => updateSimStatus());
         }
 
         function updateSimStatus() {
@@ -1571,11 +1995,12 @@
         }
 
         function renderStatPanel(panel) {
-            // For logs we fetch from /api/logs
+            // Logs: from /api/logs
             if (panel === 'logs') {
                 fetch('/api/logs')
                     .then(r => r.json())
                     .then(logs => {
+                        if (!Array.isArray(logs)) logs = [];
                         const content = document.getElementById('statPanelContent-logs');
                         const count   = document.getElementById('statPanelCount-logs');
                         const recent  = logs.slice(-50).reverse();
@@ -1595,45 +2020,50 @@
                 return;
             }
 
-            // For anomalies / diagnoses / recoveries we use /api/incidents
-            fetch('/api/incidents')
+            // Anomalies / Diagnoses / Recoveries — use in-memory endpoints (always in sync with counters)
+            const urlMap = { anomalies: '/api/anomalies', diagnoses: '/api/diagnoses', recoveries: '/api/recoveries' };
+            fetch(urlMap[panel] || '/api/anomalies')
                 .then(r => r.json())
-                .then(incidents => {
-                    cachedIncidents = incidents;
-                    _populateStatPanel(panel, incidents);
-                });
+                .then(data => {
+                    if (!Array.isArray(data)) data = [];
+                    _populateStatPanel(panel, data);
+                })
+                .catch(() => _populateStatPanel(panel, []));
         }
 
-        function _populateStatPanel(panel, incidents) {
+        function _populateStatPanel(panel, data) {
             const content = document.getElementById('statPanelContent-' + panel);
             const count   = document.getElementById('statPanelCount-' + panel);
 
-            if (!incidents || !incidents.length) {
+            if (!data || !data.length) {
                 count.textContent = '0 records';
-                content.innerHTML = '<p class="stat-empty">No incidents recorded yet.</p>';
+                content.innerHTML = '<p class="stat-empty">No data yet — run a simulation or wait for detection to fire.</p>';
                 return;
             }
 
+            // Show newest first
+            const items = [...data].reverse();
             let html = '';
 
             if (panel === 'anomalies') {
-                count.textContent = incidents.length + ' records';
-                html = incidents.map(inc => {
-                    const m = inc.metrics || {};
-                    const val  = m.value   !== undefined ? parseFloat(m.value).toFixed(1)   : '?';
-                    const exp  = m.expected_value !== undefined ? parseFloat(m.expected_value).toFixed(1) : '?';
-                    const dev  = m.deviation !== undefined ? parseFloat(m.deviation).toFixed(2) : '';
-                    const devStr = dev ? ` · deviation ${dev}σ` : '';
+                // data[i] = { timestamp, anomaly: { metric_name, type, severity, value, expected_value, deviation } }
+                count.textContent = items.length + ' detections';
+                html = items.map(item => {
+                    const a   = item.anomaly || {};
+                    const sev = a.severity || 'low';
+                    const val = a.value !== undefined ? parseFloat(a.value).toFixed(2) : '?';
+                    const exp = a.expected_value !== undefined ? parseFloat(a.expected_value).toFixed(2) : '?';
+                    const dev = a.deviation !== undefined ? ` · ${parseFloat(a.deviation).toFixed(2)}σ` : '';
                     return `
-                    <div class="stat-item sev-${inc.severity || 'low'}">
+                    <div class="stat-item sev-${sev}">
                         <div class="stat-item-row">
-                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'} anomaly</span>
-                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                            <span class="stat-item-main">${a.metric_name || '?'} — ${(a.type||'anomaly').replace(/_/g,' ')}</span>
+                            <span class="stat-item-meta">${item.timestamp || ''}</span>
                         </div>
                         <div class="stat-item-row" style="margin-top:3px;">
                             <span>
-                                <span class="sev-badge ${severityClass(inc.severity)}" style="font-size:0.75em;">${(inc.severity||'?').toUpperCase()}</span>
-                                &nbsp;Metric: <strong>${m.metric_name || '?'}</strong> = ${val}% (expected ${exp}%)${devStr}
+                                <span class="sev-badge ${severityClass(sev)}" style="font-size:0.75em;">${sev.toUpperCase()}</span>
+                                &nbsp;value: <strong>${val}</strong> · expected ~${exp}${dev}
                             </span>
                         </div>
                     </div>`;
@@ -1641,44 +2071,49 @@
             }
 
             else if (panel === 'diagnoses') {
-                const diagnosed = incidents.filter(i => i.diagnosis && i.diagnosis !== 'Pending');
-                count.textContent = diagnosed.length + ' diagnosed';
-                if (!diagnosed.length) {
-                    content.innerHTML = '<p class="stat-empty">No diagnoses yet.</p>';
-                    return;
-                }
-                html = diagnosed.map(inc => `
-                    <div class="stat-item sev-${inc.severity || 'low'}">
+                // data[i] = { timestamp, diagnosis: { anomaly_type, severity, diagnosis, root_cause, recommended_actions, methods_used } }
+                count.textContent = items.length + ' diagnoses';
+                html = items.map(item => {
+                    const d    = item.diagnosis || {};
+                    const sev  = d.severity || 'low';
+                    const via  = (d.methods_used || []).join(', ') || 'rule-based';
+                    const acts = (d.recommended_actions || []).join(', ') || '—';
+                    return `
+                    <div class="stat-item sev-${sev}">
                         <div class="stat-item-row">
-                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'}</span>
-                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                            <span class="stat-item-main">${d.anomaly_type || 'unknown'}</span>
+                            <span class="stat-item-meta">${item.timestamp || ''}</span>
                         </div>
                         <div class="stat-item-sub">
-                            <strong style="color:#00d4ff;">Diagnosis:</strong> ${inc.diagnosis || 'Pending'}<br>
-                            <strong style="color:#00d4ff;">Root Cause:</strong> ${inc.root_cause || 'Unknown'}
+                            <strong style="color:#00d4ff;">Diagnosis:</strong> ${d.diagnosis || 'Pending'}<br>
+                            <strong style="color:#00d4ff;">Root Cause:</strong> ${d.root_cause || 'Unknown'}<br>
+                            <strong style="color:#00d4ff;">Actions:</strong> ${acts}<br>
+                            <span style="color:#666;font-size:0.88em;">via: ${via}</span>
                         </div>
-                    </div>`).join('');
+                    </div>`;
+                }).join('');
             }
 
             else if (panel === 'recoveries') {
-                const recovered = incidents.filter(i => i.actions && i.actions.length > 0);
-                count.textContent = recovered.length + ' with actions';
-                if (!recovered.length) {
-                    content.innerHTML = '<p class="stat-empty">No recovery actions yet.</p>';
-                    return;
-                }
-                html = recovered.map(inc => {
-                    const chips = (inc.actions || []).map(a =>
+                // data[i] = { timestamp, actions: [{ action_name, status, message }] }
+                count.textContent = items.length + ' recovery events';
+                html = items.map(item => {
+                    const acts       = item.actions || [];
+                    const hasSuccess = acts.some(a => a.status === 'success');
+                    const hasFailed  = acts.some(a => a.status === 'failed');
+                    const statusLabel = hasSuccess ? 'RESOLVED' : hasFailed ? 'FAILED' : 'ATTEMPTED';
+                    const pillCls    = hasSuccess ? 'status-resolved' : hasFailed ? 'status-failed' : 'status-attempted';
+                    const itemCls    = hasSuccess ? 'sev-success' : hasFailed ? 'sev-critical' : '';
+                    const chips      = acts.map(a =>
                         `<span class="action-chip ${chipClass(a.status)}">${a.action_name} (${a.status})</span>`
                     ).join('');
-                    const statusCls = inc.status === 'success' ? 'sev-success' : inc.status === 'failed' ? 'sev-failed' : '';
                     return `
-                    <div class="stat-item ${statusCls}">
+                    <div class="stat-item ${itemCls}">
                         <div class="stat-item-row">
-                            <span class="stat-item-main">${inc.anomaly_type || 'unknown'} → <span class="status-pill ${statusClass(inc.status)}" style="font-size:0.8em;">${(inc.status||'?').toUpperCase()}</span></span>
-                            <span class="stat-item-meta">${inc.timestamp || ''}</span>
+                            <span class="stat-item-main">${acts.length} action(s) → <span class="status-pill ${pillCls}" style="font-size:0.8em;">${statusLabel}</span></span>
+                            <span class="stat-item-meta">${item.timestamp || ''}</span>
                         </div>
-                        <div class="stat-item-sub" style="margin-top:4px;">${chips || '<span style="color:#555">No actions</span>'}</div>
+                        <div class="stat-item-sub" style="margin-top:4px;">${chips || '<span style="color:#555">No actions recorded</span>'}</div>
                     </div>`;
                 }).join('');
             }
@@ -1689,15 +2124,15 @@
         // ── End Statistics Dropdown Panels ────────────────────────────
 
         // Regular updates
-        setInterval(updateMetrics, 2000);    // Every 2 seconds
-        setInterval(updateAgentStatus, 3000);// Every 3 seconds
-        setInterval(updateLogs, 1000);       // Every 1 second
-        setInterval(updateStats, 5000);      // Every 5 seconds
-        setInterval(checkAlerts, 2000);      // Every 2 seconds
-        setInterval(updateChart, 2000);      // Every 2 seconds
-        setInterval(updateIncidents, 5000);  // Every 5 seconds
-        setInterval(loadThresholds, 30000);  // Recalculate adaptive thresholds every 30s
-        setInterval(updateSimStatus, 3000);  // Simulation status every 3 seconds
+        setInterval(updateMetrics, 2000);       // Every 2 seconds
+        setInterval(updateAgentStatus, 3000);   // Every 3 seconds
+        setInterval(updateLogs, 1000);          // Every 1 second
+        setInterval(updateStats, 5000);         // Every 5 seconds
+        setInterval(updateChart, 2000);         // Every 2 seconds
+        setInterval(updateIncidents, 5000);     // Every 5 seconds
+        setInterval(loadThresholds, 15000);     // Refresh learned IQR bounds every 15s
+        setInterval(updateSimStatus, 3000);     // Simulation status every 3 seconds
+        setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
 
         // Initial load
         loadThresholds();
@@ -1708,6 +2143,7 @@
         updateStats();
         updateChart();
         updateIncidents();
+        updateSecurityPanel();
     </script>
 </body>
 </html>
