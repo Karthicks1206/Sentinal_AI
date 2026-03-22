@@ -1902,49 +1902,80 @@ class AlgorithmicRecoveryEngine:
         )
 
     # ─────────────────────────────────────────────────────────────────────
-    # Ollama AI validation helpers
+    # AI validation helpers — Groq (primary) → Ollama (fallback)
     # ─────────────────────────────────────────────────────────────────────
 
     def _ask_ollama_cpu(self, profile: CPUProfile) -> Optional[str]:
-        """Ask Ollama to validate CPU classification and suggest any adjustments."""
+        """Ask LLM to validate CPU classification and suggest any adjustments."""
         prompt = (
-            f"System context: CPU anomaly on IoT device.\n"
-            f"Classification algorithm result: {profile.classification}\n"
-            f"Evidence: CPU samples={[round(x,1) for x in profile.cpu_samples]}, "
+            f"IoT device CPU anomaly. Algorithm classified it as: {profile.classification}.\n"
+            f"Evidence: samples={[round(x,1) for x in profile.cpu_samples]}, "
             f"iowait={profile.iowait_pct:.1f}%, "
-            f"dominant_process={profile.dominant_process.name if profile.dominant_process else 'none'}, "
-            f"dominant_cpu={profile.dominant_cpu_pct:.1f}%, "
-            f"trajectory={profile.trajectory}, "
-            f"single_core_saturated={profile.single_core_saturated}\n"
-            f"Question: Is this classification correct? Reply in one sentence with yes/no and brief reason."
+            f"dominant_process={profile.dominant_process.name if profile.dominant_process else 'none'} "
+            f"at {profile.dominant_cpu_pct:.1f}% CPU, trajectory={profile.trajectory}, "
+            f"single_core_saturated={profile.single_core_saturated}.\n"
+            f"In 2 sentences: confirm or correct the classification, then state the single best algorithmic fix."
         )
-        return self._call_ollama(prompt)
+        return self._call_llm(prompt)
 
     def _ask_ollama_memory(self, profile: MemoryProfile) -> Optional[str]:
-        """Ask Ollama to validate memory classification."""
+        """Ask LLM to validate memory classification."""
         leakers_str = [f"{l['name']} slope={l['slope_mb_per_s']}MB/s" for l in profile.leaking_processes[:2]]
         prompt = (
-            f"System context: Memory anomaly on IoT device.\n"
-            f"Classification: {profile.classification}\n"
-            f"Evidence: mem_samples={[round(x,1) for x in profile.mem_samples]}, "
-            f"swap_pct={profile.swap_pct:.1f}%, cached_mb={profile.cached_mb:.0f}MB, "
-            f"leaking_processes={leakers_str}, trajectory={profile.trajectory}\n"
-            f"Question: Is this classification correct? Reply in one sentence."
+            f"IoT device memory anomaly. Algorithm classified it as: {profile.classification}.\n"
+            f"Evidence: samples={[round(x,1) for x in profile.mem_samples]}, "
+            f"swap={profile.swap_pct:.1f}%, cached={profile.cached_mb:.0f}MB, "
+            f"leaking_processes={leakers_str or 'none'}, trajectory={profile.trajectory}.\n"
+            f"In 2 sentences: confirm or correct the classification, then state the single best algorithmic fix."
         )
-        return self._call_ollama(prompt)
+        return self._call_llm(prompt)
 
-    def _call_ollama(self, prompt: str) -> Optional[str]:
-        """Call local Ollama with a short prompt. Returns response string or None."""
+    def _call_llm(self, prompt: str) -> Optional[str]:
+        """
+        Call Groq (llama-3.3-70b-versatile) first for fast, high-quality validation.
+        Falls back to local Ollama if Groq is unavailable or fails.
+        """
+        # ── Try Groq first ────────────────────────────────────────────────
+        groq_key = os.environ.get('GROQ_API_KEY', '')
+        if not groq_key:
+            # Try loading from .env
+            env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+            try:
+                for line in open(os.path.abspath(env_path)):
+                    line = line.strip()
+                    if line.startswith('GROQ_API_KEY='):
+                        groq_key = line.split('=', 1)[1].strip()
+                        os.environ['GROQ_API_KEY'] = groq_key
+                        break
+            except Exception:
+                pass
+
+        if groq_key:
+            try:
+                from groq import Groq as _Groq
+                client = _Groq(api_key=groq_key)
+                resp = client.chat.completions.create(
+                    model='llama-3.3-70b-versatile',
+                    messages=[{'role': 'user', 'content': prompt}],
+                    max_tokens=150,
+                    temperature=0.2,
+                )
+                text = resp.choices[0].message.content.strip()
+                self._log(f"Groq AI validation (70B): {text[:120]}")
+                return text[:300]
+            except Exception as e:
+                self._log(f"Groq unavailable ({e}) — falling back to Ollama")
+
+        # ── Fallback: local Ollama ─────────────────────────────────────────
         try:
             import ollama as _ollama
             response = _ollama.chat(
                 model=self.ollama_model,
-                messages=[{
-                    'role':    'user',
-                    'content': prompt,
-                }],
-                options={'num_predict': 80, 'temperature': 0.1},
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'num_predict': 100, 'temperature': 0.1},
             )
-            return response['message']['content'].strip()[:200]
+            text = response['message']['content'].strip()
+            self._log(f"Ollama AI validation (3B): {text[:100]}")
+            return text[:300]
         except Exception:
             return None

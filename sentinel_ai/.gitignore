@@ -1,0 +1,30 @@
+# Secrets — never commit
+.env
+*.pem
+*.key
+certs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Data / logs
+logs/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

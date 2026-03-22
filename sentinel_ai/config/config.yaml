@@ -257,8 +257,8 @@ aws:
 
 groq:
   enabled: true
-  model: "llama-3.1-8b-instant"   # fast, free-tier Groq model (primary AI provider)
-  max_tokens: 512
+  model: "llama-3.3-70b-versatile"  # best free-tier Groq model — strong reasoning for diagnosis
+  max_tokens: 1024
   temperature: 0.2
   # API key read from GROQ_API_KEY env var or .env file
 
