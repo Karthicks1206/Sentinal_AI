@@ -823,6 +823,242 @@
             animation: pulse 2s infinite;
         }
 
+        /* ── Connected Devices Panel ──────────────────────────────── */
+        .devices-panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(0,212,255,0.2);
+            margin-bottom: 20px;
+        }
+
+        .devices-panel h2 {
+            font-size: 1.3em;
+            color: #00d4ff;
+            border-bottom: 2px solid rgba(0,212,255,0.3);
+            padding-bottom: 10px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .devices-count-badge {
+            font-size: 0.65em;
+            background: rgba(0,212,255,0.15);
+            border: 1px solid rgba(0,212,255,0.3);
+            padding: 2px 10px;
+            border-radius: 12px;
+            color: #00d4ff;
+        }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+
+        .device-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 14px 16px;
+            border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+
+        .device-card:hover {
+            border-color: rgba(0,212,255,0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,212,255,0.15);
+        }
+
+        .device-card.status-connected { border-left: 3px solid #00ff88; }
+        .device-card.status-stale     { border-left: 3px solid #ffaa00; }
+        .device-card.status-offline   { border-left: 3px solid #ff4444; opacity: 0.6; }
+
+        .device-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .device-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .device-dot.connected { background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: pulse 2s infinite; }
+        .device-dot.stale     { background: #ffaa00; }
+        .device-dot.offline   { background: #ff4444; }
+
+        .device-name {
+            font-size: 0.95em;
+            font-weight: 600;
+            color: #eee;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .device-platform {
+            font-size: 0.72em;
+            color: #666;
+            background: rgba(255,255,255,0.06);
+            padding: 1px 7px;
+            border-radius: 8px;
+        }
+
+        .device-bars { display: flex; flex-direction: column; gap: 6px; }
+
+        .device-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8em;
+        }
+
+        .device-bar-label {
+            width: 32px;
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        .device-bar-track {
+            flex: 1;
+            height: 7px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .device-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .device-bar-fill.cpu  { background: linear-gradient(90deg,#00d4ff,#00ff88); }
+        .device-bar-fill.mem  { background: linear-gradient(90deg,#aa44ff,#ff44aa); }
+        .device-bar-fill.disk { background: linear-gradient(90deg,#ff8800,#ffcc00); }
+        .device-bar-fill.warn { background: linear-gradient(90deg,#ffaa00,#ff6600); }
+        .device-bar-fill.crit { background: linear-gradient(90deg,#ff4444,#cc0000); }
+
+        .device-bar-val {
+            width: 34px;
+            text-align: right;
+            color: #ccc;
+            font-size: 0.95em;
+        }
+
+        .device-footer {
+            margin-top: 10px;
+            font-size: 0.72em;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .device-status-text.connected { color: #00ff88; }
+        .device-status-text.stale     { color: #ffaa00; }
+        .device-status-text.offline   { color: #ff4444; }
+
+        .devices-empty {
+            text-align: center;
+            padding: 32px 0;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .devices-empty .devices-empty-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        /* ── Device Detail Modal ───────────────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.open { display: flex; }
+
+        .modal-box {
+            background: linear-gradient(135deg,#1a1a2e,#16213e);
+            border: 1px solid rgba(0,212,255,0.3);
+            border-radius: 12px;
+            padding: 28px;
+            width: 90%;
+            max-width: 640px;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 1.5em;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .modal-close:hover { color: #fff; }
+
+        .modal-title {
+            font-size: 1.25em;
+            color: #00d4ff;
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+
+        .modal-subtitle {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .modal-section-title {
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 14px 0 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            padding-bottom: 4px;
+        }
+
+        .modal-metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px,1fr));
+            gap: 10px;
+        }
+
+        .modal-metric-tile {
+            background: rgba(255,255,255,0.04);
+            border-radius: 7px;
+            padding: 10px 12px;
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .modal-metric-tile .m-label { font-size: 0.75em; color: #888; margin-bottom: 3px; }
+        .modal-metric-tile .m-val   { font-size: 1.2em; font-weight: 600; color: #00ff88; }
+
         /* Scrollbar styling */
         ::-webkit-scrollbar {
             width: 8px;
@@ -976,6 +1212,44 @@
                 <div class="sec-feed" id="secFeed" style="max-height:160px;">
                     <p class="sec-empty">No threats detected — system is clean.</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Connected Devices -->
+        <div class="devices-panel">
+            <h2>
+                🖥️ Connected Devices
+                <span class="devices-count-badge" id="devicesCountBadge">0 online</span>
+            </h2>
+            <div class="devices-grid" id="devicesGrid">
+                <div class="devices-empty">
+                    <div class="devices-empty-icon">📡</div>
+                    <div>No remote devices connected yet.</div>
+                    <div style="margin-top:6px;font-size:0.85em;color:#444;">
+                        Run <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;">python sentinel_client.py</code> on any machine to start monitoring it.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Detail Modal -->
+        <div class="modal-overlay" id="deviceModal" onclick="if(event.target===this)closeDeviceModal()">
+            <div class="modal-box">
+                <button class="modal-close" onclick="closeDeviceModal()">×</button>
+                <div class="modal-title" id="modalDeviceName">Device</div>
+                <div class="modal-subtitle" id="modalDeviceSubtitle"></div>
+
+                <div class="modal-section-title">CPU</div>
+                <div class="modal-metric-grid" id="modalCpuMetrics"></div>
+
+                <div class="modal-section-title">Memory</div>
+                <div class="modal-metric-grid" id="modalMemMetrics"></div>
+
+                <div class="modal-section-title">Disk</div>
+                <div class="modal-metric-grid" id="modalDiskMetrics"></div>
+
+                <div class="modal-section-title">Network</div>
+                <div class="modal-metric-grid" id="modalNetMetrics"></div>
             </div>
         </div>
 
@@ -2123,6 +2397,182 @@
 
         // ── End Statistics Dropdown Panels ────────────────────────────
 
+        // ══════════════════════════════════════════════════════════════
+        // CONNECTED DEVICES PANEL
+        // ══════════════════════════════════════════════════════════════
+
+        let _deviceModalId = null;
+
+        function barColor(pct, type) {
+            if (pct >= 90) return 'crit';
+            if (pct >= 75) return 'warn';
+            return type;
+        }
+
+        function deviceBar(label, pct, type) {
+            const cls = barColor(pct, type);
+            return `
+            <div class="device-bar-row">
+                <span class="device-bar-label">${label}</span>
+                <div class="device-bar-track">
+                    <div class="device-bar-fill ${cls}" style="width:${Math.min(100,pct)}%"></div>
+                </div>
+                <span class="device-bar-val">${pct.toFixed(0)}%</span>
+            </div>`;
+        }
+
+        function renderDevices(devices) {
+            const grid  = document.getElementById('devicesGrid');
+            const badge = document.getElementById('devicesCountBadge');
+
+            const online = devices.filter(d => d.status === 'connected').length;
+            badge.textContent = `${devices.length} device${devices.length !== 1 ? 's' : ''} · ${online} online`;
+
+            if (devices.length === 0) {
+                grid.innerHTML = `
+                <div class="devices-empty">
+                    <div class="devices-empty-icon">📡</div>
+                    <div>No remote devices connected yet.</div>
+                    <div style="margin-top:6px;font-size:0.85em;color:#444;">
+                        Run <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;">python sentinel_client.py</code> on any machine to start monitoring it.
+                    </div>
+                </div>`;
+                return;
+            }
+
+            grid.innerHTML = devices.map(d => {
+                const m   = d.metrics || {};
+                const cpu = (m.cpu  && m.cpu.cpu_percent)       || 0;
+                const mem = (m.memory && m.memory.memory_percent)|| 0;
+                const dsk = (m.disk  && m.disk.disk_percent)     || 0;
+                const age = d.age_seconds || 0;
+                const ageStr = age < 60 ? `${Math.round(age)}s ago`
+                             : age < 3600 ? `${Math.round(age/60)}m ago`
+                             : `${Math.round(age/3600)}h ago`;
+
+                return `
+                <div class="device-card status-${d.status}" onclick="openDeviceModal('${d.device_id}')">
+                    <div class="device-header">
+                        <div class="device-dot ${d.status}"></div>
+                        <div class="device-name" title="${d.device_id}">${d.device_id}</div>
+                        <div class="device-platform">${d.platform || '?'}</div>
+                    </div>
+                    <div class="device-bars">
+                        ${deviceBar('CPU',  cpu,  'cpu')}
+                        ${deviceBar('MEM',  mem,  'mem')}
+                        ${deviceBar('DISK', dsk,  'disk')}
+                    </div>
+                    <div class="device-footer">
+                        <span class="device-status-text ${d.status}">${d.status.toUpperCase()}</span>
+                        <span>Updated ${ageStr}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function updateDevices() {
+            try {
+                const resp = await fetch('/api/devices');
+                if (!resp.ok) return;
+                const devices = await resp.json();
+
+                // Attach metrics snapshot to each device object for modal
+                const withMetrics = await Promise.all(devices.map(async d => {
+                    try {
+                        const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
+                        d.metrics = mr.ok ? await mr.json() : {};
+                    } catch { d.metrics = {}; }
+                    return d;
+                }));
+
+                renderDevices(withMetrics);
+
+                // Refresh modal if open
+                if (_deviceModalId) {
+                    const cur = withMetrics.find(d => d.device_id === _deviceModalId);
+                    if (cur) populateModal(cur);
+                }
+            } catch (e) { /* silently ignore */ }
+        }
+
+        // ── Device Detail Modal ────────────────────────────────────────
+
+        function metricTile(label, value, unit='') {
+            const v = (value !== null && value !== undefined) ? value : '—';
+            const display = typeof v === 'number' ? `${v.toFixed(1)}${unit}` : `${v}${unit}`;
+            return `<div class="modal-metric-tile"><div class="m-label">${label}</div><div class="m-val">${display}</div></div>`;
+        }
+
+        function populateModal(d) {
+            document.getElementById('modalDeviceName').textContent = d.device_id;
+            document.getElementById('modalDeviceSubtitle').textContent =
+                `${d.hostname || ''} · ${d.platform || '?'} · ${d.status?.toUpperCase() || '?'} · seen ${Math.round(d.age_seconds||0)}s ago`;
+
+            const m = d.metrics || {};
+
+            const cpu = m.cpu || {};
+            document.getElementById('modalCpuMetrics').innerHTML = [
+                metricTile('Usage',       cpu.cpu_percent,        '%'),
+                metricTile('Cores',       cpu.cpu_count,          ''),
+                metricTile('Load 1m',     cpu.load_avg_1min,      ''),
+                metricTile('Load 5m',     cpu.load_avg_5min,      ''),
+                metricTile('Top Process', cpu.top_process_name,   ''),
+                metricTile('Top CPU',     cpu.top_process_cpu,    '%'),
+            ].join('');
+
+            const mem = m.memory || {};
+            document.getElementById('modalMemMetrics').innerHTML = [
+                metricTile('Usage',     mem.memory_percent,  '%'),
+                metricTile('Used',      mem.memory_used_mb   != null ? (mem.memory_used_mb/1024).toFixed(2) : null, ' GB'),
+                metricTile('Available', mem.memory_available_mb != null ? (mem.memory_available_mb/1024).toFixed(2) : null, ' GB'),
+                metricTile('Total',     mem.memory_total_mb  != null ? (mem.memory_total_mb/1024).toFixed(1) : null,  ' GB'),
+                metricTile('Swap',      mem.swap_percent,    '%'),
+                metricTile('Top Proc',  mem.top_process_name,''),
+            ].join('');
+
+            const dsk = m.disk || {};
+            document.getElementById('modalDiskMetrics').innerHTML = [
+                metricTile('Usage',  dsk.disk_percent, '%'),
+                metricTile('Used',   dsk.disk_used_gb, ' GB'),
+                metricTile('Free',   dsk.disk_free_gb, ' GB'),
+                metricTile('Total',  dsk.disk_total_gb,' GB'),
+            ].join('');
+
+            const net = m.network || {};
+            document.getElementById('modalNetMetrics').innerHTML = [
+                metricTile('Ping',       net.ping_latency_ms,      ' ms'),
+                metricTile('Connected',  net.ping_success ? 'Yes' : 'No', ''),
+                metricTile('Sent',       net.bytes_sent_mb,        ' MB'),
+                metricTile('Received',   net.bytes_recv_mb,        ' MB'),
+                metricTile('Pkt Loss',   net.packet_loss_percent,  '%'),
+                metricTile('Errors In',  net.errors_in,            ''),
+            ].join('');
+        }
+
+        async function openDeviceModal(deviceId) {
+            _deviceModalId = deviceId;
+            document.getElementById('deviceModal').classList.add('open');
+            try {
+                const [dr, mr] = await Promise.all([
+                    fetch(`/api/devices`).then(r => r.json()),
+                    fetch(`/api/devices/${encodeURIComponent(deviceId)}/metrics`).then(r => r.json()),
+                ]);
+                const d = dr.find(x => x.device_id === deviceId) || { device_id: deviceId };
+                d.metrics = mr;
+                populateModal(d);
+            } catch (e) {
+                document.getElementById('modalDeviceName').textContent = deviceId;
+                document.getElementById('modalDeviceSubtitle').textContent = 'Could not load metrics';
+            }
+        }
+
+        function closeDeviceModal() {
+            _deviceModalId = null;
+            document.getElementById('deviceModal').classList.remove('open');
+        }
+
+        // ── End Connected Devices ──────────────────────────────────────
+
         // Regular updates
         setInterval(updateMetrics, 2000);       // Every 2 seconds
         setInterval(updateAgentStatus, 3000);   // Every 3 seconds
@@ -2133,6 +2583,7 @@
         setInterval(loadThresholds, 15000);     // Refresh learned IQR bounds every 15s
         setInterval(updateSimStatus, 3000);     // Simulation status every 3 seconds
         setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
+        setInterval(updateDevices, 5000);       // Connected devices every 5 seconds
 
         // Initial load
         loadThresholds();
@@ -2144,6 +2595,7 @@
         updateChart();
         updateIncidents();
         updateSecurityPanel();
+        updateDevices();
     </script>
 </body>
 </html>
