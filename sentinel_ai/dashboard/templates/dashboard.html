@@ -262,6 +262,10 @@
         /* ── Gauge SVG ────────────────────────────────────────────────── */
         svg.gauge-arc-svg { transform: rotate(0deg); }
         svg.gauge-arc-svg path.gauge-bg-path { stroke: rgba(255,255,255,0.06); }
+        /* Value text inside the gauge arc */
+        .gauge-center-text { font-family: 'Segoe UI', system-ui, sans-serif; pointer-events: none; }
+        /* Hide the old above-arc value label — number is now inside the SVG */
+        .metric .metric-value { display: none; }
         svg.gauge-arc-svg path#cpuGaugeArc    { filter: drop-shadow(0 0 8px rgba(0,212,255,0.7)); }
         svg.gauge-arc-svg path#memoryGaugeArc { stroke: #a855f7 !important; filter: drop-shadow(0 0 8px rgba(168,85,247,0.7)); }
         svg.gauge-arc-svg path#diskGaugeArc   { stroke: #f59e0b !important; filter: drop-shadow(0 0 8px rgba(245,158,11,0.7)); }
@@ -1066,9 +1070,8 @@
             font-weight: 600;
             color: #eee;
             flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            min-width: 0;
+            word-break: break-word;
         }
 
         .device-platform {
@@ -1126,7 +1129,13 @@
             font-size: 0.72em;
             color: #555;
             display: flex;
-            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+            align-items: center;
+        }
+        .device-footer-link {
+            width: 100%;
+            margin-top: 4px;
         }
 
         .device-status-text.connected { color: #00ff88; }
@@ -1540,10 +1549,13 @@
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="cpuValue">0%</div>
                     <!-- Gauge Arc SVG -->
-                    <svg class="gauge-arc-svg" viewBox="0 0 120 70" style="width:100%;max-width:200px;display:block;margin:12px auto 4px;">
-                        <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
-                        <path id="cpuGaugeArc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#00d4ff" stroke-width="10" stroke-linecap="round"
-                              stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(0,212,255,0.8));"/>
+                    <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
+                        <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+                        <path id="cpuGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#00d4ff" stroke-width="10" stroke-linecap="round"
+                              stroke-dasharray="199.6" stroke-dashoffset="199.6" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(0,212,255,0.8));"/>
+                        <text id="cpuGaugeText" x="60" y="66" text-anchor="middle" class="gauge-center-text"
+                              fill="#ffffff" font-size="22" font-weight="700">0%</text>
+                        <text x="60" y="84" text-anchor="middle" class="gauge-center-text" fill="#555" font-size="10">CPU</text>
                     </svg>
                     <div class="progress-bar">
                         <div class="progress-fill" id="cpuBar" style="width: 0%">0%</div>
@@ -1564,10 +1576,13 @@
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="memoryValue">0%</div>
                     <!-- Gauge Arc SVG -->
-                    <svg class="gauge-arc-svg" viewBox="0 0 120 70" style="width:100%;max-width:200px;display:block;margin:12px auto 4px;">
-                        <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
-                        <path id="memoryGaugeArc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#a855f7" stroke-width="10" stroke-linecap="round"
-                              stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(168,85,247,0.8));"/>
+                    <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
+                        <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+                        <path id="memoryGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#a855f7" stroke-width="10" stroke-linecap="round"
+                              stroke-dasharray="199.6" stroke-dashoffset="199.6" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(168,85,247,0.8));"/>
+                        <text id="memoryGaugeText" x="60" y="66" text-anchor="middle" class="gauge-center-text"
+                              fill="#ffffff" font-size="22" font-weight="700">0%</text>
+                        <text x="60" y="84" text-anchor="middle" class="gauge-center-text" fill="#555" font-size="10">MEM</text>
                     </svg>
                     <div class="progress-bar">
                         <div class="progress-fill" id="memoryBar" style="width: 0%">0%</div>
@@ -1588,10 +1603,13 @@
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="diskValue">0%</div>
                     <!-- Gauge Arc SVG -->
-                    <svg class="gauge-arc-svg" viewBox="0 0 120 70" style="width:100%;max-width:200px;display:block;margin:12px auto 4px;">
-                        <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
-                        <path id="diskGaugeArc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#f59e0b" stroke-width="10" stroke-linecap="round"
-                              stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(245,158,11,0.8));"/>
+                    <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
+                        <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+                        <path id="diskGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#f59e0b" stroke-width="10" stroke-linecap="round"
+                              stroke-dasharray="199.6" stroke-dashoffset="199.6" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(245,158,11,0.8));"/>
+                        <text id="diskGaugeText" x="60" y="66" text-anchor="middle" class="gauge-center-text"
+                              fill="#ffffff" font-size="22" font-weight="700">0%</text>
+                        <text x="60" y="84" text-anchor="middle" class="gauge-center-text" fill="#555" font-size="10">DISK</text>
                     </svg>
                     <div class="progress-bar">
                         <div class="progress-fill" id="diskBar" style="width: 0%">0%</div>
@@ -1612,10 +1630,13 @@
                     <div class="metric-label">Input Voltage</div>
                     <div class="metric-value" id="powerVoltage">5.00 V</div>
                     <!-- Power Quality Gauge Arc SVG -->
-                    <svg class="gauge-arc-svg" viewBox="0 0 120 70" style="width:100%;max-width:200px;display:block;margin:12px auto 4px;">
-                        <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
-                        <path id="powerQualityGaugeArc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#ec4899" stroke-width="10" stroke-linecap="round"
-                              stroke-dasharray="172.8" stroke-dashoffset="0" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(236,72,153,0.8));"/>
+                    <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
+                        <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+                        <path id="powerQualityGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#ec4899" stroke-width="10" stroke-linecap="round"
+                              stroke-dasharray="199.6" stroke-dashoffset="0" style="transition:stroke-dashoffset 0.6s ease,stroke 0.4s;filter:drop-shadow(0 0 8px rgba(236,72,153,0.8));"/>
+                        <text id="powerQualityGaugeText" x="60" y="66" text-anchor="middle" class="gauge-center-text"
+                              fill="#ffffff" font-size="22" font-weight="700">100%</text>
+                        <text x="60" y="84" text-anchor="middle" class="gauge-center-text" fill="#555" font-size="10">QUALITY</text>
                     </svg>
                     <div class="progress-bar">
                         <div class="progress-fill" id="powerQualityBar" style="width:100%">100%</div>
@@ -2399,14 +2420,20 @@
                 });
         }
 
-        // Gauge arc total arc length for the semi-circle (radius 55, π * 55 ≈ 172.8)
-        const GAUGE_ARC_LEN = 172.8;
+        // Gauge arc total arc length for 220° arc (radius 52): 220/360 * 2π*52 ≈ 199.6
+        const GAUGE_ARC_LEN = 199.6;
         // Map progress-bar elementId → gauge arc elementId
         const GAUGE_ARC_MAP = {
             'cpuBar':          'cpuGaugeArc',
             'memoryBar':       'memoryGaugeArc',
             'diskBar':         'diskGaugeArc',
             'powerQualityBar': 'powerQualityGaugeArc'
+        };
+        const GAUGE_TEXT_MAP = {
+            'cpuBar':          'cpuGaugeText',
+            'memoryBar':       'memoryGaugeText',
+            'diskBar':         'diskGaugeText',
+            'powerQualityBar': 'powerQualityGaugeText'
         };
 
         function updateProgressBar(elementId, percent, customThreshold) {
@@ -2444,6 +2471,15 @@
                         // Power quality: green when good, red when poor
                         arc.style.stroke = percent >= 80 ? '#cc44ff' : (percent >= 50 ? '#ffd93d' : '#ff4444');
                     }
+                }
+            }
+            // Update SVG text inside the gauge
+            const textId = GAUGE_TEXT_MAP[elementId];
+            if (textId) {
+                const textEl = document.getElementById(textId);
+                if (textEl) {
+                    textEl.textContent = percent.toFixed(1) + '%';
+                    textEl.setAttribute('fill', percent >= 90 ? '#ff4444' : percent >= 75 ? '#ffd93d' : '#ffffff');
                 }
             }
         }
@@ -3076,8 +3112,9 @@
                         <span class="device-status-text ${d.status}">${d.status.toUpperCase()}</span>
                         <span>Updated ${ageStr}</span>
                         <a href="/device/${encodeURIComponent(d.device_id)}" target="_blank"
-                           style="color:#00d4ff;font-size:11px;text-decoration:none;margin-left:auto"
-                           onclick="event.stopPropagation()">Full Dashboard ↗</a>
+                           class="device-footer-link"
+                           style="color:#00d4ff;font-size:11px;text-decoration:none;display:block"
+                           onclick="event.stopPropagation()">↗ Full Dashboard</a>
                     </div>
                 </div>`;
             }).join('');
