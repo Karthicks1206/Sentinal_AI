@@ -358,28 +358,46 @@ def _exec_remote_command(action):
         return {'status': 'error', 'message': str(e)}
 
 
+_cmd_lock = threading.Lock()
+
+
 def poll_and_execute_commands(hub_url, device_id):
     """Fetch pending recovery commands from hub and execute them."""
-    data = _get_json("{}/api/devices/{}/commands".format(hub_url, device_id))
-    if not data:
+    if not _cmd_lock.acquire(blocking=False):
         return
-    commands = data.get('commands', [])
-    if not commands:
-        return
+    try:
+        data = _get_json("{}/api/devices/{}/commands".format(hub_url, device_id))
+        if not data:
+            return
+        commands = data.get('commands', [])
+        if not commands:
+            return
 
-    results = []
-    for cmd in commands:
-        action = cmd.get('action', '')
-        action_id = cmd.get('action_id', '')
-        print(" [RECOVERY] remote action: {}".format(action), flush=True)
-        result = _exec_remote_command(action)
-        result['action_id'] = action_id
-        result['action'] = action
-        print(" [RECOVERY] {} — {}".format(result['status'], result['message']), flush=True)
-        results.append(result)
+        results = []
+        for cmd in commands:
+            action = cmd.get('action', '')
+            action_id = cmd.get('action_id', '')
+            print(" [RECOVERY] remote action: {}".format(action), flush=True)
+            result = _exec_remote_command(action)
+            result['action_id'] = action_id
+            result['action'] = action
+            print(" [RECOVERY] {} — {}".format(result['status'], result['message']), flush=True)
+            results.append(result)
 
-    _post("{}/api/devices/{}/command_results".format(hub_url, device_id),
-          {'device_id': device_id, 'results': results})
+        _post("{}/api/devices/{}/command_results".format(hub_url, device_id),
+              {'device_id': device_id, 'results': results})
+    finally:
+        _cmd_lock.release()
+
+
+def _command_poll_loop(hub_url, device_id):
+    """Background thread: polls for commands every 1 second for near-instant execution."""
+    while True:
+        try:
+            poll_and_execute_commands(hub_url, device_id)
+        except Exception:
+            pass
+        time.sleep(1)
 
 
 def collect_metrics() -> dict:
@@ -582,6 +600,12 @@ def main():
 
         time.sleep(5)
 
+    cmd_thread = threading.Thread(
+        target=_command_poll_loop, args=(hub_url, device_id),
+        daemon=True, name='sentinel_cmd_poll'
+    )
+    cmd_thread.start()
+
     print("\nStreaming metrics. Press Ctrl+C to stop.\n")
     print(" {:<10} {:<10} {:<10} {:<10}".format("TIME", "CPU %", "MEM %", "DISK %"))
     print(" " + "-" * 42)
@@ -604,7 +628,6 @@ def main():
                 mem = metrics['memory']['memory_percent']
                 dsk = metrics['disk']['disk_percent']
                 print(" {:<10} {:<10.1f} {:<10.1f} {:<10.1f}".format(ts, cpu, mem, dsk), flush=True)
-                poll_and_execute_commands(hub_url, device_id)
             else:
                 errors += 1
                 reason = _last_error or "HTTP {}".format(status)
