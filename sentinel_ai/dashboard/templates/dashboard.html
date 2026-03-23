@@ -1981,6 +1981,52 @@
                         </div>
                     </div>
 
+                    <div class="grid" style="margin-top:16px;">
+                        <div class="card">
+                            <h2>Agent Status</h2>
+                            <div id="distAgentGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;"></div>
+                        </div>
+                        <div class="card">
+                            <h2>Controlled Instability</h2>
+                            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_cpu')">CPU Spike</button>
+                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_memory')">Memory Pressure</button>
+                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_disk')">Disk Fill</button>
+                                <button class="btn btn-danger" onclick="sendRemoteCmd('stop_stress')">Stop All</button>
+                            </div>
+                            <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid" style="margin-top:16px;">
+                        <div class="card">
+                            <h2>Anomaly Detection</h2>
+                            <div id="distAnmCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
+                            <div id="distAnmFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                        </div>
+                        <div class="card">
+                            <h2>Diagnosis</h2>
+                            <div id="distDiagCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
+                            <div id="distDiagFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                        </div>
+                        <div class="card">
+                            <h2>Recovery Actions</h2>
+                            <div id="distRecCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
+                            <div id="distRecFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:16px;">
+                        <h2>Incident Timeline</h2>
+                        <div id="distIncCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
+                        <div id="distIncList" style="max-height:220px;overflow-y:auto;font-size:0.78em;"></div>
+                    </div>
+
+                    <div class="card" style="margin-top:16px;">
+                        <h2>Activity Log</h2>
+                        <div id="distLogFeed" style="max-height:180px;overflow-y:auto;font-size:0.75em;font-family:monospace;"></div>
+                    </div>
+
                 </div>
 
             </div>
@@ -3370,6 +3416,7 @@
                             m.memory?.memory_percent ?? 0,
                             m.disk?.disk_percent ?? 0);
                         _refreshDistChart(selectedDistDevice);
+                        updateDistDeviceData(selectedDistDevice);
                     }
                 }
             } catch (e) { }
@@ -3388,6 +3435,139 @@
         setInterval(updateSimStatus, 3000); // Simulation status every 3 seconds
         setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
         setInterval(updateDevices, 5000); // Connected devices every 5 seconds
+        async function sendRemoteCmd(action) {
+            if (!selectedDistDevice) return;
+            const enc = encodeURIComponent(selectedDistDevice);
+            const res = document.getElementById('distSimResult');
+            if (res) res.textContent = action + ' sending…';
+            try {
+                const r = await fetch(`/api/devices/${enc}/queue_command`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action})
+                });
+                const j = await r.json();
+                if (res) res.textContent = j.status === 'queued' ? action + ' queued' : (j.error || 'error');
+            } catch (e) {
+                if (res) res.textContent = 'request failed';
+            }
+        }
+
+        async function updateDistDeviceData(deviceId) {
+            if (!deviceId) return;
+            const enc = encodeURIComponent(deviceId);
+            const statusDot = { monitoring: '#00ff88', anomaly: '#00ff88', diagnosis: '#00ff88', recovery: '#00ff88', learning: '#00ff88' };
+
+            try {
+                const sr = await fetch('/api/status');
+                if (sr.ok) {
+                    const st = await sr.json();
+                    const ag = document.getElementById('distAgentGrid');
+                    if (ag) {
+                        const agents = [
+                            {key: 'monitoring_agent', label: 'Monitoring'},
+                            {key: 'anomaly_agent', label: 'Anomaly'},
+                            {key: 'diagnosis_agent', label: 'Diagnosis'},
+                            {key: 'recovery_agent', label: 'Recovery'},
+                            {key: 'learning_agent', label: 'Learning'},
+                            {key: 'device_link', label: 'Device Link', fixed: '#aa00ff'},
+                        ];
+                        ag.innerHTML = agents.map(a => {
+                            const color = a.fixed || (st.agents && st.agents[a.key] === 'running' ? '#00ff88' : '#ff4444');
+                            return `<div style="display:flex;align-items:center;gap:6px;">
+                                <span style="width:10px;height:10px;border-radius:50%;background:${color};box-shadow:0 0 6px ${color};display:inline-block;"></span>
+                                <span style="font-size:0.78em;color:#ccc;">${a.label}</span>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch {}
+
+            const sev = {critical:'#ff4444',high:'#ff8800',medium:'#ffd93d',low:'#00aaff'};
+
+            try {
+                const r = await fetch(`/api/devices/${enc}/anomalies`);
+                if (r.ok) {
+                    const items = await r.json();
+                    const el = document.getElementById('distAnmFeed');
+                    const cnt = document.getElementById('distAnmCount');
+                    if (cnt) cnt.textContent = items.length + ' anomalies';
+                    if (el) el.innerHTML = items.length ? items.map(a =>
+                        `<div style="padding:4px 0;border-bottom:1px solid #222;color:${sev[a.severity]||'#ccc'};">
+                            <span style="font-size:0.9em;">${a.metric || a.anomaly_type || ''}</span>
+                            <span style="float:right;color:#888;">${(a.timestamp||'').slice(11,19)}</span>
+                        </div>`).join('') : '<div style="color:#555;padding:4px 0;">No anomalies detected</div>';
+                }
+            } catch {}
+
+            try {
+                const r = await fetch(`/api/devices/${enc}/diagnoses`);
+                if (r.ok) {
+                    const items = await r.json();
+                    const el = document.getElementById('distDiagFeed');
+                    const cnt = document.getElementById('distDiagCount');
+                    if (cnt) cnt.textContent = items.length + ' diagnoses';
+                    if (el) el.innerHTML = items.length ? items.map(d =>
+                        `<div style="padding:4px 0;border-bottom:1px solid #222;">
+                            <div style="color:#00ccff;">${d.root_cause || d.diagnosis || 'Diagnosis pending'}</div>
+                            <div style="color:#888;font-size:0.9em;">${(d.timestamp||'').slice(11,19)}</div>
+                        </div>`).join('') : '<div style="color:#555;padding:4px 0;">No diagnoses yet</div>';
+                }
+            } catch {}
+
+            try {
+                const r = await fetch(`/api/devices/${enc}/recoveries`);
+                if (r.ok) {
+                    const items = await r.json();
+                    const el = document.getElementById('distRecFeed');
+                    const cnt = document.getElementById('distRecCount');
+                    if (cnt) cnt.textContent = items.length + ' actions';
+                    if (el) el.innerHTML = items.length ? items.map(rec => {
+                        const sc = rec.status === 'success' ? '#00ff88' : rec.status === 'error' ? '#ff4444' : '#ffd93d';
+                        return `<div style="padding:4px 0;border-bottom:1px solid #222;">
+                            <span style="color:${sc};">${rec.action || ''}</span>
+                            <span style="float:right;color:#888;">${(rec.timestamp||'').slice(11,19)}</span>
+                            <div style="color:#aaa;font-size:0.9em;">${rec.message||''}</div>
+                        </div>`;
+                    }).join('') : '<div style="color:#555;padding:4px 0;">No recovery actions yet</div>';
+                }
+            } catch {}
+
+            try {
+                const r = await fetch(`/api/devices/${enc}/incidents`);
+                if (r.ok) {
+                    const items = await r.json();
+                    const el = document.getElementById('distIncList');
+                    const cnt = document.getElementById('distIncCount');
+                    if (cnt) cnt.textContent = items.length + ' incidents';
+                    if (el) el.innerHTML = items.length ? items.map(inc => {
+                        const bc = inc.outcome === 'resolved' ? '#00ff88' : inc.outcome === 'failed' ? '#ff4444' : '#ffd93d';
+                        return `<div style="padding:6px 0;border-bottom:1px solid #222;">
+                            <span style="background:${bc};color:#000;padding:1px 6px;border-radius:3px;font-size:0.8em;">${inc.outcome||'detected'}</span>
+                            <span style="margin-left:8px;color:#ccc;">${inc.anomaly_type||''}</span>
+                            <span style="float:right;color:#888;font-size:0.85em;">${(inc.timestamp||'').slice(0,19).replace('T',' ')}</span>
+                            <div style="color:#aaa;margin-top:2px;font-size:0.85em;">${inc.root_cause||''}</div>
+                        </div>`;
+                    }).join('') : '<div style="color:#555;padding:4px 0;">No incidents yet</div>';
+                }
+            } catch {}
+
+            try {
+                const r = await fetch(`/api/devices/${enc}/logs`);
+                if (r.ok) {
+                    const items = await r.json();
+                    const el = document.getElementById('distLogFeed');
+                    if (el) {
+                        el.innerHTML = items.length ? items.map(log => {
+                            const lc = log.level === 'ERROR' ? '#ff4444' : log.level === 'WARNING' ? '#ffd93d' : '#aaa';
+                            return `<div style="color:${lc};padding:1px 0;">${(log.timestamp||'').slice(11,19)} ${log.message||''}</div>`;
+                        }).join('') : '<div style="color:#555;">No log entries</div>';
+                        el.scrollTop = el.scrollHeight;
+                    }
+                }
+            } catch {}
+        }
+
         setInterval(updateDistributed, 3000); // Distributed tab every 3 seconds
 
         loadThresholds();
