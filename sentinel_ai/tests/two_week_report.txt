@@ -1,0 +1,276 @@
+========================================================================
+  SENTINEL AI — 2-WEEK COMPRESSED TEST SUITE REPORT
+  Generated: 2026-03-22 18:53:50
+  Platform:  Darwin 25.3.0
+  Python:    3.14.3
+========================================================================
+
+  SUMMARY: 10/14 passed  |  4 failed  |  0 skipped
+  Total runtime: 120.9s
+
+  PASS RATE: 71%
+
+========================================================================
+  DAY-BY-DAY RESULTS
+========================================================================
+
+  Day  1 [FAIL] — Baseline: imports, psutil, process enumeration (13.07s)
+  [INFO] Verifying all core imports load without errors
+  [PASS] Import OK: agents.recovery.algorithmic_engine.AlgorithmicRecoveryEngine
+  [PASS] Import OK: agents.recovery.recovery_agent.RecoveryAgent
+  [PASS] Import OK: agents.anomaly.anomaly_detection_agent.AnomalyDetectionAgent
+  [PASS] Import OK: agents.diagnosis.diagnosis_agent.DiagnosisAgent
+  [PASS] Import OK: agents.monitoring.monitoring_agent.MonitoringAgent
+  [PASS] Import OK: core.event_bus.EventBus
+  [INFO] Verifying psutil can collect live metrics
+  [PASS] CPU: 42.1%
+  [PASS] Memory: 63.9% used (5917 MB free)
+  [PASS] Disk: 8.1% used (132 GB free)
+  [INFO] Verifying process enumeration works
+  [PASS] Enumerated 759 running processes
+  --- ERRORS ---
+  [FAIL] Import failed: psutil.psutil — module 'psutil' has no attribute 'psutil'
+  [FAIL] Import failed: numpy.numpy — module 'numpy' has no attribute 'numpy'
+  [FAIL] Import failed: core.config.load_config — module 'core.config' has no attribute 'load_config'
+
+  Day  2 [PASS] — CPU stress: profiler classification + algorithmic fix (16.34s)
+  [INFO] Spinning up a CPU stress subprocess for 20 seconds
+  [PASS] Stress subprocess started (PID 86984)
+  [PASS] CPU samples: [50.4, 50.7, 52.5]
+  [PASS] Classification: COMPUTE_BOUND
+  [PASS] Dominant process: fileproviderd @ 180.5%
+  [PASS] Trajectory: STABLE
+  [PASS] Dominant process detected correctly (CPU > 10%)
+  [INFO] Running algorithmic CPU fix
+  [PASS] Algorithm applied: cpu_affinity_and_scheduling_policy
+  [PASS] Actions taken: 1
+  [PASS]   > Reniced 'fileproviderd' (PID 1041) from 0 → 10
+  [PASS] First action was NOT a kill — algorithmic fix applied correctly
+  [PASS] Before CPU: [51.8, 50.4, 50.6]
+  [PASS] After  CPU: {'cpu_pct': 50.4, 'targeted_process': 'fileproviderd'}
+  [INFO] Stress process terminated
+
+  Day  3 [PASS] — Memory pressure: profiler + algorithmic fix (14.37s)
+  [INFO] Profiling memory (4 samples × 1.5s)
+  [PASS] Memory samples: [63.8, 63.7, 63.8, 63.8]
+  [PASS] Classification: MEMORY_LEAK
+  [PASS] Swap usage: 44.4%
+  [PASS] Cached MB: 0 MB
+  [PASS] Trajectory: STABLE
+  [PASS] Top consumers: ['com.apple.WebKit.WebContent', 'Python', 'node']
+  [PASS] Leak detection: 1 potential leakers found
+  [PASS]   Leak: 'fileproviderd' RSS=66MB slope=1.121MB/s
+  [INFO] Running algorithmic memory fix
+  [PASS] Algorithm: pressure_relief_renice_and_compact
+  [PASS] Classification: NORMAL_GROWTH
+  [PASS] Success: True
+  [PASS]   > Reniced 'com.apple.WebKit.WebContent' (PID 86587, 742MB)
+  [PASS]   > Reniced 'node' (PID 82616, 526MB)
+  [PASS]   > macOS purge attempted
+  [PASS] First action was algorithmic (no kill as first response)
+  [PASS] Before: [63.8, 63.8, 63.7, 63.8]
+  [PASS] After:  {'mem_pct': 63.8, 'available_mb': 5937.3}
+
+  Day  4 [PASS] — Memory leak detection: injected RSS growth slope (12.23s)
+  [INFO] Injecting a memory leak simulation (growing list in subprocess)
+  [PASS] Leak subprocess started (PID 86996)
+  [PASS] Memory samples: [63.9, 63.8, 63.9, 63.8, 63.8]
+  [PASS] Classification: NORMAL_GROWTH
+  [WARN] Leak subprocess not in top leakers (may be masked by other processes). Leakers found: []
+  [PASS] Leak detection algorithm ran without error
+  [INFO] Leak subprocess terminated
+
+  Day  5 [PASS] — Disk: profiler + smart targeted cleanup (0.97s)
+  [INFO] Creating test temp files for cleanup validation
+  [PASS] Created 5 test files (250KB) in /var/folders/yb/fhrc_r890xz5vr40b2gwkykm0000gn/T/sentinel_test_t_17u7vy
+  [INFO] Running disk profiler
+  [PASS] Classification: DISK_CAPACITY
+  [PASS] Disk usage: 8.1%
+  [PASS] Free space: 132.2 GB
+  [PASS] Inode usage: 0.0%
+  [PASS] Largest dirs found: 3
+  [PASS]   logs/sentinel.log.2: 100.0 MB
+  [PASS]   /var/log/powermanagement: 25.4 MB
+  [PASS]   /var/log/com.apple.xpc.launchd: 20.3 MB
+  [INFO] Running algorithmic disk fix
+  [PASS] Algorithm: targeted_smart_disk_cleanup
+  [PASS] Success: True
+  [PASS]   > Temp cleanup: 0.0MB freed from /tmp
+  [PASS]   > Cleared 588 __pycache__ directories
+  [PASS] Before: disk=8.1%
+  [PASS] After:  {'disk_pct': 8.1, 'freed_mb': 0.0}
+
+  Day  6 [PASS] — Network: profiler + TCP algorithmic fix (5.22s)
+  [INFO] Running network profiler
+  [PASS] Classification: HIGH_LATENCY
+  [PASS] Ping: 16.5ms, Loss: 0.0%
+  [PASS] Connections — ESTABLISHED:0 TIME_WAIT:0 CLOSE_WAIT:0
+  [PASS] DNS OK: True, Internet OK: True
+  [INFO] Running algorithmic network fix
+  [PASS] Algorithm: arp_flush_and_interface_diagnostics
+  [PASS] Success: True
+  [PASS]   > Flushed ARP cache (arp -d -a)
+  [PASS] First action was algorithmic (no interface reset as first response)
+  [PASS] Before: {'ping_ms': 23.8, 'loss_pct': 50.0, 'time_wait': 0, 'close_wait': 0, 'established': 0, 'dns_ok': True, 'internet_ok': True, 'top_conn_proc': None, 'anomaly_value': 16.482}
+  [PASS] After:  {'ping_ms': 15.6, 'loss_pct': 0.0}
+
+  Day  7 [PASS] — Escalation: L1→L2→L3→L4 ladder verification (0.0s)
+  [INFO] Testing graduated escalation tracker
+  [PASS] Incident 1 → Level 1, actions: ['algorithmic_cpu_fix']
+  [PASS] Level 1 correct on first incident
+  [PASS] algorithmic_cpu_fix is Level-1 action (correct)
+  [PASS] Incident 2 → Level 2, actions: ['algorithmic_cpu_fix', 'throttle_cpu_process']
+  [PASS] Level 2 correct on second incident
+  [PASS] throttle_cpu_process added at Level 2 (correct)
+  [PASS] Incident 3 → Level 3, actions: ['algorithmic_cpu_fix', 'throttle_cpu_process', 'kill_top_cpu_process']
+  [PASS] Level 3 correct on third incident
+  [PASS] kill_top_cpu_process added at Level 3 (correct — kill only after algorithmic fails)
+  [PASS] Incident 4 → Level 4, actions: ['algorithmic_cpu_fix', 'throttle_cpu_process', 'kill_top_cpu_process', 'restart_service', 'compact_memory']
+  [PASS] Level 4 correct on fourth incident
+  [PASS] After reset → Level 1
+  [PASS] Escalation reset correctly after resolution
+  [PASS] Category 'memory': Level-1 algorithmic action = ['algorithmic_memory_fix']
+  [PASS] Category 'disk': Level-1 algorithmic action = ['algorithmic_disk_fix']
+  [PASS] Category 'network': Level-1 algorithmic action = ['algorithmic_network_fix']
+
+  Day  8 [PASS] — Multi-anomaly: simultaneous CPU + memory (16.33s)
+  [INFO] Running simultaneous CPU + memory stress for 15s
+  [PASS] Stress procs running: CPU PID=87003, MEM PID=87004
+  [PASS] CPU classification: COMPUTE_BOUND
+  [PASS] CPU samples: [41.5, 33.7]
+  [PASS] MEM classification: MEMORY_LEAK
+  [PASS] MEM samples: [63.9, 63.8]
+  [PASS] CPU fix: cpu_affinity_and_scheduling_policy — 1 actions
+  [PASS]   [CPU] > Reniced 'fileproviderd' (PID 1041) from 10 → 10
+  [PASS] MEM fix: pressure_relief_renice_and_compact — 3 actions
+  [PASS]   [MEM] > Reniced 'com.apple.WebKit.WebContent' (PID 86587, 742MB)
+  [PASS]   [MEM] > Reniced 'node' (PID 82616, 527MB)
+  [PASS]   [MEM] > macOS purge attempted
+  [INFO] All stress processes terminated
+
+  Day  9 [PASS] — Groq AI validation: llama-3.3-70b-versatile live (1.33s)
+  [INFO] Testing Groq llama-3.3-70b-versatile AI validation
+  [PASS] Groq CPU response (0.48s): The classification of COMPUTE_BOUND is confirmed, as the high CPU usage of 82% by the stress-ng process with no significant iowait indicates that the IoT device's CPU is the bottleneck, limiting the device's performance.
+  [PASS] Groq latency acceptable: 0.48s
+  [PASS] Groq MEM response (0.4s): Confirming the classification as MEMORY_LEAK, the best algorithmic fix is to implement a periodic garbage collection using Python's `gc` module, specifically by calling `gc.collect()` at regular intervals to free up unused memory and prevent further RSS growth.
+  [PASS] Groq NET response (0.44s): The CONNECTION_LEAK classification is confirmed due to the high number of TIME_WAIT connections, and the best fix is to adjust the TCP timeout settings to reduce the TIME_WAIT period, allowing for more efficient connection closure and reuse.
+  [PASS] Average Groq latency: 0.44s across 3 queries
+  [PASS] Model used: llama-3.3-70b-versatile
+
+  Day 10 [FAIL] — Anomaly detection: IQR / freeze / EMA methods (0.01s)
+  [INFO] Testing AdaptiveMetricBaseline — all detection methods
+  [INFO] Warming up baseline with 35 normal readings (35% CPU)
+  [PASS] Baseline stats: {'mean': 35.0, 'std': 1.4142135623730951, 'median': 35.0, 'q1': 34.0, 'q3': 36.0, 'iqr': 2.0, 'upper_mild': 39.0, 'upper_extreme': 42.0, 'lower_fence': 31.0, 'roc_std': 1.8232113763882918, 'roc_mean': 1.4736842105263157}
+  [INFO] Test 1: IQR spike detection (inject 95% reading into 35% baseline)
+  --- ERRORS ---
+  [FAIL] Baseline not warmed up: only None samples
+  [FAIL] Uncaught exception: 'AdaptiveMetricBaseline' object has no attribute 'is_anomalous'
+Traceback (most recent call last):
+  File "/Users/karthi/Desktop/Sentinal_AI/sentinel_ai/tests/two_week_test_suite.py", line 97, in _run_day
+    fn(r)
+    ~~^^^
+  File "/Users/karthi/Desktop/Sentinal_AI/sentinel_ai/tests/two_week_test_suite.py", line 642, in day10_anomaly_detection
+    is_anom, reason, severity = baseline.is_anomalous(95.0)
+                                ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'AdaptiveMetricBaseline' object has no attribute 'is_anomalous'
+
+
+  Day 11 [PASS] — No-kill guard: Level-1 must not kill at first response (18.47s)
+  [INFO] Verifying recovery does NOT kill/terminate at Level 1
+  [INFO] CPU algorithmic fix at Level 1
+  [PASS] CPU actions: ["Reniced 'fileproviderd' (PID 1041): nice=10", "Reniced 'Stats' (PID 1802): nice=10", "Reniced 'bird' (PID 78923): nice=10"]
+  [PASS] CPU Level-1: No kill/terminate — algorithmic fix only [PASS]
+  [INFO] Memory algorithmic fix at Level 1 (no leak scenario)
+  [PASS] Memory classification: NORMAL_GROWTH
+  [PASS] Memory actions: ["Reniced 'com.apple.WebKit.WebContent' (PID 86587, 742MB)", "Reniced 'node' (PID 82616, 527MB)", 'macOS purge attempted']
+  [PASS] Memory Level-1: No kill for non-leak scenario [PASS]
+  [INFO] Verifying dispatch table has algorithmic actions registered
+  [PASS] Action 'algorithmic_cpu_fix' registered in dispatch table
+  [PASS] Action 'algorithmic_memory_fix' registered in dispatch table
+  [PASS] Action 'algorithmic_disk_fix' registered in dispatch table
+  [PASS] Action 'algorithmic_network_fix' registered in dispatch table
+
+  Day 12 [PASS] — Outcome verification: before/after evidence present (22.53s)
+  [INFO] Verifying outcome verification: all HealResult objects have before/after evidence
+  [PASS] 
+  CPU fix:
+  [PASS]     success        = True
+  [PASS]     classification = MULTI_PROCESS
+  [PASS]     algorithm      = batch_scheduling_and_renice
+  [PASS]     actions_taken  = 3 actions
+  [PASS]     evidence_before: ['samples', 'iowait_pct', 'per_core', 'dominant', 'dominant_cpu_avg', 'trajectory', 'heavy_writers', 'anomaly_value']
+  [PASS]     evidence_after : ['cpu_pct']
+  [PASS]     Before/after evidence present [PASS]
+  [PASS]     After evidence present [PASS]
+  [PASS]     Algorithm name present [PASS]: batch_scheduling_and_renice
+  [PASS] 
+  Memory fix:
+  [PASS]     success        = True
+  [PASS]     classification = NORMAL_GROWTH
+  [PASS]     algorithm      = pressure_relief_renice_and_compact
+  [PASS]     actions_taken  = 3 actions
+  [PASS]     evidence_before: ['samples', 'swap_pct', 'cached_mb', 'leaking', 'trajectory', 'anomaly_value']
+  [PASS]     evidence_after : ['mem_pct', 'available_mb']
+  [PASS]     Before/after evidence present [PASS]
+  [PASS]     After evidence present [PASS]
+  [PASS]     Algorithm name present [PASS]: pressure_relief_renice_and_compact
+  [PASS] 
+  Disk fix:
+  [PASS]     success        = True
+  [PASS]     classification = DISK_CAPACITY
+  [PASS]     algorithm      = targeted_smart_disk_cleanup
+  [PASS]     actions_taken  = 2 actions
+  [PASS]     evidence_before: ['disk_pct', 'free_gb', 'inode_pct', 'io_util_pct', 'top_writers', 'classification', 'anomaly_value']
+  [PASS]     evidence_after : ['disk_pct', 'freed_mb']
+  [PASS]     Before/after evidence present [PASS]
+  [PASS]     After evidence present [PASS]
+  [PASS]     Algorithm name present [PASS]: targeted_smart_disk_cleanup
+  [PASS] 
+  Network fix:
+  [PASS]     success        = True
+  [PASS]     classification = HIGH_LATENCY
+  [PASS]     algorithm      = tcp_congestion_and_buffer_tuning
+  [PASS]     actions_taken  = 1 actions
+  [PASS]     evidence_before: ['ping_ms', 'loss_pct', 'time_wait', 'close_wait', 'established', 'dns_ok', 'internet_ok', 'top_conn_proc', 'anomaly_value']
+  [PASS]     evidence_after : ['ping_ms', 'loss_pct']
+  [PASS]     Before/after evidence present [PASS]
+  [PASS]     After evidence present [PASS]
+  [PASS]     Algorithm name present [PASS]: tcp_congestion_and_buffer_tuning
+
+  Day 13 [FAIL] — Adaptive baselines: hysteresis + drift detection (0.0s)
+  [INFO] Testing hysteresis: anomaly counter should NOT reset at boundary
+  [PASS] Baseline: mean=40.0, std=0.00
+  [PASS] Hysteresis reset threshold: 40.00
+  --- ERRORS ---
+  [FAIL] Uncaught exception: 'AdaptiveMetricBaseline' object has no attribute 'is_anomalous'
+Traceback (most recent call last):
+  File "/Users/karthi/Desktop/Sentinal_AI/sentinel_ai/tests/two_week_test_suite.py", line 97, in _run_day
+    fn(r)
+    ~~^^^
+  File "/Users/karthi/Desktop/Sentinal_AI/sentinel_ai/tests/two_week_test_suite.py", line 815, in day13_adaptive_baselines
+    is_anom, reason, _ = baseline.is_anomalous(just_above)
+                         ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'AdaptiveMetricBaseline' object has no attribute 'is_anomalous'
+
+
+  Day 14 [FAIL] — Full end-to-end pipeline: monitor→detect→diagnose→recover (0.0s)
+  [INFO] Full pipeline test: EventBus → MonitoringAgent → AnomalyDetection → Diagnosis → Recovery
+  --- ERRORS ---
+  [FAIL] Core infra init failed: cannot import name 'load_config' from 'core.config' (/Users/karthi/Desktop/Sentinal_AI/sentinel_ai/tests/../core/config.py)
+
+========================================================================
+  ALGORITHMIC RECOVERY VALIDATION
+========================================================================
+
+  The following checks confirm recovery is NOT just kill/reset:
+    Day  2: CPU Level-1 action is scheduling policy, NOT kill
+    Day  3: Memory Level-1 action is renice/cache-drop, NOT kill
+    Day  6: Network Level-1 action is TCP tuning, NOT interface reset
+    Day  7: Escalation ladder — kill only appears at Level 3
+    Day 11: Level-1 dispatch verified: algorithmic_*_fix actions registered
+
+  AI Integration:
+    Groq llama-3.3-70b-versatile: active
+    Ollama fallback: local llama3.2:3b
+
+========================================================================
