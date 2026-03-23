@@ -9,7 +9,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
 
-/* ── Header ── */
+
 .header { background: linear-gradient(135deg,#0d1117 0%,#161b2e 100%); border-bottom: 1px solid #1e2a45; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
 .back-btn { color: #00d4ff; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px; opacity: .8; transition: opacity .2s; }
 .back-btn:hover { opacity: 1; }
@@ -17,11 +17,11 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
 .header-title span { color: #00d4ff; }
 .status-pill { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: .5px; }
 .status-pill.connected { background: rgba(0,255,136,.15); color: #00ff88; border: 1px solid #00ff88; }
-.status-pill.stale     { background: rgba(255,170,0,.15);  color: #ffaa00; border: 1px solid #ffaa00; }
-.status-pill.offline   { background: rgba(255,68,68,.15);  color: #ff4444; border: 1px solid #ff4444; }
+.status-pill.stale { background: rgba(255,170,0,.15); color: #ffaa00; border: 1px solid #ffaa00; }
+.status-pill.offline { background: rgba(255,68,68,.15); color: #ff4444; border: 1px solid #ff4444; }
 .header-meta { font-size: 12px; color: #555; }
 
-/* ── Layout ── */
+
 .main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
 .row { display: grid; gap: 16px; margin-bottom: 16px; }
 .row-4 { grid-template-columns: repeat(4, 1fr); }
@@ -29,11 +29,11 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
 .row-2 { grid-template-columns: repeat(2, 1fr); }
 .row-1 { grid-template-columns: 1fr; }
 
-/* ── Cards ── */
+
 .card { background: #0d1117; border: 1px solid #1e2a45; border-radius: 12px; padding: 18px; }
 .card-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: #555; margin-bottom: 10px; }
 
-/* ── Metric Cards ── */
+
 .metric-val { font-size: 36px; font-weight: 700; color: #00d4ff; line-height: 1; margin-bottom: 6px; }
 .metric-val.warn { color: #ffaa00; }
 .metric-val.crit { color: #ff4444; }
@@ -43,77 +43,77 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
 .metric-bar-fill.crit { background: #ff4444; }
 .metric-sub { font-size: 11px; color: #555; }
 
-/* ── Chart ── */
+
 .chart-wrap { position: relative; height: 260px; }
 
-/* ── Feed items ── */
+
 .feed { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
 .feed::-webkit-scrollbar { width: 4px; }
 .feed::-webkit-scrollbar-thumb { background: #1e2a45; border-radius: 2px; }
 .feed-empty { color: #333; font-size: 12px; padding: 20px 0; text-align: center; }
 .feed-item { background: #111827; border-radius: 8px; padding: 10px 12px; border-left: 3px solid #1e2a45; font-size: 12px; }
 .feed-item.critical { border-left-color: #ff4444; }
-.feed-item.high     { border-left-color: #ff6600; }
-.feed-item.medium   { border-left-color: #ffaa00; }
-.feed-item.low      { border-left-color: #00d4ff; }
-.feed-item.success  { border-left-color: #00ff88; }
-.feed-item.queued   { border-left-color: #9966ff; }
-.feed-ts  { color: #444; font-size: 10px; margin-bottom: 3px; }
+.feed-item.high { border-left-color: #ff6600; }
+.feed-item.medium { border-left-color: #ffaa00; }
+.feed-item.low { border-left-color: #00d4ff; }
+.feed-item.success { border-left-color: #00ff88; }
+.feed-item.queued { border-left-color: #9966ff; }
+.feed-ts { color: #444; font-size: 10px; margin-bottom: 3px; }
 .feed-label { font-weight: 600; color: #ccc; margin-bottom: 2px; }
 .feed-detail { color: #888; font-size: 11px; }
 
-/* ── Incidents ── */
+
 .incident { background: #111827; border-radius: 8px; padding: 12px 14px; border-left: 3px solid #1e2a45; margin-bottom: 8px; }
-.incident.resolved  { border-left-color: #00ff88; }
-.incident.failed    { border-left-color: #ff4444; }
+.incident.resolved { border-left-color: #00ff88; }
+.incident.failed { border-left-color: #ff4444; }
 .incident.attempted { border-left-color: #ffaa00; }
-.incident.detected  { border-left-color: #00d4ff; }
+.incident.detected { border-left-color: #00d4ff; }
 .inc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .inc-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
-.badge-resolved  { background: rgba(0,255,136,.15); color: #00ff88; }
-.badge-failed    { background: rgba(255,68,68,.15);  color: #ff4444; }
-.badge-attempted { background: rgba(255,170,0,.15);  color: #ffaa00; }
-.badge-detected  { background: rgba(0,212,255,.15);  color: #00d4ff; }
+.badge-resolved { background: rgba(0,255,136,.15); color: #00ff88; }
+.badge-failed { background: rgba(255,68,68,.15); color: #ff4444; }
+.badge-attempted { background: rgba(255,170,0,.15); color: #ffaa00; }
+.badge-detected { background: rgba(0,212,255,.15); color: #00d4ff; }
 .inc-metric { font-weight: 600; color: #ccc; font-size: 13px; }
-.inc-ts     { color: #444; font-size: 11px; margin-left: auto; }
-.inc-diag   { color: #888; font-size: 11px; margin-top: 3px; }
+.inc-ts { color: #444; font-size: 11px; margin-left: auto; }
+.inc-diag { color: #888; font-size: 11px; margin-top: 3px; }
 .inc-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .inc-action { background: #1a2035; border-radius: 4px; padding: 2px 8px; font-size: 10px; color: #aaa; }
 
-/* ── Log ── */
+
 .log-feed { max-height: 240px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; }
 .log-line { padding: 2px 0; border-bottom: 1px solid #0d1117; }
 .log-line.WARNING { color: #ffaa00; }
-.log-line.ERROR   { color: #ff4444; }
-.log-line.INFO    { color: #888; }
+.log-line.ERROR { color: #ff4444; }
+.log-line.INFO { color: #888; }
 .log-ts { color: #444; margin-right: 8px; }
 
-/* ── Remote Control ── */
+
 .ctrl-btns { display: flex; flex-wrap: wrap; gap: 10px; }
 .ctrl-btn { background: #111827; border: 1px solid #1e2a45; border-radius: 8px; padding: 10px 18px; color: #ccc; cursor: pointer; font-size: 13px; transition: all .2s; }
 .ctrl-btn:hover { border-color: #00d4ff; color: #00d4ff; }
 .ctrl-btn.danger:hover { border-color: #ff4444; color: #ff4444; }
 .ctrl-result { margin-top: 10px; font-size: 12px; color: #555; min-height: 20px; }
 
-/* ── Agent status ── */
+
 .agent-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
 .agent-item { background: #111827; border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 8px; }
-.agent-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.agent-dot.ok  { background: #00ff88; }
+.agent-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.agent-dot.ok { background: #00ff88; }
 .agent-dot.off { background: #ff4444; }
 .agent-name { font-size: 12px; color: #aaa; }
 
-/* ── Toast ── */
+
 #toasts { position: fixed; top: 70px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
 .toast { background: #111827; border-radius: 10px; padding: 12px 16px; width: 300px; border-left: 4px solid #00d4ff; animation: slideIn .3s ease; font-size: 13px; }
 .toast.crit { border-left-color: #ff4444; }
 .toast.high { border-left-color: #ff6600; }
-.toast.med  { border-left-color: #ffaa00; }
+.toast.med { border-left-color: #ffaa00; }
 .toast-title { font-weight: 600; color: #ccc; margin-bottom: 3px; }
-.toast-body  { color: #888; font-size: 11px; }
+.toast-body { color: #888; font-size: 11px; }
 @keyframes slideIn { from { transform: translateX(120%); opacity:0; } to { transform: translateX(0); opacity:1; } }
 
-/* ── Section title ── */
+
 .section-title { font-size: 13px; font-weight: 600; color: #aaa; letter-spacing: .5px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1e2a45; display: flex; align-items: center; gap: 8px; }
 .section-title .count { background: #1e2a45; color: #888; border-radius: 10px; padding: 1px 8px; font-size: 11px; }
 </style>
@@ -131,7 +131,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
 
 <div class="main">
 
-  <!-- Metric Cards -->
+  
   <div class="row row-4" style="margin-bottom:16px">
     <div class="card" id="card-cpu">
       <div class="card-title">CPU Usage</div>
@@ -159,7 +159,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-  <!-- Chart -->
+  
   <div class="row row-1" style="margin-bottom:16px">
     <div class="card">
       <div class="card-title">Live Metrics</div>
@@ -167,7 +167,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-  <!-- Anomalies / Diagnosis / Recovery -->
+  
   <div class="row row-3" style="margin-bottom:16px">
     <div class="card">
       <div class="section-title">Anomalies <span class="count" id="anm-count">0</span></div>
@@ -183,7 +183,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-  <!-- Agent Status + Remote Control -->
+  
   <div class="row row-2" style="margin-bottom:16px">
     <div class="card">
       <div class="section-title">Agent Status (Hub)</div>
@@ -209,7 +209,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-  <!-- Incident Timeline -->
+  
   <div class="row row-1" style="margin-bottom:16px">
     <div class="card">
       <div class="section-title">Incident Timeline <span class="count" id="inc-count">0</span></div>
@@ -217,7 +217,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-  <!-- Activity Log -->
+  
   <div class="row row-1">
     <div class="card">
       <div class="section-title">Activity Log</div>
@@ -225,7 +225,7 @@ body { background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, 
     </div>
   </div>
 
-</div><!-- /main -->
+</div>
 
 <script>
 const DEVICE_ID = {{ device_id | tojson }};
@@ -233,7 +233,6 @@ let devChart = null;
 let _chartIsolated = null;
 let _prevAnmLen = 0, _prevDiagLen = 0, _prevRecLen = 0;
 
-// ── Chart ────────────────────────────────────────────────────────────────────
 function initChart() {
   const ctx = document.getElementById('devChart').getContext('2d');
   devChart = new Chart(ctx, {
@@ -241,10 +240,10 @@ function initChart() {
     data: {
       labels: [],
       datasets: [
-        { label: 'CPU %',    data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,.08)', borderWidth: 2, pointRadius: 0, tension: .4, fill: true },
+        { label: 'CPU %', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,.08)', borderWidth: 2, pointRadius: 0, tension: .4, fill: true },
         { label: 'Memory %', data: [], borderColor: '#ff6b9d', backgroundColor: 'rgba(255,107,157,.08)', borderWidth: 2, pointRadius: 0, tension: .4, fill: true },
-        { label: 'Disk %',   data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,.08)',  borderWidth: 2, pointRadius: 0, tension: .4, fill: true },
-        { label: 'Net ms',   data: [], borderColor: '#9966ff', backgroundColor: 'rgba(153,102,255,.08)', borderWidth: 1.5, pointRadius: 0, tension: .4, fill: false, yAxisID: 'y2' },
+        { label: 'Disk %', data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,.08)', borderWidth: 2, pointRadius: 0, tension: .4, fill: true },
+        { label: 'Net ms', data: [], borderColor: '#9966ff', backgroundColor: 'rgba(153,102,255,.08)', borderWidth: 1.5, pointRadius: 0, tension: .4, fill: false, yAxisID: 'y2' },
       ]
     },
     options: {
@@ -287,14 +286,13 @@ function initChart() {
       },
       scales: {
         x: { ticks: { color: '#555', maxTicksLimit: 8, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,.04)' } },
-        y:  { min: 0, max: 100, ticks: { color: '#555', callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,.04)' } },
+        y: { min: 0, max: 100, ticks: { color: '#555', callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,.04)' } },
         y2: { position: 'right', min: 0, ticks: { color: '#9966ff', callback: v => v+'ms' }, grid: { display: false } }
       }
     }
   });
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function severity_class(sev) {
   return { critical:'critical', high:'high', medium:'med', low:'low' }[sev] || 'low';
 }
@@ -319,35 +317,34 @@ function toast(title, body, sev='low') {
   setTimeout(() => t.remove(), 7000);
 }
 
-// ── Fetch & update ────────────────────────────────────────────────────────────
 async function updateMetrics() {
   const r = await fetch(`/api/devices/${encodeURIComponent(DEVICE_ID)}/metrics`).catch(()=>null);
   if (!r || !r.ok) return;
   const m = await r.json();
-  const cpu  = m.cpu?.cpu_percent ?? 0;
-  const mem  = m.memory?.memory_percent ?? 0;
+  const cpu = m.cpu?.cpu_percent ?? 0;
+  const mem = m.memory?.memory_percent ?? 0;
   const disk = m.disk?.disk_percent ?? 0;
-  const net  = m.network?.ping_latency_ms ?? 0;
+  const net = m.network?.ping_latency_ms ?? 0;
   const avail= m.memory?.memory_available_mb ? (m.memory.memory_available_mb/1024).toFixed(1)+'GB avail' : '';
   const free = m.disk?.disk_free_gb ? m.disk.disk_free_gb.toFixed(0)+'GB free' : '';
   const proc = m.cpu?.top_process_name || '';
 
-  setVal('cpu-val',  cpu.toFixed(1)+'%',  cpu);  setBar('cpu-bar', cpu);
-  setVal('mem-val',  mem.toFixed(1)+'%',  mem);  setBar('mem-bar', mem);
+  setVal('cpu-val', cpu.toFixed(1)+'%', cpu); setBar('cpu-bar', cpu);
+  setVal('mem-val', mem.toFixed(1)+'%', mem); setBar('mem-bar', mem);
   setVal('disk-val', disk.toFixed(1)+'%', disk); setBar('disk-bar', disk);
-  setVal('net-val',  net.toFixed(0)+'ms', Math.min(100, net/5));
+  setVal('net-val', net.toFixed(0)+'ms', Math.min(100, net/5));
   setBar('net-bar', Math.min(100, net/5));
-  document.getElementById('cpu-sub').textContent  = proc ? `Top: ${proc}` : '—';
-  document.getElementById('mem-sub').textContent  = avail || '—';
-  document.getElementById('disk-sub').textContent = free  || '—';
-  document.getElementById('net-sub').textContent  = net > 0 ? `Ping ${net.toFixed(0)}ms` : 'Ping latency';
+  document.getElementById('cpu-sub').textContent = proc ? `Top: ${proc}` : '—';
+  document.getElementById('mem-sub').textContent = avail || '—';
+  document.getElementById('disk-sub').textContent = free || '—';
+  document.getElementById('net-sub').textContent = net > 0 ? `Ping ${net.toFixed(0)}ms` : 'Ping latency';
 }
 
 async function updateChart() {
   const r = await fetch(`/api/devices/${encodeURIComponent(DEVICE_ID)}/history`).catch(()=>null);
   if (!r || !r.ok) return;
   const h = await r.json();
-  devChart.data.labels           = h.timestamps;
+  devChart.data.labels = h.timestamps;
   devChart.data.datasets[0].data = h.cpu;
   devChart.data.datasets[1].data = h.memory;
   devChart.data.datasets[2].data = h.disk;
@@ -362,7 +359,6 @@ async function updateAnomalies() {
   document.getElementById('anm-count').textContent = items.length;
   if (!items.length) { document.getElementById('anm-feed').innerHTML = '<div class="feed-empty">No anomalies yet</div>'; return; }
 
-  // Toast new ones
   if (items.length > _prevAnmLen) {
     const newest = items[items.length-1];
     const a = newest.anomaly || {};
@@ -492,7 +488,6 @@ async function updateLogs() {
   ).join('');
 }
 
-// ── Remote control ────────────────────────────────────────────────────────────
 async function sendCmd(action) {
   const res = document.getElementById('ctrl-result');
   res.textContent = `Queuing ${action}...`;
@@ -503,7 +498,7 @@ async function sendCmd(action) {
       body: JSON.stringify({action})
     });
     if (r.ok) {
-      res.textContent = `✓ ${action} queued — client will execute on next poll (~${window._interval||5}s)`;
+      res.textContent = ` ${action} queued — client will execute on next poll (~${window._interval||5}s)`;
       res.style.color = '#00ff88';
     } else {
       res.textContent = `Failed to queue command`;
@@ -516,7 +511,6 @@ async function sendCmd(action) {
   setTimeout(() => { res.textContent = ''; res.style.color = '#555'; }, 5000);
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
 initChart();
 
 async function tick() {

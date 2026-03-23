@@ -60,43 +60,35 @@ class DiagnosisAgent(BaseAgent):
         self.database = database
         self.device_id = config.device_id
 
-        # Diagnosis configuration
         self.diagnosis_config = config.get_section('diagnosis')
         self.rules_config = self.diagnosis_config.get('rules', {})
         self.llm_config = self.diagnosis_config.get('llm', {})
 
-        # Load diagnosis rules
         self.rules = []
         if self.rules_config.get('enabled', True):
             self._load_rules()
 
-        # Initialize LLM client (Bedrock)
         self.bedrock_client = None
         if self.llm_config.get('enabled', False):
             self._init_bedrock_client()
 
-        # Initialize OpenAI client (used only if API key is available)
         self.openai_client = None
         self.openai_config = config.get_section('openai') or {}
         if self.openai_config.get('enabled', False):
             self._init_openai_client()
 
-        # Initialize Groq client (fast cloud inference — preferred over Ollama when available)
         self.groq_client = None
         self.groq_config = config.get_section('groq') or {}
         if self.groq_config.get('enabled', True):
             self._init_groq_client()
 
-        # Initialize Ollama AI agent (free, local — fallback when Groq unavailable)
         self.ollama_config = config.get_section('ollama') or {}
         self.ollama_model = self.ollama_config.get('model', 'llama3.2:3b')
         self.ollama_available = self._check_ollama()
 
-        # Buffer for context gathering
         self.recent_metrics = []
         self.recent_anomalies = []
 
-        # Subscribe to anomaly events
         self.event_bus.subscribe("anomaly.detected", self.process_event)
 
     def _load_rules(self):
@@ -138,7 +130,6 @@ class DiagnosisAgent(BaseAgent):
 
         api_key = os.environ.get('OPENAI_API_KEY', '')
 
-        # If not set in environment, try to load from .env file in project root
         if not api_key:
             env_path = Path(__file__).parent.parent.parent / '.env'
             if env_path.exists():
@@ -202,7 +193,6 @@ class DiagnosisAgent(BaseAgent):
         try:
             models = _ollama_lib.list()
             model_names = [m.model for m in models.models]
-            # Accept model with or without tag
             base = self.ollama_model.split(':')[0]
             available = any(
                 m == self.ollama_model or m.startswith(base + ':')
@@ -234,13 +224,12 @@ class DiagnosisAgent(BaseAgent):
         self.logger.info("Diagnosis agent started (event-driven mode)")
 
         while self._running:
-            # Perform periodic cleanup
             try:
                 self._cleanup_buffers()
             except Exception as e:
                 self.logger.error(f"Error in periodic cleanup: {e}")
 
-            if not self.wait(300):  # 5 minutes
+            if not self.wait(300):
                 break
 
     def process_event(self, event):
@@ -251,14 +240,12 @@ class DiagnosisAgent(BaseAgent):
         if event.event_type != "anomaly.detected":
             return
 
-        # Snapshot data immediately (before handing off to thread)
         anomaly = event.data.get('anomaly', {})
         device_id = event.data.get('device_id')
         timestamp = event.data.get('timestamp')
 
         self.recent_anomalies.append({'timestamp': timestamp, 'anomaly': anomaly})
 
-        # Run the (potentially slow) Ollama inference off the event bus thread
         threading.Thread(
             target=self._diagnose_and_publish,
             args=(anomaly, device_id, timestamp),
@@ -311,7 +298,6 @@ class DiagnosisAgent(BaseAgent):
             'severity': anomaly.get('severity', 'medium')
         }
 
-        # Method 1: Rule-based diagnosis
         if self.rules_config.get('enabled', True):
             rule_diagnosis = self._diagnose_with_rules(anomaly)
             if rule_diagnosis:
@@ -319,8 +305,6 @@ class DiagnosisAgent(BaseAgent):
                 diagnosis_result['methods_used'].append('rule_based')
                 self.logger.debug(f"Rule-based diagnosis: {rule_diagnosis.get('diagnosis')}")
 
-        # Method 2: AI agent diagnosis
-        # Priority: Groq (fast, free tier) > Ollama (local) > OpenAI > AWS Bedrock
         llm_diagnosis = None
         context = self._gather_context(device_id, timestamp)
 
@@ -350,7 +334,6 @@ class DiagnosisAgent(BaseAgent):
             if not diagnosis_result['diagnosis']:
                 diagnosis_result.update(llm_diagnosis)
             else:
-                # AI enhances rule-based diagnosis
                 diagnosis_result['root_cause'] = llm_diagnosis.get('root_cause', diagnosis_result['root_cause'])
                 diagnosis_result['llm_insights'] = llm_diagnosis.get('diagnosis')
                 existing = set(diagnosis_result.get('recommended_actions', []))
@@ -373,10 +356,8 @@ class DiagnosisAgent(BaseAgent):
         metric_name = anomaly.get('metric_name', '')
         value = anomaly.get('value', 0)
 
-        # Get recent metrics for context
         recent_data = self._get_recent_metrics()
 
-        # Enrich context with anomaly's own values and string context (e.g. process names)
         bare = metric_name.split('.')[-1]
         recent_data.setdefault(metric_name, value)
         recent_data.setdefault(bare, value)
@@ -385,7 +366,6 @@ class DiagnosisAgent(BaseAgent):
 
         for rule in self.rules:
             if self._match_rule(rule, metric_name, value, recent_data):
-                # Format diagnosis with actual values
                 diagnosis = rule.get('diagnosis', 'Unknown issue')
                 diagnosis = self._format_diagnosis(diagnosis, recent_data)
 
@@ -420,7 +400,6 @@ class DiagnosisAgent(BaseAgent):
             operator = condition.get('operator')
             threshold = condition.get('value')
 
-            # Get the metric value
             if condition_metric == metric_name:
                 metric_value = value
             else:
@@ -429,7 +408,6 @@ class DiagnosisAgent(BaseAgent):
             if metric_value is None:
                 continue
 
-            # Check condition
             if operator == '>':
                 if not (metric_value > threshold):
                     return False
@@ -440,7 +418,6 @@ class DiagnosisAgent(BaseAgent):
                 if not (metric_value == threshold):
                     return False
             elif operator == 'increasing':
-                # Check if trend is increasing
                 if not self._check_trend(condition_metric, 'increasing'):
                     return False
 
@@ -457,12 +434,9 @@ class DiagnosisAgent(BaseAgent):
         Returns:
             Formatted diagnosis
         """
-        # Build replacement map with both full keys (cpu.top_process_name)
-        # and bare keys (top_process_name) so templates match either form
         replacements = {}
         for key, value in context.items():
             replacements[key] = value
-            # Also add the part after the last dot as a bare key
             bare = key.split('.')[-1]
             if bare not in replacements:
                 replacements[bare] = value
@@ -488,7 +462,6 @@ class DiagnosisAgent(BaseAgent):
         Returns:
             True if trend matches
         """
-        # Get historical data from database if available
         if not self.database:
             return False
 
@@ -505,7 +478,6 @@ class DiagnosisAgent(BaseAgent):
             values = [h.get('value', 0) for h in history[-10:]]
 
             if trend_type == 'increasing':
-                # Check if values are generally increasing
                 return values[-1] > values[0] and sum(1 for i in range(len(values)-1) if values[i+1] > values[i]) > len(values) * 0.6
             elif trend_type == 'decreasing':
                 return values[-1] < values[0] and sum(1 for i in range(len(values)-1) if values[i+1] < values[i]) > len(values) * 0.6
@@ -525,24 +497,24 @@ class DiagnosisAgent(BaseAgent):
             return None
 
         try:
-            metric   = anomaly.get('metric_name', 'unknown')
-            value    = anomaly.get('value', 0)
+            metric = anomaly.get('metric_name', 'unknown')
+            value = anomaly.get('value', 0)
             expected = anomaly.get('expected_value', 0)
             severity = anomaly.get('severity', 'medium')
-            atype    = anomaly.get('type', 'unknown')
+            atype = anomaly.get('type', 'unknown')
 
             recent = context.get('recent_metrics_summary', {})
             context_lines = []
             for mtype, stats in recent.items():
                 if isinstance(stats, dict):
                     context_lines.append(
-                        f"  {mtype}: mean={stats.get('mean', 0):.1f}, "
+                        f" {mtype}: mean={stats.get('mean', 0):.1f}, "
                         f"max={stats.get('max', 0):.1f}, min={stats.get('min', 0):.1f}"
                     )
-            context_str = '\n'.join(context_lines) or '  No history available'
+            context_str = '\n'.join(context_lines) or ' No history available'
 
-            model       = self.groq_config.get('model', 'llama-3.1-8b-instant')
-            max_tokens  = self.groq_config.get('max_tokens', 512)
+            model = self.groq_config.get('model', 'llama-3.1-8b-instant')
+            max_tokens = self.groq_config.get('max_tokens', 512)
             temperature = self.groq_config.get('temperature', 0.2)
 
             response = self.groq_client.chat.completions.create(
@@ -562,7 +534,7 @@ class DiagnosisAgent(BaseAgent):
                         "content": f"""ANOMALY on IoT device:
 - Metric: {metric}
 - Detection: {atype}
-- Value: {value:.3f}  Expected: {expected:.3f}
+- Value: {value:.3f} Expected: {expected:.3f}
 - Severity: {severity}
 
 System context (1-hour averages):
@@ -620,16 +592,15 @@ Respond with this JSON only:
             severity = anomaly.get('severity', 'medium')
             atype = anomaly.get('type', 'unknown')
 
-            # Build rich system context summary
             recent = context.get('recent_metrics_summary', {})
             context_lines = []
             for mtype, stats in recent.items():
                 if isinstance(stats, dict):
                     context_lines.append(
-                        f"  {mtype}: mean={stats.get('mean', 0):.1f}, "
+                        f" {mtype}: mean={stats.get('mean', 0):.1f}, "
                         f"max={stats.get('max', 0):.1f}, min={stats.get('min', 0):.1f}"
                     )
-            context_str = '\n'.join(context_lines) if context_lines else '  No history available'
+            context_str = '\n'.join(context_lines) if context_lines else ' No history available'
 
             recent_incidents = context.get('recent_incidents_count', 0)
 
@@ -653,12 +624,12 @@ System state (last 1 hour averages):
 {context_str}
 
 Available recovery actions (use exact names):
-  restart_mqtt      - Restart the MQTT broker service
-  kill_process      - Kill the highest CPU-consuming process
-  reconnect_sensor  - Reconnect disconnected sensors
-  failover          - Switch to backup MQTT broker
-  clear_cache       - Clear application cache directories
-  restart_service   - Restart the sentinel-agent service
+  restart_mqtt - Restart the MQTT broker service
+  kill_process - Kill the highest CPU-consuming process
+  reconnect_sensor - Reconnect disconnected sensors
+  failover - Switch to backup MQTT broker
+  clear_cache - Clear application cache directories
+  restart_service - Restart the sentinel-agent service
 
 Task: Analyze this anomaly using step-by-step reasoning, then output a JSON response.
 
@@ -770,15 +741,12 @@ Respond with this exact JSON structure:
             return None
 
         try:
-            # Prepare prompt for LLM
             prompt = self._build_llm_prompt(anomaly, context)
 
-            # Call Bedrock API
             model_id = self.llm_config.get('model_id', 'anthropic.claude-3-sonnet-20240229-v1:0')
             max_tokens = self.llm_config.get('max_tokens', 2048)
             temperature = self.llm_config.get('temperature', 0.3)
 
-            # Prepare request body (format depends on model)
             if 'anthropic' in model_id:
                 body = json.dumps({
                     "anthropic_version": "bedrock-2023-05-31",
@@ -792,29 +760,24 @@ Respond with this exact JSON structure:
                     ]
                 })
             else:
-                # Generic format
                 body = json.dumps({
                     "prompt": prompt,
                     "max_tokens": max_tokens,
                     "temperature": temperature
                 })
 
-            # Invoke model
             response = self.bedrock_client.invoke_model(
                 modelId=model_id,
                 body=body
             )
 
-            # Parse response
             response_body = json.loads(response['body'].read())
 
-            # Extract diagnosis from response
             if 'anthropic' in model_id:
                 diagnosis_text = response_body.get('content', [{}])[0].get('text', '')
             else:
                 diagnosis_text = response_body.get('completion', response_body.get('generated_text', ''))
 
-            # Parse structured response
             parsed_diagnosis = self._parse_llm_response(diagnosis_text)
 
             return parsed_diagnosis
@@ -874,7 +837,6 @@ Format your response as JSON:
             Parsed diagnosis dictionary
         """
         try:
-            # Try to extract JSON from response
             import re
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
 
@@ -887,7 +849,6 @@ Format your response as JSON:
                     'confidence': float(parsed.get('confidence', 0.7))
                 }
             else:
-                # Fallback: use raw text
                 return {
                     'root_cause': 'LLM Analysis',
                     'diagnosis': response_text,
@@ -918,7 +879,6 @@ Format your response as JSON:
             'timestamp': timestamp
         }
 
-        # Get recent metrics from database
         if self.database:
             try:
                 recent_metrics = self.database.get_metrics_history(
@@ -926,11 +886,9 @@ Format your response as JSON:
                     hours=1
                 )
 
-                # Summarize recent metrics
                 if recent_metrics:
                     context['recent_metrics_summary'] = self._summarize_metrics(recent_metrics)
 
-                # Get recent anomalies
                 recent_anomalies = self.database.get_recent_incidents(limit=5, device_id=device_id)
                 if recent_anomalies:
                     context['recent_incidents_count'] = len(recent_anomalies)
@@ -938,7 +896,6 @@ Format your response as JSON:
             except Exception as e:
                 self.logger.error(f"Error gathering context: {e}")
 
-        # Add buffered anomalies
         context['recent_anomalies'] = self.recent_anomalies[-5:]
 
         return context
@@ -977,7 +934,6 @@ Format your response as JSON:
             if not metrics:
                 return {}
 
-            # Get most recent value for each metric
             recent = {}
             for m in metrics:
                 key = f"{m['metric_type']}.{m['metric_name']}"
@@ -991,6 +947,5 @@ Format your response as JSON:
 
     def _cleanup_buffers(self):
         """Cleanup old data from buffers"""
-        # Keep only last 100 anomalies
         if len(self.recent_anomalies) > 100:
             self.recent_anomalies = self.recent_anomalies[-100:]

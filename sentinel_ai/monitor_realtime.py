@@ -30,7 +30,6 @@ class RealtimeMonitor:
 
     def __init__(self):
         """Initialize monitor"""
-        # Configuration
         self.config = get_config()
         self.config.set('aws.enabled', False)
 
@@ -38,19 +37,16 @@ class RealtimeMonitor:
         self.event_bus = get_event_bus(self.config)
         self.database = get_database(self.config)
 
-        # State tracking
         self.latest_metrics = {}
         self.anomalies = []
         self.diagnoses = []
         self.recoveries = []
 
-        # Subscribe to events
         self.event_bus.subscribe("health.metric", self._on_metric)
         self.event_bus.subscribe("anomaly.detected", self._on_anomaly)
         self.event_bus.subscribe("diagnosis.complete", self._on_diagnosis)
         self.event_bus.subscribe("recovery.action", self._on_recovery)
 
-        # Initialize agents
         self.agents = {
             'monitoring': MonitoringAgent(
                 'MonitoringAgent', self.config, self.event_bus,
@@ -98,7 +94,7 @@ class RealtimeMonitor:
 
     def get_status_icon(self, running):
         """Get status icon"""
-        return "🟢" if running else "🔴"
+        return "" if running else ""
 
     def render_dashboard(self):
         """Render the monitoring dashboard"""
@@ -110,15 +106,13 @@ class RealtimeMonitor:
         print("=" * 80)
         print()
 
-        # Agent Status
         print("AGENT STATUS:")
         print("-" * 80)
         for name, agent in self.agents.items():
             status = self.get_status_icon(agent.is_running())
-            print(f"  {status} {name.capitalize()}: {'RUNNING' if agent.is_running() else 'STOPPED'}")
+            print(f" {status} {name.capitalize()}: {'RUNNING' if agent.is_running() else 'STOPPED'}")
         print()
 
-        # Current Metrics
         print("CURRENT METRICS:")
         print("-" * 80)
         if self.latest_metrics:
@@ -127,33 +121,28 @@ class RealtimeMonitor:
             disk = self.latest_metrics.get('disk', {})
             network = self.latest_metrics.get('network', {})
 
-            # CPU
             cpu_pct = cpu.get('cpu_percent', 0)
             cpu_bar = self._make_bar(cpu_pct, 100)
             cpu_color = self._get_color(cpu_pct, 80, 90)
-            print(f"  CPU:    {cpu_bar} {cpu_color}{cpu_pct:5.1f}%\033[0m")
+            print(f" CPU: {cpu_bar} {cpu_color}{cpu_pct:5.1f}%\033[0m")
 
-            # Memory
             mem_pct = memory.get('memory_percent', 0)
             mem_bar = self._make_bar(mem_pct, 100)
             mem_color = self._get_color(mem_pct, 85, 90)
-            print(f"  Memory: {mem_bar} {mem_color}{mem_pct:5.1f}%\033[0m")
+            print(f" Memory: {mem_bar} {mem_color}{mem_pct:5.1f}%\033[0m")
 
-            # Disk
             disk_pct = disk.get('disk_percent', 0)
             disk_bar = self._make_bar(disk_pct, 100)
             disk_color = self._get_color(disk_pct, 90, 95)
-            print(f"  Disk:   {disk_bar} {disk_color}{disk_pct:5.1f}%\033[0m")
+            print(f" Disk: {disk_bar} {disk_color}{disk_pct:5.1f}%\033[0m")
 
-            # Network
             pkt_loss = network.get('packet_loss_percent', 0)
             net_color = self._get_color(pkt_loss, 5, 10)
-            print(f"  Network: {net_color}Packet Loss: {pkt_loss:.1f}%\033[0m")
+            print(f" Network: {net_color}Packet Loss: {pkt_loss:.1f}%\033[0m")
         else:
-            print("  Waiting for metrics...")
+            print(" Waiting for metrics...")
         print()
 
-        # Recent Anomalies
         print("RECENT ANOMALIES:")
         print("-" * 80)
         if self.anomalies:
@@ -161,43 +150,40 @@ class RealtimeMonitor:
                 anomaly = event.data.get('anomaly', {})
                 severity = anomaly.get('severity', 'unknown')
                 severity_icon = self._get_severity_icon(severity)
-                print(f"  {severity_icon} {anomaly.get('metric_name', 'unknown')}: "
+                print(f" {severity_icon} {anomaly.get('metric_name', 'unknown')}: "
                       f"{anomaly.get('type', 'unknown')} "
                       f"(value: {anomaly.get('value', 0):.1f})")
         else:
-            print("  No anomalies detected (system healthy)")
+            print(" No anomalies detected (system healthy)")
         print()
 
-        # Recent Diagnoses
         print("RECENT DIAGNOSES:")
         print("-" * 80)
         if self.diagnoses:
             latest = self.diagnoses[-1].data.get('diagnosis', {})
-            print(f"  Latest: {latest.get('diagnosis', 'N/A')}")
-            print(f"  Root Cause: {latest.get('root_cause', 'N/A')}")
-            print(f"  Actions: {', '.join(latest.get('recommended_actions', []))}")
+            print(f" Latest: {latest.get('diagnosis', 'N/A')}")
+            print(f" Root Cause: {latest.get('root_cause', 'N/A')}")
+            print(f" Actions: {', '.join(latest.get('recommended_actions', []))}")
         else:
-            print("  No diagnoses yet")
+            print(" No diagnoses yet")
         print()
 
-        # Recent Recoveries
         print("RECENT RECOVERY ACTIONS:")
         print("-" * 80)
         if self.recoveries:
             for event in self.recoveries[-3:]:
                 for action in event.data.get('actions', []):
-                    status_icon = "✅" if action['status'] == 'success' else "❌"
-                    print(f"  {status_icon} {action['action_name']}: {action['status']}")
+                    status_icon = "" if action['status'] == 'success' else ""
+                    print(f" {status_icon} {action['action_name']}: {action['status']}")
         else:
-            print("  No recovery actions executed")
+            print(" No recovery actions executed")
         print()
 
-        # Statistics
         print("STATISTICS:")
         print("-" * 80)
-        print(f"  Total Anomalies: {len(self.anomalies)}")
-        print(f"  Total Diagnoses: {len(self.diagnoses)}")
-        print(f"  Total Recoveries: {len(self.recoveries)}")
+        print(f" Total Anomalies: {len(self.anomalies)}")
+        print(f" Total Diagnoses: {len(self.diagnoses)}")
+        print(f" Total Recoveries: {len(self.recoveries)}")
         print()
 
         print("=" * 80)
@@ -207,51 +193,48 @@ class RealtimeMonitor:
     def _make_bar(self, value, max_value, width=30):
         """Create a progress bar"""
         filled = int((value / max_value) * width)
-        bar = "█" * filled + "░" * (width - filled)
+        bar = "" * filled + "" * (width - filled)
         return f"[{bar}]"
 
     def _get_color(self, value, warning, critical):
         """Get ANSI color code based on value"""
         if value >= critical:
-            return "\033[91m"  # Red
+            return "\033[91m"
         elif value >= warning:
-            return "\033[93m"  # Yellow
+            return "\033[93m"
         else:
-            return "\033[92m"  # Green
+            return "\033[92m"
 
     def _get_severity_icon(self, severity):
         """Get icon for severity level"""
         icons = {
-            'low': '🟢',
-            'medium': '🟡',
-            'high': '🟠',
-            'critical': '🔴'
+            'low': '',
+            'medium': '',
+            'high': '',
+            'critical': ''
         }
-        return icons.get(severity, '⚪')
+        return icons.get(severity, '')
 
     def start(self):
         """Start monitoring"""
         print("Starting Sentinel AI agents...")
 
-        # Start all agents
         for name, agent in self.agents.items():
             agent.start()
-            print(f"  ✅ {name} started")
+            print(f" {name} started")
 
         print("\nWaiting for metrics collection...\n")
         time.sleep(3)
 
         try:
-            # Main monitoring loop
             while True:
                 self.render_dashboard()
-                time.sleep(2)  # Refresh every 2 seconds
+                time.sleep(2)
 
         except KeyboardInterrupt:
             print("\n\nStopping monitor...")
 
         finally:
-            # Stop agents
             for name, agent in self.agents.items():
                 agent.stop()
             self.event_bus.stop()

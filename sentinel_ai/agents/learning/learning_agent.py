@@ -40,24 +40,20 @@ class LearningAgent(BaseAgent):
         self.database = database
         self.device_id = config.device_id
 
-        # Learning configuration
         self.learning_config = config.get_section('learning')
         self.aws_sync_config = self.learning_config.get('aws_sync', {})
         self.adaptation_config = self.learning_config.get('adaptation', {})
 
-        # AWS clients
         self.dynamodb_client = None
         self.s3_client = None
 
         if self.aws_sync_config.get('enabled', False):
             self._init_aws_clients()
 
-        # Learning state
         self.incident_history = []
         self.threshold_adjustments = {}
         self.recovery_success_rates = defaultdict(list)
 
-        # Subscribe to events
         self.event_bus.subscribe("diagnosis.complete", self.process_event)
         self.event_bus.subscribe("recovery.action", self._on_recovery_action)
 
@@ -70,12 +66,10 @@ class LearningAgent(BaseAgent):
         try:
             region = self.aws_sync_config.get('dynamodb', {}).get('region', 'us-east-1')
 
-            # Initialize DynamoDB client
             if self.aws_sync_config.get('dynamodb', {}).get('table_name'):
                 self.dynamodb_client = boto3.client('dynamodb', region_name=region)
                 self.logger.info("Initialized DynamoDB client")
 
-            # Initialize S3 client
             if self.aws_sync_config.get('s3', {}).get('bucket_name'):
                 self.s3_client = boto3.client('s3', region_name=region)
                 self.logger.info("Initialized S3 client")
@@ -91,21 +85,17 @@ class LearningAgent(BaseAgent):
 
         while self._running:
             try:
-                # Sync to cloud
                 if self.aws_sync_config.get('enabled', False):
                     self._sync_to_cloud()
 
-                # Perform adaptive learning
                 if self.adaptation_config.get('enabled', False):
                     self._perform_adaptation()
 
-                # Cleanup old data
                 self._cleanup_old_data()
 
             except Exception as e:
                 self.logger.error(f"Error in learning loop: {e}", exc_info=True)
 
-            # Wait for next iteration
             if not self.wait(sync_interval):
                 break
 
@@ -125,7 +115,6 @@ class LearningAgent(BaseAgent):
             device_id = event.data.get('device_id')
             timestamp = event.data.get('timestamp')
 
-            # Create incident record
             incident = {
                 'incident_id': diagnosis.get('diagnosis_id'),
                 'timestamp': timestamp,
@@ -144,11 +133,9 @@ class LearningAgent(BaseAgent):
                 'recovery_status': 'pending'
             }
 
-            # Store in database
             if self.database:
                 self.database.store_incident(incident)
 
-            # Add to history buffer
             self.incident_history.append(incident)
 
             self.logger.info(f"Stored incident: {incident['incident_id']}")
@@ -167,9 +154,7 @@ class LearningAgent(BaseAgent):
             actions = event.data.get('actions', [])
             diagnosis_id = event.data.get('diagnosis_id')
 
-            # Update incident with recovery status
             if self.database and diagnosis_id:
-                # Calculate recovery status
                 successful = sum(1 for a in actions if a.get('status') == 'success')
                 executed = sum(1 for a in actions if a.get('status') in ('success', 'failed'))
 
@@ -178,7 +163,7 @@ class LearningAgent(BaseAgent):
                 elif executed > 0:
                     status = 'failed'
                 else:
-                    status = 'attempted'  # all actions were skipped (cooldown)
+                    status = 'attempted'
 
                 self.database.update_incident(
                     diagnosis_id,
@@ -188,13 +173,11 @@ class LearningAgent(BaseAgent):
                     }
                 )
 
-            # Track success rates for each action type
             for action in actions:
                 action_name = action.get('action_name')
                 success = action.get('status') == 'success'
                 self.recovery_success_rates[action_name].append(success)
 
-                # Keep only recent results
                 if len(self.recovery_success_rates[action_name]) > 100:
                     self.recovery_success_rates[action_name].pop(0)
 
@@ -207,7 +190,6 @@ class LearningAgent(BaseAgent):
             return
 
         try:
-            # Get unsynced incidents
             unsynced = self.database.get_unsynced_incidents(limit=100)
 
             if not unsynced:
@@ -220,11 +202,9 @@ class LearningAgent(BaseAgent):
 
             for incident in unsynced:
                 try:
-                    # Sync to DynamoDB
                     if self.dynamodb_client:
                         self._sync_to_dynamodb(incident)
 
-                    # Sync to S3
                     if self.s3_client:
                         self._sync_to_s3(incident)
 
@@ -233,7 +213,6 @@ class LearningAgent(BaseAgent):
                 except Exception as e:
                     self.logger.error(f"Failed to sync incident {incident['incident_id']}: {e}")
 
-            # Mark as synced
             if synced_ids:
                 self.database.mark_incidents_synced(synced_ids)
                 self.logger.info(f"Successfully synced {len(synced_ids)} incidents")
@@ -253,7 +232,6 @@ class LearningAgent(BaseAgent):
 
         table_name = self.aws_sync_config['dynamodb']['table_name']
 
-        # Parse JSON strings
         metrics = incident.get('metrics')
         if isinstance(metrics, str):
             metrics = json.loads(metrics)
@@ -262,7 +240,6 @@ class LearningAgent(BaseAgent):
         if isinstance(recovery_actions, str):
             recovery_actions = json.loads(recovery_actions)
 
-        # Prepare item
         item = {
             'incident_id': {'S': incident['incident_id']},
             'timestamp': {'S': incident['timestamp']},
@@ -276,7 +253,6 @@ class LearningAgent(BaseAgent):
             'recovery_actions': {'S': json.dumps(recovery_actions or [])}
         }
 
-        # Put item
         self.dynamodb_client.put_item(
             TableName=table_name,
             Item=item
@@ -295,18 +271,15 @@ class LearningAgent(BaseAgent):
         bucket = self.aws_sync_config['s3']['bucket_name']
         prefix = self.aws_sync_config['s3'].get('prefix', 'incidents/')
 
-        # Parse JSON strings for complete object
         incident_copy = incident.copy()
         if isinstance(incident_copy.get('metrics'), str):
             incident_copy['metrics'] = json.loads(incident_copy['metrics'])
         if isinstance(incident_copy.get('recovery_actions'), str):
             incident_copy['recovery_actions'] = json.loads(incident_copy['recovery_actions'])
 
-        # Create S3 key with timestamp for partitioning
         timestamp = datetime.fromisoformat(incident['timestamp'])
         key = f"{prefix}{timestamp.year}/{timestamp.month:02d}/{timestamp.day:02d}/{incident['incident_id']}.json"
 
-        # Upload to S3
         self.s3_client.put_object(
             Bucket=bucket,
             Key=key,
@@ -322,18 +295,15 @@ class LearningAgent(BaseAgent):
         try:
             min_incidents = self.adaptation_config.get('min_incidents_for_learning', 10)
 
-            # Get recent incidents
             recent_incidents = self.database.get_recent_incidents(limit=min_incidents)
 
             if len(recent_incidents) < min_incidents:
                 self.logger.debug("Not enough incidents for adaptation")
                 return
 
-            # Adjust thresholds
             if self.adaptation_config.get('threshold_adjustment', True):
                 self._adjust_thresholds(recent_incidents)
 
-            # Refine recovery strategies
             if self.adaptation_config.get('strategy_refinement', True):
                 self._refine_strategies()
 
@@ -347,7 +317,6 @@ class LearningAgent(BaseAgent):
         Args:
             incidents: Recent incidents
         """
-        # Analyze incident patterns
         metric_incidents = defaultdict(list)
 
         for incident in incidents:
@@ -369,22 +338,17 @@ class LearningAgent(BaseAgent):
             except Exception as e:
                 self.logger.debug(f"Error parsing incident metrics: {e}")
 
-        # Adjust thresholds for each metric
         for metric_name, data in metric_incidents.items():
             if len(data) < 5:
                 continue
 
-            # Calculate adjustment based on false positive rate
-            # If many low-severity incidents, increase threshold
             low_severity_count = sum(1 for d in data if d['severity'] in ['low', 'medium'])
             high_severity_count = len(data) - low_severity_count
 
             if low_severity_count > high_severity_count * 2:
-                # Too many low-severity alerts, increase threshold by 5%
                 adjustment = 1.05
                 self.threshold_adjustments[metric_name] = adjustment
 
-                # Store in database for persistence
                 if self.database:
                     self.database.store_learning_data(
                         data_type='threshold_adjustment',
@@ -399,7 +363,6 @@ class LearningAgent(BaseAgent):
                 )
 
             elif high_severity_count > low_severity_count * 2:
-                # Too many critical incidents, decrease threshold by 5%
                 adjustment = 0.95
                 self.threshold_adjustments[metric_name] = adjustment
 
@@ -424,7 +387,6 @@ class LearningAgent(BaseAgent):
 
             success_rate = sum(results) / len(results)
 
-            # Store success rate
             if self.database:
                 self.database.store_learning_data(
                     data_type='recovery_success_rate',
@@ -433,7 +395,6 @@ class LearningAgent(BaseAgent):
                     metadata={'sample_size': len(results)}
                 )
 
-            # Log insights
             if success_rate < 0.5:
                 self.logger.warning(
                     f"Recovery action '{action_name}' has low success rate: {success_rate:.1%}"
@@ -466,18 +427,16 @@ class LearningAgent(BaseAgent):
         Returns:
             Adjustment multiplier (1.0 = no change)
         """
-        # Check in-memory cache
         if metric_name in self.threshold_adjustments:
             return self.threshold_adjustments[metric_name]
 
-        # Check database
         if self.database:
             adjustment = self.database.get_learning_data('threshold_adjustment', metric_name)
             if adjustment:
                 self.threshold_adjustments[metric_name] = adjustment
                 return adjustment
 
-        return 1.0  # No adjustment
+        return 1.0
 
     def get_recovery_stats(self) -> Dict[str, float]:
         """Get recovery action success rates"""

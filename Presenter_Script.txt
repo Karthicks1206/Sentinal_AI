@@ -1,0 +1,634 @@
+══════════════════════════════════════════════════════════════════════
+  SENTINEL AI — FULL PRESENTER SCRIPT
+  (Speaker notes are also embedded in the PPTX under View → Notes)
+══════════════════════════════════════════════════════════════════════
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 1  —  TITLE
+──────────────────────────────────────────────────────────────────────
+Good [morning/afternoon], everyone.
+
+Today we're presenting Sentinel AI — a self-healing IoT monitoring
+system we've built from the ground up.
+
+The core idea is simple but powerful: instead of waiting for an
+engineer to notice something is wrong and manually fix it, Sentinel AI
+watches your system continuously, detects problems using multiple layers
+of AI and machine learning, diagnoses the root cause using a local large
+language model, and then fixes itself — automatically, in seconds.
+
+Over the next [X] minutes, we'll walk you through the problem we're
+solving, how the system is architected, the AI stack powering it, and a
+live demonstration of the full self-healing pipeline in action.
+
+Let's get started.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 2  —  MEET THE TEAM
+──────────────────────────────────────────────────────────────────────
+Before we dive in, a quick introduction to our team.
+
+We are four students from [University Name], bringing together
+backgrounds in AI, computer engineering, software systems, and
+embedded systems.
+
+Karthick led the multi-agent design, MQTT integration, and all AI
+components.
+Sejal handled monitoring logic, logging, and performance benchmarking.
+Jie built the telemetry pipeline and fault injection modules.
+Naveen set up the Raspberry Pi nodes and Arduino LED display integration.
+
+The project reflects a genuine collaboration across all these areas,
+and every component you'll see today was built and tested by this team.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 3  —  AGENDA
+──────────────────────────────────────────────────────────────────────
+Here's what we'll cover today.
+
+We'll start by framing the problem — why IoT systems fail silently and
+why existing platforms fall short.
+
+Then we'll walk through our objectives and the 5-layer system
+architecture.
+
+The heart of the presentation is the multi-agent AI framework — five
+specialized agents that work together through an event-driven pipeline.
+
+We'll cover the full AI detection stack in depth: from simple threshold
+rules all the way to an LSTM autoencoder and Ollama language model.
+
+Then we'll show the dashboard and the Simulation Lab — where we inject
+real faults to validate the entire pipeline.
+
+We'll finish with performance results and a live demo.
+
+Let's begin.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 4  —  PROBLEM STATEMENT
+──────────────────────────────────────────────────────────────────────
+The problem we're solving is one that every IoT operator faces.
+
+IoT systems fail — devices drop off the network, MQTT brokers crash
+silently, a CPU spike cascades into a service failure. These aren't
+edge cases. They happen regularly.
+
+The fundamental issue is that failure is silent. When an MQTT broker
+crashes, no alert fires. Clients just stop receiving data and wait.
+When a resource spike happens, the on-call engineer finds out via a
+user complaint, not an automated system.
+
+And then recovery is entirely manual. An engineer gets paged, SSHes
+into the machine, investigates, and attempts a fix. The mean time to
+recovery is measured in hours.
+
+There is no automated root-cause analysis. No one system that detects,
+explains, and heals itself.
+
+That's the gap Sentinel AI fills.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 5  —  MARKET ANALYSIS & GAP
+──────────────────────────────────────────────────────────────────────
+We looked at the leading commercial platforms to understand what's
+already out there.
+
+AWS IoT Core handles device connectivity and cloud monitoring well —
+but it's cloud-first, and it doesn't provide autonomous multi-agent
+recovery at the edge.
+
+Azure IoT Hub offers centralized device management at enterprise scale,
+with strong Microsoft ecosystem integration. Again — no self-healing,
+no edge-native AI.
+
+PTC ThingWorx is widely used in industrial IoT for analytics and
+dashboards. Powerful, but no autonomous recovery mechanism.
+
+What none of these platforms offer is: distributed multi-agent recovery
+that runs at the edge, an LLM-powered root-cause explanation engine,
+adaptive learning from incident history, and the ability to validate
+the full pipeline with controlled fault injection.
+
+These four gaps are exactly what Sentinel AI addresses.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 6  —  PROJECT OBJECTIVES
+──────────────────────────────────────────────────────────────────────
+With that gap identified, here are the seven objectives we set for
+ourselves.
+
+First — collect real system metrics every five seconds using psutil:
+CPU, memory, disk, network, and sensor data.
+
+Second — detect anomalies using five layers: static thresholds,
+Z-score, spike detection, Isolation Forest, and an LSTM autoencoder.
+
+Third — diagnose the root cause using a locally-running Ollama language
+model. No cloud dependency, no API costs, completely private.
+
+Fourth — execute autonomous recovery actions: killing the offending
+process by PID, restarting services, clearing cache.
+
+Fifth — learn from every incident and adjust detection thresholds
+over time.
+
+Sixth — provide a real-time web dashboard on port 5001 with live
+graphs and agent status.
+
+And seventh — a Simulation Lab where we can inject controlled CPU,
+memory, and disk faults to validate the entire pipeline.
+
+Our target latencies: detect in under 20 seconds, diagnose in under 10,
+recover in under 5.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 7  —  SYSTEM ARCHITECTURE — 5-LAYER DESIGN
+──────────────────────────────────────────────────────────────────────
+Let's look at the architecture.
+
+Sentinel AI is organized into five layers, each feeding the next
+through a central event bus.
+
+At the bottom is the Hardware and OS layer — psutil collects raw system
+metrics directly from the OS: CPU utilization, memory pressure, disk
+usage, network I/O.
+
+Those metrics flow up to the Monitoring Agent, which runs on a precise
+5-second polling cycle. It formats, stores, and publishes a
+health.metric event onto the event bus.
+
+The Event Bus is the nervous system of the entire platform. It's an
+in-memory publish-subscribe system with asynchronous handlers and a
+10,000-event circular buffer. Every agent communicates exclusively
+through this bus — no direct coupling between agents.
+
+The AI Agent Layer is where the intelligence lives: four agents
+subscribed to different event types, each doing one job extremely well.
+
+At the top, the Dashboard presents everything through a Flask REST API
+with server-sent events for real-time updates.
+
+The event types on the diagram — health.metric flowing through
+anomaly.detected, diagnosis.complete, recovery.action, and
+learning.updated — represent the complete self-healing lifecycle.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 8  —  MULTI-AGENT FRAMEWORK
+──────────────────────────────────────────────────────────────────────
+Let me walk through each agent and how they communicate.
+
+The Monitoring Agent sits at the source. Every five seconds it
+publishes a health.metric event containing the full snapshot of
+system state.
+
+The Anomaly Detection Agent subscribes to health.metric. Every time a
+new metric arrives, it runs it through all five detection layers. When
+a sustained anomaly is confirmed — three consecutive readings above
+threshold — it fires an anomaly.detected event.
+
+The Diagnosis Agent picks up anomaly.detected and immediately spawns a
+background thread to query Ollama. This is critical — by running in a
+background thread, it never blocks the event bus. When the diagnosis
+is ready, it publishes diagnosis.complete with a root-cause explanation
+and a list of recommended recovery actions.
+
+The Recovery Agent listens for diagnosis.complete and executes those
+actions — killing processes by PID, restarting services, checking
+network. It publishes recovery.action with the outcome.
+
+The Learning Agent monitors both anomaly and recovery events, adjusts
+thresholds over time, tracks action success rates, and syncs incident
+data to AWS every 15 minutes.
+
+This chain — detect, diagnose, recover, learn — completes entirely
+automatically.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 9  —  MONITORING AGENT
+──────────────────────────────────────────────────────────────────────
+Let's look at what we actually collect.
+
+The Monitoring Agent uses psutil to gather around 30 metrics across
+five categories every five seconds.
+
+CPU: percentage utilization, per-core load averages at 1, 5, and 15
+minutes, CPU count, frequency, and the top CPU-consuming process.
+
+Memory: used percentage, total and available megabytes, swap usage,
+and the top memory-consuming process.
+
+Disk: usage percentage, total, used, and free space in gigabytes, plus
+read and write throughput.
+
+Network: we actively ping Google DNS at 8.8.8.8 and Cloudflare at
+1.1.1.1 — measuring round-trip latency and packet loss on every cycle.
+
+Sensors and MQTT: simulated sensor latency and success rate, plus MQTT
+broker connection state and latency.
+
+An important design decision: we exclude 15 volatile metrics from
+anomaly detection entirely — things like top_process_pid, which changes
+every reading as different processes compete for CPU, load averages
+that correlate with CPU percent, and disk size metrics that never
+change. This eliminated false positives before we even reached the
+ML layer.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 10  —  ANOMALY DETECTION — 5-LAYER STACK
+──────────────────────────────────────────────────────────────────────
+The anomaly detection engine has five layers, and every metric passes
+through all of them on every reading.
+
+Layer 1 is the threshold check — the simplest and fastest.
+CPU above 80%, memory above 85%, disk above 90%, packet loss above 5%.
+Immediate, no history needed.
+
+Layer 2 is Z-score analysis. We maintain a 100-reading rolling window
+— about 8 minutes of history — and flag any metric more than 3
+standard deviations from the mean.
+
+Layer 3 is spike detection. If the current value is more than 2.5
+times the recent average, that's a spike — regardless of whether it
+crosses the absolute threshold.
+
+Layer 4 is Isolation Forest — a sklearn multivariate model that looks
+at all metrics simultaneously. It learns the normal distribution of
+the system and scores outliers.
+
+Layer 5 is the LSTM Autoencoder — the most sophisticated layer. It
+learns the time-series patterns of the system and fires when the
+reconstruction error exceeds the mean plus three sigma.
+
+Two critical gates prevent false-positive floods. Three consecutive
+readings must confirm the anomaly — 15 seconds of sustained deviation.
+And once an anomaly fires for a given metric, there's a 5-minute
+cooldown before it can fire again.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 11  —  ML DETECTION STACK — DUAL LAYER
+──────────────────────────────────────────────────────────────────────
+Let me go deeper on the two ML layers.
+
+The Isolation Forest is a point-in-time model. It sees one snapshot of
+all metrics at once and asks: does this combination of values look
+normal? It uses 100 decision trees with a contamination setting of 0.1,
+meaning it's calibrated to expect 10% of readings to be anomalous. It
+requires 1,000 samples to train and retrains automatically as data
+accumulates.
+
+The LSTM Autoencoder is fundamentally different. It's a sequence model.
+It looks at the last 20 readings — 100 seconds of history — across
+three features: CPU, memory, and disk percentage. It learns to
+reconstruct normal sequences. When reconstruction error exceeds the
+mean plus three standard deviations, it signals an anomaly.
+
+The architecture is: Input of shape 20 by 3, through an Encoder LSTM
+with 32 units, compressed to a single vector via RepeatVector, expanded
+back through a Decoder LSTM with 32 units, and finally through a
+TimeDistributed Dense layer outputting the reconstructed 20-by-3
+sequence.
+
+Training runs in a background thread after 60 sequences accumulate —
+about 6.5 minutes on first run. It uses early stopping with patience
+of 3 on validation loss, with a 10% validation split.
+
+On Apple Silicon Macs, we enable PYTORCH_ENABLE_MPS_FALLBACK to handle
+operations not yet supported on the MPS backend.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 12  —  DIAGNOSIS AGENT — AI ROOT-CAUSE ANALYSIS
+──────────────────────────────────────────────────────────────────────
+When an anomaly is confirmed, the Diagnosis Agent takes over.
+
+The execution model is important here. The moment anomaly.detected
+arrives, a background thread is spawned immediately. The event bus
+thread returns instantly — it's never blocked waiting for an LLM
+response, which could take several seconds.
+
+The thread builds a rich context: the anomaly type, metric name,
+current value, and expected threshold. It pulls the last hour of metric
+history, the number of recent incidents from the database, and the
+severity classification.
+
+It then attempts Ollama first — locally running llama3.2:3b.
+Temperature is set to 0.2 for deterministic outputs. The format is
+forced to JSON. It asks for a structured response: root cause,
+confidence score, and a list of recommended recovery actions.
+
+If Ollama is unavailable, it falls back to OpenAI GPT-4o, then to
+AWS Bedrock with Claude Sonnet.
+
+The fourth path — the rule-based system — is always available
+regardless of LLM status. It evaluates YAML-defined rules against the
+current metric values, checking conditions like greater-than,
+less-than, or increasing trend over the last 10 readings.
+
+The result is a natural-language root-cause explanation delivered
+in 2 to 10 seconds.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 13  —  RECOVERY AGENT — AUTONOMOUS HEALING
+──────────────────────────────────────────────────────────────────────
+Recovery is where the system actually heals itself.
+
+When diagnosis.complete arrives with a list of recommended actions,
+the Recovery Agent begins executing them in order.
+
+The smartest action is kill_process. When a CPU or memory anomaly fires
+during a simulation, the Recovery Agent calls InstabilityRunner — the
+simulation controller — and asks for the PID of the active simulation
+subprocess. It maps the anomaly metric to the scenario name:
+cpu_percent maps to cpu_spike, memory_percent maps to
+memory_pressure. It then kills that exact subprocess and waits 2
+seconds to confirm it exited.
+
+If no simulation is running, it falls back to killing the
+highest-memory process above 500 megabytes, excluding critical system
+processes.
+
+Other actions: restart_mqtt calls brew services on macOS or systemctl
+on Linux with a 30-second timeout. check_network tests DNS resolution
+to 8.8.8.8 and internet connectivity to google.com.
+clear_cache removes temporary files from configurable paths.
+
+The retry policy: up to 3 attempts per action, 5 seconds between
+retries, with a 5-minute per-action cooldown to prevent recovery loops.
+
+Every action result — success, failed, or skipped due to cooldown — is
+published as a recovery.action event and stored in the database.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 14  —  LEARNING AGENT — ADAPTIVE INTELLIGENCE
+──────────────────────────────────────────────────────────────────────
+The Learning Agent is what turns Sentinel AI from a reactive system
+into an adaptive one.
+
+Threshold Adaptation: once 10 or more incidents have accumulated, the
+agent analyzes their severity distribution. If low-severity incidents
+outnumber high-severity ones by more than 2 to 1, thresholds are too
+sensitive — they're raised by 5%. If high-severity incidents dominate,
+the system is missing real problems — thresholds are lowered by 5%.
+Adjustments are bounded between 50% and 100% of the configured value.
+
+Recovery Learning: the agent tracks the success rate of every recovery
+action type across the last 100 attempts. If a particular action's
+success rate drops below 50%, it logs a warning.
+
+Cloud Sync: every 15 minutes, incident summaries are uploaded to
+DynamoDB and full JSON records are archived to S3, partitioned by date.
+Records older than 90 days are automatically cleaned up.
+
+The result is a system that gets more accurate the longer it runs.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 15  —  DASHBOARD OVERVIEW
+──────────────────────────────────────────────────────────────────────
+The dashboard is the operational window into the entire system.
+
+It's a Flask application running on port 5001, using Server-Sent Events
+for real-time updates without polling.
+
+The Real-Time Metrics panel shows live CPU, memory, and disk
+percentages as gauges, updated every 5 seconds as new readings arrive.
+
+Below that, Live Graphs display a 60-point rolling history for each
+metric — the last 5 minutes. You can visually see a CPU spike climb
+and then recover after the autonomous action fires.
+
+The Anomaly Feed shows every detection event in real time: the metric
+name, current value versus threshold, severity, and the source tag —
+whether it came from the threshold check, Z-score, spike detector,
+Isolation Forest, or LSTM autoencoder.
+
+The Diagnosis and Recovery Log shows the LLM output — the natural
+language root-cause explanation — alongside each recovery action taken
+and its outcome status.
+
+The Simulation Lab panel has three buttons: CPU Spike, Memory Pressure,
+and Disk Fill. One click starts a controlled fault. You watch the
+anomaly appear in the feed, the diagnosis appear in the log, and the
+recovery action fire — all within 30 to 40 seconds.
+
+The Agent Status card shows which agents are running and whether the
+LSTM model has completed its training warmup.
+
+On the next slide you'll see the actual dashboard screenshot.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 16  —  DASHBOARD — LIVE VIEW  [Screenshot slide]
+──────────────────────────────────────────────────────────────────────
+[Point to the screenshot]
+
+What you're looking at is the live dashboard captured during a
+CPU spike simulation.
+
+You can see the CPU gauge spiked to [X]% — well above the 80%
+threshold. In the Live Graph, you can see the characteristic sharp
+rise and then the drop after recovery fired.
+
+In the Anomaly Feed, you can see the event: cpu.cpu_percent,
+value [X]%, threshold 80%, severity High.
+
+The Diagnosis Log shows the Ollama output: "High CPU utilization
+detected. The top process stress-ng is consuming all available cores.
+Recommended action: kill_process."
+
+And the Recovery Log confirms: kill_process executed successfully,
+PID terminated, metric returned to normal.
+
+The entire cycle — from first detection to recovery completing —
+took [X] seconds.
+
+This is Sentinel AI's self-healing loop working end to end.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 17  —  SIMULATION LAB — CONTROLLED FAULT INJECTION
+──────────────────────────────────────────────────────────────────────
+The Simulation Lab is how we validated the entire pipeline.
+
+Rather than waiting for real failures, we built a controlled fault
+injection system with three scenarios.
+
+CPU Spike uses stress-ng to fill all available CPU cores immediately.
+Utilization jumps to nearly 100% within seconds. The anomaly detection
+picks it up after 3 consecutive readings — 15 seconds — the LSTM fires
+alongside the threshold check, Ollama diagnoses it as a CPU overload,
+and the Recovery Agent kills the stress-ng subprocess by its exact PID.
+
+Memory Pressure allocates 20% of total system RAM — with a minimum of
+512 megabytes — and holds that allocation. Memory percent climbs
+steadily. The anomaly fires at 85%, Ollama identifies the pressure,
+and recovery kills the highest-memory process.
+
+Disk Fill writes a 200 megabyte temp file to the root partition.
+Disk percentage rises, crosses the 90% threshold, and recovery executes
+clear_cache — removing the file and restoring normal disk levels.
+
+Each scenario is managed as an isolated subprocess with its own PID
+tracked by InstabilityRunner. The REST API starts the fault. The
+dashboard shows real-time status including the PID and time remaining.
+
+This Simulation Lab is how we produced all the performance numbers
+on the next slide.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 18  —  LIVE DEMO  [Video slide]
+──────────────────────────────────────────────────────────────────────
+Now let's watch the system in action.
+
+In this demo, we'll trigger a CPU spike from the Simulation Lab panel
+and watch Sentinel AI detect it, diagnose it, and recover — without
+any human intervention.
+
+[Start the demo video]
+
+Watch the CPU gauge — it climbs immediately as stress-ng saturates the
+cores.
+
+After three consecutive readings above 80%, the anomaly fires. You can
+see it appear in the Anomaly Feed.
+
+A fraction of a second later, the Diagnosis Agent spawns its background
+thread and queries Ollama. Within a few seconds the natural-language
+diagnosis appears in the log.
+
+The Recovery Agent acts on the recommended action — kill_process. It
+queries InstabilityRunner for the simulation PID, kills the subprocess,
+and waits to confirm exit.
+
+Watch the CPU gauge — it drops back to baseline.
+
+The entire cycle from first detection to full recovery: [X] seconds.
+
+[End video]
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 19  —  SYSTEM PERFORMANCE & RESULTS
+──────────────────────────────────────────────────────────────────────
+Let's look at the numbers.
+
+Anomaly detection latency: 15 to 25 seconds. This is the time from
+when a fault is injected to when the anomaly.detected event fires.
+The floor is 15 seconds — three readings at 5 seconds each. The
+ceiling of 25 seconds accounts for the occasional reading that resets
+the consecutive counter.
+
+LLM diagnosis time: 2 to 10 seconds. This is Ollama running
+llama3.2:3b entirely locally — no network round-trip, no API costs.
+The range depends on current system load and whether the LSTM is
+training in the background.
+
+Recovery execution: under 5 seconds. The PID kill itself is
+instantaneous. The 2-second verification wait accounts for most
+of this time.
+
+LSTM warm-up: approximately 6.5 minutes on the first run. The model
+needs 60 complete 20-step sequences before training begins. After the
+first training cycle, it retrains every 500 new readings in the
+background.
+
+The 3-reading gate eliminated all transient spikes in our testing.
+The 5-minute cooldown prevented alert storms during sustained faults.
+And excluding 15 volatile metrics removed essentially all noise from
+non-actionable system changes.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 20  —  TIMELINE
+──────────────────────────────────────────────────────────────────────
+Here's how the project unfolded over 10 weeks.
+
+Weeks 1 and 2 were architecture design and hardware setup — deciding
+on the multi-agent pattern, selecting the tech stack, and configuring
+the Raspberry Pi nodes.
+
+Week 3 brought MQTT implementation — setting up Mosquitto and the
+paho-mqtt monitoring client.
+
+Week 4 was agent development — building the base agent class, event
+bus, and the monitoring and anomaly agents.
+
+Week 5 introduced the AI layer — integrating Ollama, implementing
+Isolation Forest, and wiring the diagnosis agent.
+
+Week 6 completed recovery integration — the PID-based kill strategy
+and the Simulation Lab.
+
+Week 7 added the Arduino LED display for physical status visualization.
+
+Weeks 8 and 9 were intensive fault testing and performance evaluation
+— running hundreds of simulation cycles to tune thresholds and validate
+latency numbers.
+
+Week 10 is the final demo — what you're watching today.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 21  —  WORK DISTRIBUTION
+──────────────────────────────────────────────────────────────────────
+Here's how we divided the work.
+
+Karthick designed the overall multi-agent architecture, implemented
+the MQTT monitoring layer, integrated Ollama and the Isolation Forest
+model, built the LSTM autoencoder, and developed the Flask dashboard
+with the Simulation Lab.
+
+Sejal built the monitoring logic and metric collection pipeline,
+implemented the logging and database layers, and ran all the
+performance benchmarks.
+
+Jie designed the telemetry system, built the fault injection module,
+and validated the detection pipeline against all simulation scenarios.
+
+Naveen set up the physical Raspberry Pi nodes, configured the hardware
+telemetry layer, and built the Arduino LED status display.
+
+While the responsibilities were divided, the architecture decisions
+were made together — every component was reviewed and tested as a team.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 22  —  CONCLUSION
+──────────────────────────────────────────────────────────────────────
+To wrap up.
+
+We set out to build an IoT monitoring platform that doesn't just
+observe — it heals itself. And we believe we've delivered that.
+
+Sentinel AI detects anomalies in under 20 seconds using five
+complementary detection layers. It explains the root cause in plain
+English using a locally-running language model — no cloud dependency,
+no cost. It fixes the problem autonomously in under 5 seconds. And it
+learns from every incident, continuously improving its own accuracy.
+
+The four core pillars that make this work:
+  — A loosely coupled multi-agent design that makes each component
+    independently scalable
+  — A dual ML stack that catches both point anomalies and gradual drift
+  — Local-first AI that keeps everything private and offline-capable
+  — Smart recovery that goes beyond generic restarts to kill the exact
+    responsible process
+
+This is more than a monitoring tool — it's a self-improving,
+self-healing infrastructure platform.
+
+Thank you. We'd be happy to take any questions.
+
+──────────────────────────────────────────────────────────────────────
+  SLIDE 23  —  REFERENCES
+──────────────────────────────────────────────────────────────────────
+[Reference slide — available for questions on prior work]
+
+References 1 through 8 cover AI-based fault detection in wireless
+sensor networks, transformer-driven fault detection, surveys of
+self-healing IoT mechanisms, adaptive IoT architectures, automated
+IoT deployment frameworks, bio-inspired agentic self-healing,
+distributed system self-healing trade-offs, and AI-based self-healing
+in cellular networks.
+
+Sentinel AI builds directly on the patterns in references 1, 3, and 6
+— particularly the multi-agent approach and the use of AI for
+root-cause classification rather than simple threshold alerting.
+
+══════════════════════════════════════════════════════════════════════
+  END OF SCRIPT
+  Total slides: 23  |  Estimated duration: 25–35 minutes
+══════════════════════════════════════════════════════════════════════

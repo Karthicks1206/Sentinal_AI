@@ -20,16 +20,10 @@ from collections import deque
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch, PropertyMock
 
-# ── Path setup ────────────────────────────────────────────────────────────────
-# Make the project root importable regardless of where pytest is invoked from.
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-
-# =============================================================================
-# 1. RemoteDeviceManager
-# =============================================================================
 
 class TestRemoteDeviceManager(unittest.TestCase):
     """Tests for agents/monitoring/remote_device_manager.py"""
@@ -43,7 +37,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         mgr = RemoteDeviceManager(event_bus=bus, logger=logger)
         return mgr, bus
 
-    # ── register / get_all_devices ────────────────────────────────────────
 
     def test_register_device(self):
         """Registering a device should make it appear in get_all_devices()."""
@@ -63,7 +56,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         self.assertEqual(d['hostname'], 'myhost')
         self.assertEqual(d['platform'], 'windows')
 
-    # ── is_remote ─────────────────────────────────────────────────────────
 
     def test_is_remote_registered(self):
         """A registered device_id should return True from is_remote()."""
@@ -76,14 +68,13 @@ class TestRemoteDeviceManager(unittest.TestCase):
         mgr, _ = self._make_manager()
         self.assertFalse(mgr.is_remote('no-such-device'))
 
-    # ── queue_command / pop_commands ──────────────────────────────────────
 
     def test_queue_and_pop_commands(self):
         """Queue 2 commands; first pop returns both; second pop returns empty."""
         mgr, _ = self._make_manager()
         mgr.register('device-q', {})
         cmd1 = {'action': 'compact_memory', 'action_id': 'a1'}
-        cmd2 = {'action': 'rotate_logs',    'action_id': 'a2'}
+        cmd2 = {'action': 'rotate_logs', 'action_id': 'a2'}
         mgr.queue_command('device-q', cmd1)
         mgr.queue_command('device-q', cmd2)
 
@@ -93,7 +84,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         self.assertIn('compact_memory', actions)
         self.assertIn('rotate_logs', actions)
 
-        # Second pop must be empty (queue was cleared)
         empty = mgr.pop_commands('device-q')
         self.assertEqual(empty, [])
 
@@ -103,7 +93,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         result = mgr.pop_commands('ghost-device')
         self.assertEqual(result, [])
 
-    # ── push_metrics → event bus ──────────────────────────────────────────
 
     def test_push_metrics_injects_event(self):
         """push_metrics should publish a health.metric event to the event bus."""
@@ -125,7 +114,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         ts = datetime.now(timezone.utc).isoformat()
         mgr.push_metrics('device-push', ts, metrics)
 
-        # Give the synchronous bus a moment (it's actually sync, but just in case)
         self.assertGreater(len(received), 0, "Expected at least one health.metric event")
         event = received[0]
         self.assertEqual(event.event_type, 'health.metric')
@@ -138,7 +126,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         mgr.push_metrics('auto-reg-device', ts, {})
         self.assertTrue(mgr.is_remote('auto-reg-device'))
 
-    # ── device age / status transitions ──────────────────────────────────
 
     def test_device_stale_offline(self):
         """
@@ -148,11 +135,9 @@ class TestRemoteDeviceManager(unittest.TestCase):
         from agents.monitoring.remote_device_manager import RemoteDevice
         d = RemoteDevice('test-dev', {'hostname': 'h', 'platform': 'linux'})
 
-        # Freshly registered → connected
         self.assertEqual(d.status, 'connected')
         self.assertAlmostEqual(d.age_seconds, 0, delta=1)
 
-        # Backdate last_seen past the stale threshold
         stale_threshold = RemoteDevice.STALE_AFTER_S + 5
         d.last_seen = datetime.now(timezone.utc) - timedelta(seconds=stale_threshold)
         d.refresh_status()
@@ -176,10 +161,6 @@ class TestRemoteDeviceManager(unittest.TestCase):
         self.assertEqual(mgr.device_count(), 2)
 
 
-# =============================================================================
-# 2. GraduatedEscalationTracker
-# =============================================================================
-
 class TestGraduatedEscalationTracker(unittest.TestCase):
     """Tests for GraduatedEscalationTracker in agents/recovery/recovery_agent.py"""
 
@@ -187,7 +168,6 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         from agents.recovery.recovery_agent import GraduatedEscalationTracker
         return GraduatedEscalationTracker(window_minutes=30)
 
-    # ── level increases ───────────────────────────────────────────────────
 
     def test_level_increases_with_incidents(self):
         """
@@ -198,10 +178,8 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         self.assertEqual(tracker.record('cpu.cpu_percent'), 2)
         self.assertEqual(tracker.record('cpu.cpu_percent'), 3)
         self.assertEqual(tracker.record('cpu.cpu_percent'), 4)
-        # Extra incidents still cap at 4
         self.assertEqual(tracker.record('cpu.cpu_percent'), 4)
 
-    # ── extra_actions for level 1 CPU ─────────────────────────────────────
 
     def test_extra_actions_level1_cpu(self):
         """Level 1 extra actions for CPU should include algorithmic_cpu_fix."""
@@ -213,8 +191,8 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         """Level 2 extra actions should include both L1 and L2 actions."""
         tracker = self._make_tracker()
         actions = tracker.extra_actions('cpu.cpu_percent', 2)
-        self.assertIn('algorithmic_cpu_fix', actions)   # level 1 action
-        self.assertIn('throttle_cpu_process', actions)  # level 2 action
+        self.assertIn('algorithmic_cpu_fix', actions)
+        self.assertIn('throttle_cpu_process', actions)
 
     def test_extra_actions_level3_cpu(self):
         """Level 3 should accumulate all actions up to L3."""
@@ -222,7 +200,6 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         actions = tracker.extra_actions('cpu.cpu_percent', 3)
         self.assertIn('kill_top_cpu_process', actions)
 
-    # ── reset ─────────────────────────────────────────────────────────────
 
     def test_reset_clears_counter(self):
         """record twice, reset, then record once again → back to L1."""
@@ -233,7 +210,6 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         level = tracker.record('cpu.cpu_percent')
         self.assertEqual(level, 1)
 
-    # ── category mapping ──────────────────────────────────────────────────
 
     def test_category_mapping_cpu(self):
         """'cpu.cpu_percent' should map to the 'cpu' category."""
@@ -255,14 +231,12 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         from agents.recovery.recovery_agent import GraduatedEscalationTracker
         self.assertEqual(GraduatedEscalationTracker._category('sensors.temperature'), 'general')
 
-    # ── independent categories ────────────────────────────────────────────
 
     def test_categories_are_independent(self):
         """CPU and memory escalation counters must not affect each other."""
         tracker = self._make_tracker()
         tracker.record('cpu.cpu_percent')
         tracker.record('cpu.cpu_percent')
-        # Memory should start fresh at level 1
         mem_level = tracker.record('memory.memory_percent')
         self.assertEqual(mem_level, 1)
 
@@ -272,27 +246,16 @@ class TestGraduatedEscalationTracker(unittest.TestCase):
         self.assertEqual(tracker.current_level('cpu.cpu_percent'), 1)
 
 
-# =============================================================================
-# 3. DashboardState
-# =============================================================================
-
 class TestDashboardState(unittest.TestCase):
     """Tests for DashboardState in dashboard/app.py"""
 
     def _make_state(self):
         """Import and instantiate DashboardState without launching Flask."""
-        # We need to import carefully to avoid triggering Flask route setup
-        # or agent initialization.  We only need the DashboardState class.
         import importlib, types
 
-        # Build a minimal stub for modules that DashboardState depends on
-        # (avoids needing a running Ollama / DB / etc. during unit tests).
-        # We rely on the fact that DashboardState.__init__ is simple and only
-        # initialises deque/dict attributes — no I/O.
         from dashboard.app import DashboardState
         return DashboardState()
 
-    # ── _device_history ───────────────────────────────────────────────────
 
     def test_device_history_creates_on_first_access(self):
         """_device_history for a new device_id must create all expected keys."""
@@ -305,7 +268,7 @@ class TestDashboardState(unittest.TestCase):
     def test_device_history_same_object_on_second_call(self):
         """Calling _device_history twice for the same device should return the same dict."""
         state = self._make_state()
-        first  = state._device_history('machine-2')
+        first = state._device_history('machine-2')
         second = state._device_history('machine-2')
         self.assertIs(first, second)
 
@@ -317,7 +280,6 @@ class TestDashboardState(unittest.TestCase):
             self.assertEqual(dh[key].maxlen, 60,
                              f"Expected maxlen=60 for key '{key}'")
 
-    # ── _device_deque ─────────────────────────────────────────────────────
 
     def test_device_deque_creates_on_first_access(self):
         """_device_deque should create a deque with the requested maxlen."""
@@ -331,11 +293,10 @@ class TestDashboardState(unittest.TestCase):
         """_device_deque with same store+device_id should return same deque."""
         state = self._make_state()
         store = {}
-        first  = state._device_deque(store, 'dev-y', maxlen=50)
+        first = state._device_deque(store, 'dev-y', maxlen=50)
         second = state._device_deque(store, 'dev-y', maxlen=50)
         self.assertIs(first, second)
 
-    # ── rolling window (maxlen enforcement) ───────────────────────────────
 
     def test_device_history_rolling(self):
         """Appending 65 items to a maxlen=60 deque must keep only the last 60."""
@@ -348,7 +309,6 @@ class TestDashboardState(unittest.TestCase):
             cpu_dq.append(float(i))
 
         self.assertEqual(len(cpu_dq), 60)
-        # The oldest 5 values (0-4) should have been dropped
         self.assertEqual(cpu_dq[0], 5.0)
         self.assertEqual(cpu_dq[-1], 64.0)
 
@@ -363,39 +323,30 @@ class TestDashboardState(unittest.TestCase):
                              f"Expected maxlen=60 for state.{attr}")
 
 
-# =============================================================================
-# 4. sentinel_client._exec_remote_command
-# =============================================================================
-
 class TestExecRemoteCommand(unittest.TestCase):
     """Tests for the _exec_remote_command() function in sentinel_client.py"""
 
     @classmethod
     def setUpClass(cls):
         """Import sentinel_client once; it doesn't start anything on import."""
-        # sentinel_client.py lives at the project root, not inside a package,
-        # so we use importlib to load it by file path.
         import importlib.util
         client_path = os.path.join(_PROJECT_ROOT, 'sentinel_client.py')
         spec = importlib.util.spec_from_file_location('sentinel_client', client_path)
         cls.sc = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.sc)
 
-    # ── unknown action ────────────────────────────────────────────────────
 
     def test_unknown_action_returns_skipped(self):
         """An unrecognised action should return status='skipped'."""
         result = self.sc._exec_remote_command('foobar_action_xyz')
         self.assertEqual(result['status'], 'skipped')
 
-    # ── protected process ─────────────────────────────────────────────────
 
     def test_kill_protected_process_skipped(self):
         """
         When psutil only returns processes named 'python' (in _CRITICAL_PROCS),
         kill_top_cpu_process should return 'skipped'.
         """
-        # Build a fake proc with high CPU but a protected name
         mock_proc = MagicMock()
         mock_proc.name.return_value = 'python'
         mock_proc.info = {'pid': 999, 'name': 'python', 'cpu_percent': 99.0}
@@ -405,7 +356,6 @@ class TestExecRemoteCommand(unittest.TestCase):
             result = self.sc._exec_remote_command('kill_top_cpu_process')
         self.assertEqual(result['status'], 'skipped')
 
-    # ── disk cleanup ──────────────────────────────────────────────────────
 
     def test_disk_cleanup_runs(self):
         """
@@ -426,10 +376,6 @@ class TestExecRemoteCommand(unittest.TestCase):
         self.assertIn(result['status'], ('success', 'skipped', 'error'))
 
 
-# =============================================================================
-# 5. Event flow integration (real EventBus)
-# =============================================================================
-
 class TestEventBusFlow(unittest.TestCase):
     """Integration-style tests using the real EventBus."""
 
@@ -437,7 +383,6 @@ class TestEventBusFlow(unittest.TestCase):
         from core.event_bus import EventBus
         return EventBus()
 
-    # ── basic pub/sub ─────────────────────────────────────────────────────
 
     def test_event_publish_subscribe(self):
         """publish health.metric → subscribed handler is called with correct event_type."""
@@ -474,7 +419,6 @@ class TestEventBusFlow(unittest.TestCase):
             received[0].data['metrics']['cpu']['cpu_percent'], 77.0
         )
 
-    # ── multiple subscribers ──────────────────────────────────────────────
 
     def test_multiple_subscribers_both_called(self):
         """Two handlers subscribed to the same event type must both be called."""
@@ -514,7 +458,7 @@ class TestEventBusFlow(unittest.TestCase):
         received = []
 
         bus.subscribe_all(lambda e: received.append(e))
-        bus.create_event(event_type='health.metric',    data={}, source='test')
+        bus.create_event(event_type='health.metric', data={}, source='test')
         bus.create_event(event_type='anomaly.detected', data={}, source='test')
 
         self.assertEqual(len(received), 2)
@@ -533,7 +477,7 @@ class TestEventBusFlow(unittest.TestCase):
 
         bus.unsubscribe('health.metric', handler)
         bus.create_event(event_type='health.metric', data={}, source='test')
-        self.assertEqual(len(received), 1)  # still 1, no new delivery
+        self.assertEqual(len(received), 1)
 
     def test_event_source_field(self):
         """Event source should match what was passed to create_event()."""
@@ -565,9 +509,98 @@ class TestEventBusFlow(unittest.TestCase):
         self.assertEqual(order, [0, 1, 2, 3, 4])
 
 
-# =============================================================================
-# Entry point for `python tests/test_unit.py`
-# =============================================================================
+class TestRemoteStressCommands(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        client_path = os.path.join(_PROJECT_ROOT, 'sentinel_client.py')
+        spec = importlib.util.spec_from_file_location('sentinel_client_stress', client_path)
+        cls.sc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.sc)
+        cls.sc._stress_stop.clear()
+        cls.sc._stress_threads.clear()
+
+    def setUp(self):
+        self.sc._stress_stop.set()
+        time.sleep(0.05)
+        self.sc._stress_stop.clear()
+        self.sc._stress_threads[:] = [t for t in self.sc._stress_threads if t.is_alive()]
+
+    def test_stress_cpu_returns_success(self):
+        result = self.sc._exec_remote_command('stress_cpu')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('CPU stress', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_stress_memory_returns_success(self):
+        result = self.sc._exec_remote_command('stress_memory')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Memory stress', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_stress_disk_returns_success(self):
+        result = self.sc._exec_remote_command('stress_disk')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Disk stress', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_stop_stress_returns_success(self):
+        result = self.sc._exec_remote_command('stop_stress')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Stress stop', result['message'])
+
+    def test_stress_cpu_spawns_thread(self):
+        self.sc._exec_remote_command('stress_cpu')
+        alive_names = [t.name for t in self.sc._stress_threads if t.is_alive()]
+        self.assertIn('sentinel_stress_cpu', alive_names)
+        self.sc._stress_stop.set()
+
+    def test_stop_stress_sets_event(self):
+        self.sc._stress_stop.clear()
+        self.sc._exec_remote_command('stop_stress')
+        self.assertTrue(self.sc._stress_stop.is_set())
+
+    def test_stress_cpu_thread_exits_after_stop(self):
+        self.sc._exec_remote_command('stress_cpu')
+        threads_before = [t for t in self.sc._stress_threads
+                          if t.name == 'sentinel_stress_cpu' and t.is_alive()]
+        self.assertGreater(len(threads_before), 0)
+        self.sc._exec_remote_command('stop_stress')
+        for t in threads_before:
+            t.join(timeout=2.0)
+            self.assertFalse(t.is_alive())
+
+    def test_stress_memory_thread_exits_after_stop(self):
+        self.sc._exec_remote_command('stress_memory')
+        mem_threads = [t for t in self.sc._stress_threads
+                       if t.name == 'sentinel_stress_mem' and t.is_alive()]
+        self.assertGreater(len(mem_threads), 0)
+        self.sc._exec_remote_command('stop_stress')
+        for t in mem_threads:
+            t.join(timeout=2.0)
+            self.assertFalse(t.is_alive())
+
+    def test_stress_disk_cleans_temp_file(self):
+        import tempfile
+        expected_path = os.path.join(tempfile.gettempdir(), 'sentinel_disk_stress.tmp')
+        if os.path.exists(expected_path):
+            os.remove(expected_path)
+        self.sc._exec_remote_command('stress_disk')
+        disk_threads = [t for t in self.sc._stress_threads
+                        if t.name == 'sentinel_stress_disk' and t.is_alive()]
+        self.sc._exec_remote_command('stop_stress')
+        for t in disk_threads:
+            t.join(timeout=3.0)
+        self.assertFalse(os.path.exists(expected_path))
+
+    def test_consecutive_stress_calls_dont_raise(self):
+        r1 = self.sc._exec_remote_command('stress_cpu')
+        r2 = self.sc._exec_remote_command('stress_cpu')
+        self.assertEqual(r1['status'], 'success')
+        self.assertEqual(r2['status'], 'success')
+        self.sc._exec_remote_command('stop_stress')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

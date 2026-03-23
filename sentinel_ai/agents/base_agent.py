@@ -63,7 +63,6 @@ class BaseAgent(ABC):
         self._running = True
         self._stop_event.clear()
 
-        # Start agent thread
         self._thread = threading.Thread(target=self._run_wrapper, daemon=True)
         self._thread.start()
 

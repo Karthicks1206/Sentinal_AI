@@ -1,0 +1,679 @@
+================================================================================
+   SENTINEL AI — AUTONOMOUS SELF-HEALING IoT INFRASTRUCTURE
+   COMPLETE PROJECT REPORT
+   Generated: March 13, 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+
+Sentinel AI is a fully autonomous, self-healing distributed IoT monitoring
+system built in Python. The system continuously collects real-time hardware
+and network metrics from a device (targeted at Raspberry Pi / edge IoT nodes),
+detects anomalies using multiple AI/statistical methods, diagnoses root causes
+using LLMs (local and cloud), and executes automated recovery actions — all
+without human intervention.
+
+  Project Directory : /Users/karthi/Desktop/Sentinal_AI/sentinel_ai/
+  Version           : 1.0.0
+  Language          : Python 3
+  Dashboard URL     : http://localhost:5001
+  Start Command     :
+    cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && \
+    kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null; \
+    source venv/bin/activate && brew services start ollama && \
+    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; python main.py
+
+--------------------------------------------------------------------------------
+2. HIGH-LEVEL ARCHITECTURE
+--------------------------------------------------------------------------------
+
+All components communicate through a central in-memory Event Bus. There are
+no polling loops between agents — everything is event-driven.
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  main.py  (SentinelAI Orchestrator)                                     │
+  │                                                                         │
+  │  ┌──────────────────┐   health.metric    ┌───────────────────────────┐  │
+  │  │ Monitoring Agent │ ─────────────────► │ Anomaly Detection Agent   │  │
+  │  └──────────────────┘                    │  - IQR Outlier            │  │
+  │                                          │  - Adaptive Z-Score       │  │
+  │  ┌──────────────────┐                    │  - Trend Elevation        │  │
+  │  │ Security Agent   │                    │  - Rate-of-Change Spike   │  │
+  │  └──────────────────┘                    │  - Isolation Forest (ML)  │  │
+  │         │ security.threat                │  - Keras LSTM AE (ML)    │  │
+  │         │                                └────────────┬──────────────┘  │
+  │         │                                    anomaly.detected           │
+  │         ▼                                             │                  │
+  │  ┌──────────────────────────────────────────────────┐ │                  │
+  │  │ Flask Dashboard (port 5001) — display-only        │ ▼                  │
+  │  │  - Live metric charts                            ┌──────────────────┐ │
+  │  │  - Toast notifications                           │ Diagnosis Agent  │ │
+  │  │  - Simulation Lab                                │  - Rule-based    │ │
+  │  │  - Incident Timeline                             │  - Groq (cloud)  │ │
+  │  └──────────────────────────────────────────────────┘  - Ollama (local)│ │
+  │                                                         │  - OpenAI     │ │
+  │  ┌──────────────────┐   learning.updated  │  - AWS Bedrock│ │
+  │  │ Learning Agent   │ ◄───────────────────┤              └────┬─────────┘ │
+  │  └──────────────────┘                    diagnosis.complete   │           │
+  │                                                               │           │
+  │                                          ┌────────────────────▼──────────┐│
+  │                                          │ Recovery Agent                ││
+  │                                          │  - kill_process               ││
+  │                                          │  - restart_mqtt               ││
+  │                                          │  - reconnect_sensor           ││
+  │                                          │  - failover                   ││
+  │                                          │  - clear_cache                ││
+  │                                          │  - restart_service            ││
+  │                                          └───────────────────────────────┘│
+  └─────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+3. COMPONENT BREAKDOWN
+--------------------------------------------------------------------------------
+
+3.1  MAIN ORCHESTRATOR  (main.py)
+─────────────────────────────────
+- Class: SentinelAI
+- Initialises all 6 agents in order, registers signal handlers (SIGINT/SIGTERM)
+- Starts the Flask dashboard in a background daemon thread (run_agents=False)
+- Auto-opens the browser to http://localhost:5001 after a 3-second delay
+- Runs a health-watchdog loop (every 10 s) to detect any stopped agent
+- Exposes external_agents to the dashboard for agent-status display
+- On shutdown: stops all agents, flushes event bus, closes SQLite DB
+- Prints AI stack priority on startup:
+    1. Groq  (fast cloud, free tier)
+    2. Ollama (local LLM, no data leaves device)
+    3. Rule-based (instant fallback)
+
+
+3.2  MONITORING AGENT  (agents/monitoring/monitoring_agent.py)
+──────────────────────────────────────────────────────────────
+Publishes a "health.metric" event to the event bus every 5 seconds.
+
+Metrics collected:
+
+  CPU:
+    - cpu_percent (overall utilisation)
+    - cpu_count, cpu_freq_current
+    - load_avg_1min / 5min / 15min
+    - top_process_name, top_process_cpu, top_process_pid
+
+  Memory:
+    - memory_percent, memory_total_mb, memory_available_mb, memory_used_mb
+    - swap_percent, swap_used_mb
+    - top_process_name, top_process_memory
+
+  Disk:
+    - disk_percent, disk_total_gb, disk_used_gb, disk_free_gb
+    - disk_read_mb, disk_write_mb (cumulative IO counters)
+
+  Network:
+    - bytes_sent_mb, bytes_recv_mb, packets_sent/recv, errors_in/out
+    - ping_latency_ms (average to 8.8.8.8 and 1.1.1.1)
+    - packet_loss_percent
+    - ping_success (bool)
+
+  Power (simulated on macOS; replace with INA219/INA3221 on real hardware):
+    - power_voltage_v  — input voltage, correlated with CPU load (± Gaussian noise)
+    - power_current_a  — current draw (0.5A idle → 2.5A full load)
+    - power_watts      — derived: voltage × current
+    - power_quality    — 0–100 score; drops 8 pts per 1% voltage deviation
+    - power_voltage_deviation_pct — absolute % deviation from nominal
+
+  Power Simulation:
+    - trigger_power_event(sag_volts, duration) injects a voltage sag
+    - Resets automatically after duration_seconds via background thread
+
+  MQTT / Sensors: disabled on macOS dev; stubs for real IoT hardware
+
+
+3.3  ANOMALY DETECTION AGENT  (agents/anomaly/anomaly_detection_agent.py)
+──────────────────────────────────────────────────────────────────────────
+Fully adaptive — no hardcoded thresholds anywhere. All detection bounds
+are computed at runtime from the live data stream.
+
+AdaptiveMetricBaseline (per metric):
+  - Long window: 300 readings (~25 min) for stable statistics
+  - Short window: 20 readings (~100 s) for rate-of-change
+  - Warmup: 30 readings required before any anomaly can fire
+  - Anti-inflation: uses only the lower 60% (below upper mild fence) of data
+    as the "normal" population — sustained spikes don't inflate the baseline
+
+Detection Methods (all adaptive, no static numbers):
+
+  1. IQR Outlier (Tukey Fence)
+     - Mild fence:    Q3 + 1.5*IQR  → medium severity
+     - Extreme fence: Q3 + 3.0*IQR  → high/critical severity
+     - Both bounds are percentiles of observed data
+
+  2. Adaptive Z-Score
+     - z = |value - mean| / std
+     - Base threshold: 2.5σ (configurable)
+     - High-variance metrics (CV > 30%) get +0.5σ tolerance
+     - Severity scales with z/threshold ratio
+
+  3. Trend Elevation (time-series)
+     - Fires when ALL of the last 5 readings exceed mean + 1.5*std
+     - Catches gradual memory leaks or slow CPU creep
+
+  4. Rate-of-Change Spike
+     - Baseline: std of first-order differences over last 20 readings
+     - Fires if step change > mean_change + 4.0 * change_std
+     - Catches sudden vertical jumps (e.g. CPU 20% → 90% in one cycle)
+
+  5. Isolation Forest (ML Layer 1, sklearn)
+     - Multivariate point-in-time anomaly detection
+     - Trained after 50+ readings; retrains every 15 min
+     - contamination=0.1, n_estimators=100
+     - Fires as anomaly type "ml_isolation_forest"
+
+  6. Keras LSTM Autoencoder (ML Layer 2)
+     - File: agents/anomaly/keras_lstm_detector.py
+     - Features: [cpu_percent, memory_percent, disk_percent]
+     - Window: 20 readings; LSTM Encoder (32 units) → RepeatVector → LSTM Decoder
+     - Trains after 60+ sequences (~6.5 min of data); retrains every 500 readings
+     - Anomaly threshold: err_mean + 3.0 * err_std (reconstruction MSE)
+     - Uses PyTorch backend; PYTORCH_ENABLE_MPS_FALLBACK=1 for Apple Silicon
+     - Fires as anomaly type "ml_lstm_autoencoder"
+
+Deduplication Gates:
+  - Persistence gate: metric must be anomalous for ≥2 consecutive readings
+  - Cooldown gate: 5-minute suppression after an anomaly fires per metric
+
+Excluded Metrics (too noisy or not meaningful for anomaly detection):
+  disk.disk_read_mb, disk.disk_write_mb, network.bytes_*, network.packets_*,
+  network.errors_*, mqtt.mqtt_latency_ms, cpu.cpu_count, cpu.cpu_freq_current,
+  cpu.top_process_cpu, cpu.top_process_pid, cpu.load_avg_*,
+  memory.top_process_memory, memory.memory_total_mb, memory.memory_available_mb,
+  memory.memory_used_mb, memory.swap_used_mb, disk.disk_total_gb,
+  disk.disk_used_gb, disk.disk_free_gb, sensors.sensor_count, sensors.sensors_online,
+  power.power_quality, power.power_watts, power.power_voltage_deviation_pct
+
+
+3.4  DIAGNOSIS AGENT  (agents/diagnosis/diagnosis_agent.py)
+───────────────────────────────────────────────────────────
+Triggered by "anomaly.detected" events. Runs diagnosis in a BACKGROUND THREAD
+so slow LLM calls never block the event bus.
+
+AI Stack (priority order):
+  1. Groq  (llama-3.1-8b-instant, cloud, ~10× faster than Ollama)
+     - Read from GROQ_API_KEY env var or .env file
+     - Uses JSON response_format for structured output
+  2. Ollama  (llama3.2:3b, local, no data leaves device)
+     - Checked via ollama.list() at startup
+     - System prompt + user prompt, format='json'
+  3. OpenAI  (gpt-4o, disabled — no billing credits)
+  4. AWS Bedrock  (claude-3-sonnet, disabled — requires certs)
+  5. Rule-based  (instant fallback, always available)
+
+Rule-based Diagnosis:
+  - Loads rules from config/diagnosis_rules.yaml
+  - Each rule: conditions (metric, operator, threshold), diagnosis template, actions
+  - Templates support {metric.name} and bare {name} placeholder substitution
+  - Process name, PID, etc. injected from anomaly string_context
+
+LLM Prompt includes:
+  - Metric name, detection type, current vs expected value, severity
+  - 1-hour system context (mean/max/min per metric type from DB)
+  - Exact list of available recovery action names
+  - Instruction to respond as JSON only
+
+Output: "diagnosis.complete" event with:
+  - diagnosis_id, diagnosis, root_cause, confidence
+  - recommended_actions (list of action names)
+  - methods_used (e.g. ["rule_based", "groq_ai"])
+
+
+3.5  RECOVERY AGENT  (agents/recovery/recovery_agent.py)
+─────────────────────────────────────────────────────────
+Triggered by "diagnosis.complete" events. Executes recovery actions.
+
+Available Actions:
+  kill_process      — Smart PID-based kill via InstabilityRunner; targets the
+                      top CPU-consuming process (uses top_process_pid from metrics)
+  restart_mqtt      — sudo systemctl restart mosquitto
+  reconnect_sensor  — Reconnect disconnected IoT sensors
+  failover          — Switch to backup MQTT broker
+  clear_cache       — Clear /tmp/sentinel_cache and /var/cache/sentinel
+  restart_service   — Restart sentinel-agent service
+
+Safety:
+  - Cooldown: 5-minute cooldown per action type (no action loops)
+  - max_retries: 3 attempts with retry_delay=5s
+  - auto_recovery flag (can be disabled in config)
+  - Records each action to DB for learning agent
+
+
+3.6  LEARNING AGENT  (agents/learning/learning_agent.py)
+─────────────────────────────────────────────────────────
+Subscribes to "diagnosis.complete" events. Learns from resolved incidents.
+
+Functions:
+  - Adjusts anomaly detection thresholds based on false-positive patterns
+  - Refines which recovery strategies work for which anomaly types
+  - Stores learning updates to SQLite DB (data/sentinel.db)
+  - Optionally syncs to AWS DynamoDB / S3 (configurable)
+  - Requires min 10 incidents before adapting thresholds
+  - Treats all-skipped recoveries as "attempted" (not failed)
+
+
+3.7  SECURITY AGENT  (agents/security/security_agent.py)
+──────────────────────────────────────────────────────────
+Runs every 30 seconds. Publishes "security.threat" events.
+
+Real checks performed:
+  - Open Port Scan: compares listening ports against allowlist
+    {22, 80, 443, 1883, 5001, 8883}; unexpected ports → medium threat
+  - Connection Flood: >200 concurrent connections → medium/high threat
+  - Privileged Process: root processes not in safe list → low threat
+
+Demo Mode (demo_mode: true in config):
+  - 4% chance per scan of injecting a synthetic threat from these templates:
+      * SSH brute-force attempt (high)
+      * Unusual data egress (critical)
+      * Port scan detected (medium)
+      * Suspicious payload pattern / C2 beacon (critical)
+      * Auth anomaly / new geo login (high)
+  - Keeps last 50 threats in memory for dashboard display
+
+Security toasts bypass the warmup gate — always shown immediately.
+
+Production Note: Replace _scan() body with Suricata/Zeek/GuardDuty integration.
+
+
+3.8  FLASK DASHBOARD  (dashboard/app.py + templates/dashboard.html)
+────────────────────────────────────────────────────────────────────
+Port: 5001
+Mode when started from main.py: display-only (run_agents=False)
+
+Event subscriptions:
+  health.metric      → updates live metric cards and rolling chart buffers
+  anomaly.detected   → stores in anomaly deque, triggers toast notification
+  diagnosis.complete → stores in diagnoses deque, updates incident timeline
+  recovery.action    → stores in recoveries deque
+  security.threat    → stores and triggers purple security toast
+
+Dashboard Sections:
+  a) System Status Banner — overall health (healthy / warning / critical)
+  b) Live Metric Cards:
+       - CPU %        (with top process name)
+       - Memory %
+       - Disk %
+       - Network latency (ping ms)
+       - Power card: voltage (V), current (A), watts (W), quality score
+  c) Live Chart — rolling 60-point line chart:
+       Lines: CPU (green), Memory (blue), Disk (orange),
+              Network latency (red), Power Quality (purple)
+  d) Agent Status Panel — shows all 6 agents (running / stopped) with
+       LSTM training status, security demo badge
+  e) Simulation Lab — 5 buttons:
+       CPU Spike, Memory Pressure, Disk Fill, Power Sag, Stop All
+       All feedback via toast notifications (no alert() dialogs)
+  f) Anomaly Feed — last 50 anomalies with type, metric, severity badges
+  g) Incident Timeline — only populated after diagnosis.complete fires;
+       empty state: "No incidents yet — run a simulation..."
+  h) Statistics Panel — dropdowns for incident counts, recovery success rates
+
+Toast Notification System:
+  - Top-right corner, slides in from right
+  - Auto-dismisses after 7 seconds
+  - Stacks up to 5 simultaneous toasts
+  - Shrinking timer bar shows time remaining
+  - Color-coded by severity:
+      critical → red border     high → orange border
+      medium   → yellow border  low  → blue border
+      power    → purple border  security → purple border
+  - Icons: ⚡ power, 💻 cpu, 🧠 memory, 💾 disk, 📶 network, 🔒 security
+  - Warmup gate: anomaly toasts suppressed for first 3 minutes
+    (baseline settling period — prevents false-alarm flood on startup)
+  - Security threats: ALWAYS shown, no warmup gate
+
+REST API Endpoints:
+  GET  /api/status            — system status, agent states, event bus stats
+  GET  /api/metrics           — latest metric snapshot
+  GET  /api/anomalies         — last 50 anomalies
+  GET  /api/incidents         — incident records from DB
+  POST /api/simulate/start/<scenario>  — start simulation
+  POST /api/simulate/stop     — stop active simulation
+  GET  /api/simulate/status   — simulation state
+  GET  /stream                — Server-Sent Events stream (real-time push)
+
+Simulation Scenarios:
+  cpu_stress    — runs a CPU-burning subprocess via InstabilityRunner
+  memory_stress — allocates RAM in chunks
+  disk_stress   — creates 200 MB temp file (may not spike % on large disks)
+  power_sag     — calls monitoring_agent.trigger_power_event(sag_volts=0.75, duration=60)
+  stop          — kills all simulation subprocesses
+
+
+--------------------------------------------------------------------------------
+4. CORE INFRASTRUCTURE
+--------------------------------------------------------------------------------
+
+4.1  Event Bus  (core/event_bus/event_bus.py)
+  - Type: in-memory (can be swapped to Redis or Kafka via config)
+  - Buffer: 10,000 events
+  - Event priorities: NORMAL, HIGH, CRITICAL
+  - Events: health.metric, anomaly.detected, diagnosis.complete,
+             recovery.action, learning.updated, security.threat
+  - Thread-safe pub/sub, max_retries=3
+
+4.2  SQLite Database  (core/database/db.py)
+  - File: data/sentinel.db
+  - Tables: metrics (device, type, name, value, timestamp),
+             anomalies, incidents, recovery_actions
+  - get_metrics_history(device_id, hours) for diagnosis context
+  - get_recent_incidents(limit, device_id) for dashboard timeline
+  - 90-day retention, 24-hour backup interval
+  - Optional AWS DynamoDB / S3 sync
+
+4.3  Configuration  (config/config.yaml + core/config.py)
+  - YAML config with environment-variable substitution (${VAR:-default})
+  - Device ID defaults to "raspberry-pi-001"
+  - All thresholds are display-only — anomaly detection uses adaptive bounds
+  - Key sections: monitoring, anomaly_detection, diagnosis, recovery,
+                  learning, event_bus, aws, groq, ollama, openai, security
+
+4.4  Logging  (core/logging/)
+  - Structured JSON logs
+  - Handlers: console (INFO), file (DEBUG, logs/sentinel.log, 100 MB × 10),
+               CloudWatch (WARNING, batched)
+  - log level configurable via LOG_LEVEL env var
+
+4.5  AWS Integration  (cloud/aws_iot/)
+  - AWSIoTClient: MQTT over TLS to AWS IoT Core
+    Topics: sentinel/telemetry/{device_id}, sentinel/anomalies/{device_id},
+            sentinel/recovery/{device_id}, sentinel/policy/{device_id}
+  - CloudWatchPublisher: buffers up to 100 metrics before flushing
+  - DynamoDB sync for incident records
+  - S3 export for log archives
+  - Currently disabled (aws.enabled=true in config but certs not present)
+
+
+--------------------------------------------------------------------------------
+5. MACHINE LEARNING STACK
+--------------------------------------------------------------------------------
+
+Layer 1 — Isolation Forest (sklearn)
+  - Multivariate, point-in-time detection
+  - Feature vector: all numeric flat metrics at one timestep
+  - Trains when 50+ readings accumulated
+  - Retrains every 15 minutes in background
+  - Score < 0 (in sklearn) → anomaly; severity mapped from score magnitude
+
+Layer 2 — Keras LSTM Autoencoder
+  - File: agents/anomaly/keras_lstm_detector.py
+  - Architecture:
+      Input (20 timesteps × 3 features)
+      → LSTM Encoder (32 units, tanh)
+      → RepeatVector(20)
+      → LSTM Decoder (32 units, tanh, return_sequences=True)
+      → TimeDistributed Dense (3 outputs)
+      → Reconstruction (MSE loss)
+  - Features: cpu_percent, memory_percent, disk_percent (normalized 0–1)
+  - Trains after 60 complete sequences (79 readings ≈ 6.5 min)
+  - Periodic retraining every 500 readings
+  - Anomaly threshold: mean_reconstruction_error + 3.0 × std
+  - Thread-safe: training in background thread, predictions read locked copy
+  - Severity: <3σ=low, 3–5σ=medium, 5–8σ=high, >8σ=critical
+  - Requires: PYTORCH_ENABLE_MPS_FALLBACK=1 for Apple Silicon Macs
+
+Both ML layers respect the same 5-minute cooldown as statistical detectors.
+
+
+--------------------------------------------------------------------------------
+6. SIMULATION LAB
+--------------------------------------------------------------------------------
+
+Purpose: trigger real anomalies to demonstrate the end-to-end pipeline.
+
+  CPU Spike:
+    - Starts cpu_stress subprocess via InstabilityRunner
+    - Uses Python multiprocessing to saturate all cores
+    - Detected by IQR outlier / z-score within ~30 s
+    - Diagnosis: Groq/Ollama recommends kill_process
+    - Recovery: kills the stress process by PID
+
+  Memory Pressure:
+    - Allocates memory in chunks until memory_percent rises
+    - Detected by trend_elevation (gradual) or IQR (sudden)
+
+  Disk Fill:
+    - Creates ~200 MB temp file in /tmp
+    - Note: may not spike disk_percent on large modern disks (expected)
+
+  Power Sag:
+    - POST /api/simulate/start/power_sag
+    - Calls monitoring_agent.trigger_power_event(sag_volts=0.75, duration=60)
+    - Drops voltage by 0.75 V below nominal for 60 seconds
+    - Detected by z-score and IQR (power_voltage_v)
+    - Anomaly type: statistical_zscore or iqr_outlier on power.power_voltage_v
+
+  Stop All:
+    - POST /api/simulate/stop
+    - Kills all InstabilityRunner subprocesses
+    - Resets _power_sim_sag to 0.0
+
+
+--------------------------------------------------------------------------------
+7. KEY BUG FIXES AND DESIGN DECISIONS (CUMULATIVE)
+--------------------------------------------------------------------------------
+
+1. Toast Warmup Gate
+   Problem: On startup, adaptive baselines have no data. Every first reading
+            looks like a spike. → Flood of false-alarm toasts.
+   Fix: Suppress anomaly toasts for the first 3 minutes of runtime.
+        Security toasts are exempt (always shown).
+
+2. Threshold Detection Key Mismatch
+   Problem: Rule config used bare key "cpu_percent" but metrics dict uses
+            "cpu.cpu_percent". Rules never matched.
+   Fix: _format_diagnosis() and _match_rule() now try both the full dotted key
+        AND the bare key after the last dot.
+
+3. Adaptive Threshold Inflation
+   Problem: During a long CPU stress test, the rolling baseline filled with
+            high values, raising the "normal" band. The anomaly hid itself.
+   Fix: AdaptiveMetricBaseline.stats() computes mean/std only on values
+        BELOW the mild Tukey fence (lower 60% of distribution).
+
+4. Incident Flood (Multiple Instances)
+   Problem: Starting main.py without killing old processes caused multiple
+            instances writing to the same SQLite DB → cascade of duplicate
+            incidents on the dashboard.
+   Fix: Always run pkill -f "python.*main.py" before starting.
+        Documented in the one-line start command.
+
+5. PID False Anomalies
+   Problem: top_process_pid changes every reading (different process at top).
+            The anomaly detector treated these integer jumps as anomalies.
+   Fix: Added cpu.top_process_pid to excluded_metrics.
+
+6. Load Average False Anomalies
+   Problem: load_avg_* correlates strongly with cpu_percent, causing double-
+            alerts for every CPU spike.
+   Fix: Added all load_avg_* metrics to excluded_metrics.
+
+7. Skipped = Failed (Learning Agent)
+   Problem: If all recovery actions were skipped (cooldown), learning agent
+            marked the incident as recovery_failed, skewing success rates.
+   Fix: all-skipped outcome is treated as "recovery_attempted" not "failed".
+
+8. Stat Panel Error Handling
+   Problem: If /api/incidents returned an error, the JS stat panel crashed
+            with an uncaught exception, breaking the whole dashboard.
+   Fix: API endpoint returns empty array [] on any DB error (never 5xx).
+        JS stat panel handles empty array gracefully.
+
+9. Diagnosis Background Thread
+   Problem: Ollama LLM calls block for 2–5 seconds. On a single-threaded
+            event bus, this would delay every subsequent event.
+   Fix: DiagnosisAgent.process_event() immediately snapshots event data,
+        then spawns a daemon thread for the actual LLM call and publish.
+
+10. Power Card Excluded from Wrong Detection
+    Problem: power_quality, power_watts, power_voltage_deviation_pct were
+             redundant derived metrics that would cause spurious anomalies
+             alongside the primary power_voltage_v detection.
+    Fix: Added those three to excluded_metrics; only power_voltage_v and
+         power_current_a are anomaly-detected.
+
+
+--------------------------------------------------------------------------------
+8. CONFIGURATION REFERENCE
+--------------------------------------------------------------------------------
+
+File: config/config.yaml
+
+Key Settings:
+  monitoring.collection_interval : 5 seconds
+  anomaly_detection.min_consecutive_readings : 2 (persistence gate)
+  anomaly_detection.cooldown_minutes : 5 (dedup gate)
+  anomaly_detection.methods.z_score.threshold : 2.5
+  anomaly_detection.baseline.window_size : 300 readings (~25 min)
+  recovery.max_retries : 3
+  recovery.cooldown_period_seconds : 300
+  security.scan_interval_seconds : 30
+  security.demo_mode : true
+  groq.model : llama-3.1-8b-instant
+  ollama.model : llama3.2:3b
+  openai.enabled : false
+  aws.enabled : true (config present; certs not deployed locally)
+
+
+--------------------------------------------------------------------------------
+9. FILE/DIRECTORY STRUCTURE
+--------------------------------------------------------------------------------
+
+sentinel_ai/
+├── main.py                        # Master orchestrator
+├── run.sh                         # Single-command launcher
+├── requirements.txt               # Python dependencies
+├── Dockerfile / docker-compose.yml
+├── config/
+│   ├── config.yaml                # Main configuration
+│   └── diagnosis_rules.yaml       # Rule-based diagnosis rules
+├── agents/
+│   ├── base_agent.py              # Abstract base for all agents
+│   ├── monitoring/                # Monitoring Agent
+│   ├── anomaly/
+│   │   ├── anomaly_detection_agent.py   # Main anomaly detector
+│   │   └── keras_lstm_detector.py       # LSTM Autoencoder
+│   ├── diagnosis/                 # Diagnosis Agent (LLM + rules)
+│   ├── recovery/                  # Recovery Agent
+│   ├── learning/                  # Learning Agent
+│   └── security/                  # Security Agent
+├── core/
+│   ├── config.py                  # Config loader
+│   ├── event_bus/                 # In-memory event bus
+│   ├── database/                  # SQLite DB wrapper
+│   └── logging/                   # Structured logger
+├── dashboard/
+│   ├── app.py                     # Flask app + REST API + SSE
+│   └── templates/dashboard.html  # Frontend (Tailwind CSS + Chart.js)
+├── cloud/
+│   └── aws_iot/                   # AWS IoT Core + CloudWatch client
+├── simulation/
+│   └── instability_runner.py      # CPU/Memory/Disk stress subprocess
+├── data/
+│   └── sentinel.db                # SQLite database (auto-created)
+├── logs/
+│   └── sentinel.log               # Rotating log file
+├── docs/                          # Documentation files
+└── tests/                         # Unit and integration tests
+
+
+--------------------------------------------------------------------------------
+10. PYTHON DEPENDENCIES (Key Packages)
+--------------------------------------------------------------------------------
+
+  psutil          — system metrics (CPU, memory, disk, network, processes)
+  flask           — web dashboard
+  flask-cors      — CORS for dashboard API
+  numpy           — statistical calculations in anomaly detection
+  scikit-learn    — Isolation Forest ML model
+  keras           — LSTM Autoencoder (PyTorch backend)
+  torch           — PyTorch backend for Keras
+  ollama          — Python client for local Ollama LLM
+  groq            — Groq cloud API client
+  openai          — OpenAI API client (optional)
+  boto3           — AWS SDK (IoT Core, CloudWatch, DynamoDB, S3)
+  paho-mqtt       — MQTT client for broker connectivity checks
+  pandas          — metric summarisation for diagnosis context
+  pyyaml          — YAML config loading
+  python-dotenv   — .env file loading for API keys
+
+
+--------------------------------------------------------------------------------
+11. AI/LLM INTEGRATION SUMMARY
+--------------------------------------------------------------------------------
+
+  Provider     Status     Model                    Usage
+  ────────────────────────────────────────────────────────────────────────
+  Groq         Active     llama-3.1-8b-instant     Primary: fast, free tier
+  Ollama       Active     llama3.2:3b              Local fallback, offline
+  OpenAI       Disabled   gpt-4o                   No billing credits
+  AWS Bedrock  Disabled   claude-3-sonnet          Certs not deployed
+
+All LLM providers receive the same structured JSON-output prompt and return:
+  root_cause, diagnosis, recommended_actions, confidence, [reasoning]
+
+The rule-based engine always runs first; LLM output then enhances or replaces
+the rule result depending on what was found.
+
+
+--------------------------------------------------------------------------------
+12. END-TO-END PIPELINE (EXAMPLE: CPU SPIKE)
+--------------------------------------------------------------------------------
+
+  T+0s   User clicks "CPU Spike" in Simulation Lab
+  T+0s   POST /api/simulate/start/cpu_stress
+  T+0s   InstabilityRunner starts cpu_stress subprocess (all cores busy)
+  T+5s   MonitoringAgent collects metrics: cpu_percent = 95%
+  T+5s   Publishes "health.metric" to event bus
+  T+5s   AnomalyDetectionAgent.process_event() wakes up
+  T+5s   IQR outlier fires (95% >> upper_mild ~35%) → candidate
+  T+5s   Z-score fires (95% is >>2.5σ above mean ~10%) → candidate
+  T+5s   consecutive_count["cpu.cpu_percent"] incremented to 1
+  T+10s  Second reading: cpu_percent = 94%, count becomes 2 ≥ min_consecutive=2
+  T+10s  Cooldown check passes (no prior fire) → anomaly fires
+  T+10s  "anomaly.detected" event published (priority=CRITICAL)
+  T+10s  Dashboard shows orange/red toast "CPU anomaly detected"
+  T+10s  DiagnosisAgent.process_event() wakes up
+  T+10s  Background thread started for LLM diagnosis
+  T+10s  Rule-based: matches "cpu_high" rule (cpu_percent > 80)
+           diagnosis = "CPU utilisation at 95.0% by process python3"
+  T+11s  Groq API call (if key set) or Ollama (if running):
+           root_cause = "CPU-intensive process consuming all available cores"
+           recommended_actions = ["kill_process"]
+  T+11s  "diagnosis.complete" event published
+  T+11s  Dashboard: incident appears in timeline
+  T+11s  RecoveryAgent.process_event() wakes up
+  T+11s  Executes kill_process: reads top_process_pid from metrics context
+  T+11s  Kills cpu_stress subprocess by PID
+  T+11s  "recovery.action" event published
+  T+16s  Next MonitoringAgent reading: cpu_percent back to ~8%
+  T+16s  No anomaly detected (cooldown also in effect for 5 min)
+  T+16s  LearningAgent records successful recovery → updates strategy weights
+
+
+--------------------------------------------------------------------------------
+13. KNOWN LIMITATIONS / FUTURE WORK
+--------------------------------------------------------------------------------
+
+  - DB maintenance: no auto-pruning; manually clean if incidents table grows large
+  - Disk fill simulation: 200 MB temp file won't visibly spike disk_percent on
+    modern large disks (Macs with 500 GB+ drives) — expected behaviour
+  - Security agent is demo/stub — real production integration needed:
+      plug in Suricata alerts, Zeek logs, or AWS GuardDuty findings
+  - AWS IoT Core certs not deployed locally — cloud sync disabled
+  - MQTT monitoring disabled on macOS dev (enable on real Raspberry Pi)
+  - Sensor monitoring disabled on macOS dev (simulated stubs)
+  - Groq free tier: rate limits may cause occasional fallback to Ollama
+  - LSTM first training takes ~6.5 minutes — no ML detection before that
+
+================================================================================
+END OF REPORT
+================================================================================

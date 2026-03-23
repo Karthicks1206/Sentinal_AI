@@ -42,22 +42,17 @@ class MonitoringAgent(BaseAgent):
         self.collection_interval = config.get('monitoring.collection_interval', 5)
         self.device_id = config.device_id
 
-        # Metric collectors
         self.metrics_config = config.get_section('monitoring.metrics')
 
-        # MQTT client for connectivity checks
         self.mqtt_client = None
         self.mqtt_connected = False
         self.mqtt_last_latency = 0
 
-        # Sensor simulation (would be replaced with actual sensor code)
         self.sensor_latency = 0
         self.sensor_success_rate = 1.0
 
-        # Power simulation: volts to subtract from nominal (set via trigger_power_event)
         self._power_sim_sag = 0.0
 
-        # Initialize collectors
         self._init_mqtt()
 
     def _init_mqtt(self):
@@ -73,20 +68,17 @@ class MonitoringAgent(BaseAgent):
             broker_host = self.metrics_config['mqtt'].get('broker_host', 'localhost')
             broker_port = self.metrics_config['mqtt'].get('broker_port', 1883)
 
-            # paho-mqtt 2.x requires CallbackAPIVersion; fall back for older versions
             try:
                 self.mqtt_client = mqtt.Client(
                     callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
                     client_id=f"{self.device_id}_monitor"
                 )
             except AttributeError:
-                # paho-mqtt < 2.0
                 self.mqtt_client = mqtt.Client(client_id=f"{self.device_id}_monitor")
 
             self.mqtt_client.on_connect = self._on_mqtt_connect
             self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
 
-            # Connect in background — only attempt once, no reconnect loop
             def connect():
                 try:
                     self.mqtt_client.connect(broker_host, broker_port, keepalive=60)
@@ -121,10 +113,8 @@ class MonitoringAgent(BaseAgent):
 
         while self._running:
             try:
-                # Collect all metrics
                 metrics = self.collect_metrics()
 
-                # Publish to event bus
                 self.publish_event(
                     event_type="health.metric",
                     data={
@@ -135,7 +125,6 @@ class MonitoringAgent(BaseAgent):
                     priority=EventPriority.NORMAL
                 )
 
-                # Store in database if available
                 if self.database:
                     for metric_type, metric_data in metrics.items():
                         if isinstance(metric_data, dict):
@@ -151,11 +140,9 @@ class MonitoringAgent(BaseAgent):
             except Exception as e:
                 self.logger.error(f"Error collecting metrics: {e}", exc_info=True)
 
-            # Wait for next collection interval
             if not self.wait(self.collection_interval):
                 break
 
-        # Cleanup
         if self.mqtt_client:
             self.mqtt_client.loop_stop()
             self.mqtt_client.disconnect()
@@ -195,22 +182,17 @@ class MonitoringAgent(BaseAgent):
     def collect_cpu_metrics(self) -> Dict[str, float]:
         """Collect CPU metrics"""
         try:
-            # Get overall CPU percentage
             cpu_percent = psutil.cpu_percent(interval=1)
 
-            # Get per-core utilization
             cpu_per_core = psutil.cpu_percent(interval=0.1, percpu=True)
 
-            # Get CPU frequency
             cpu_freq = psutil.cpu_freq()
 
-            # Get load average (Unix-like systems)
             try:
                 load_avg = psutil.getloadavg()
             except AttributeError:
                 load_avg = (0, 0, 0)
 
-            # Get top process by CPU (include PID so recovery can target it precisely)
             processes = sorted(
                 [(p.info['pid'], p.info['name'], p.info['cpu_percent'])
                  for p in psutil.process_iter(['pid', 'name', 'cpu_percent'])
@@ -219,9 +201,9 @@ class MonitoringAgent(BaseAgent):
                 reverse=True
             )
 
-            top_process_pid  = processes[0][0] if processes else 0
+            top_process_pid = processes[0][0] if processes else 0
             top_process_name = processes[0][1] if processes else "none"
-            top_process_cpu  = processes[0][2] if processes else 0
+            top_process_cpu = processes[0][2] if processes else 0
 
             return {
                 'cpu_percent': cpu_percent,
@@ -244,7 +226,6 @@ class MonitoringAgent(BaseAgent):
             mem = psutil.virtual_memory()
             swap = psutil.swap_memory()
 
-            # Get top process by memory
             processes = sorted(
                 [(p.info['name'], p.info['memory_percent'])
                  for p in psutil.process_iter(['name', 'memory_percent'])
@@ -293,14 +274,13 @@ class MonitoringAgent(BaseAgent):
         try:
             net_io = psutil.net_io_counters()
 
-            # Ping test
             ping_hosts = self.metrics_config.get('network', {}).get('ping_hosts', ['8.8.8.8'])
             ping_results = {}
             packet_loss_total = 0
             latency_total = 0
             latency_count = 0
 
-            for host in ping_hosts[:2]:  # Limit to 2 hosts for performance
+            for host in ping_hosts[:2]:
                 ping_success, latency, loss = self._ping(host)
                 ping_results[host] = {
                     'success': ping_success,
@@ -343,7 +323,6 @@ class MonitoringAgent(BaseAgent):
             Tuple of (success: bool, latency_ms: float, packet_loss: float)
         """
         try:
-            # Use platform-specific ping command
             import platform
             param = '-n' if platform.system().lower() == 'windows' else '-c'
 
@@ -356,10 +335,8 @@ class MonitoringAgent(BaseAgent):
             )
 
             if result.returncode == 0:
-                # Parse output for latency and packet loss
                 output = result.stdout
 
-                # Extract packet loss
                 if 'packet loss' in output.lower():
                     import re
                     match = re.search(r'(\d+)%.*loss', output, re.IGNORECASE)
@@ -367,17 +344,12 @@ class MonitoringAgent(BaseAgent):
                 else:
                     packet_loss = 0
 
-                # Extract average latency
-                # macOS format: "min/avg/max/stddev = 13.948/14.594/15.239/0.646 ms"
-                # Windows format: "Average = 14ms"
                 import re
                 latency = 0
-                # Try macOS/Linux format: min/avg/max = N/N/N
                 match = re.search(r'=\s*[\d.]+/([\d.]+)/', output)
                 if match:
                     latency = float(match.group(1))
                 else:
-                    # Try Windows format
                     match = re.search(r'average\s*=\s*([\d.]+)', output, re.IGNORECASE)
                     if match:
                         latency = float(match.group(1))
@@ -393,13 +365,12 @@ class MonitoringAgent(BaseAgent):
     def collect_mqtt_metrics(self) -> Dict[str, Any]:
         """Collect MQTT connectivity metrics"""
         try:
-            # Test MQTT latency with a publish
             latency = 0
             if self.mqtt_client and self.mqtt_connected:
                 start_time = time.time()
                 try:
                     self.mqtt_client.publish("sentinel/health/ping", "ping", qos=0)
-                    latency = (time.time() - start_time) * 1000  # Convert to ms
+                    latency = (time.time() - start_time) * 1000
                     self.mqtt_last_latency = latency
                 except:
                     latency = self.mqtt_last_latency
@@ -421,8 +392,6 @@ class MonitoringAgent(BaseAgent):
         In production, this would interface with actual IoT sensors
         """
         try:
-            # Simulate sensor readings
-            # In production, replace with actual sensor code
             import random
 
             return {
@@ -442,10 +411,10 @@ class MonitoringAgent(BaseAgent):
         On real IoT hardware: replace body with INA219/INA3221 sensor reads.
 
         Metrics:
-          power_voltage_v           — input voltage (V)
-          power_current_a           — current draw (A)
-          power_watts               — power consumption (W)
-          power_quality             — quality score 0-100 (100 = clean supply)
+          power_voltage_v — input voltage (V)
+          power_current_a — current draw (A)
+          power_watts — power consumption (W)
+          power_quality — quality score 0-100 (100 = clean supply)
           power_voltage_deviation_pct — % deviation from nominal (for anomaly threshold)
         """
         import random
@@ -454,40 +423,30 @@ class MonitoringAgent(BaseAgent):
             self.metrics_config.get('power', {}).get('nominal_voltage_v', 5.0)
         )
 
-        # Correlate current draw with CPU load (realistic IoT behaviour)
         try:
             cpu_pct = psutil.cpu_percent(interval=0) / 100.0
         except Exception:
             cpu_pct = 0.3
 
-        # ── Voltage simulation ────────────────────────────────────────────
-        # Normal: nominal ± small Gaussian noise
-        # Under load: slight sag proportional to CPU activity
-        # Simulation fault: additional sag injected by trigger_power_event()
-        load_sag  = cpu_pct * 0.08                  # up to 80 mV under full load
-        noise     = random.gauss(0, 0.025)           # ±25 mV normal noise
-        voltage   = nominal_v - load_sag + noise - self._power_sim_sag
-        voltage   = round(max(2.5, min(7.0, voltage)), 3)
+        load_sag = cpu_pct * 0.08
+        noise = random.gauss(0, 0.025)
+        voltage = nominal_v - load_sag + noise - self._power_sim_sag
+        voltage = round(max(2.5, min(7.0, voltage)), 3)
 
-        # ── Current draw simulation ───────────────────────────────────────
-        # Idle ~0.5 A, full load ~2.5 A, small noise
         current = 0.5 + cpu_pct * 2.0 + random.gauss(0, 0.04)
         current = round(max(0.05, current), 3)
 
-        # ── Derived values ────────────────────────────────────────────────
         watts = round(voltage * current, 2)
 
-        # Voltage deviation from nominal (% absolute) — used by threshold detector
         voltage_dev_pct = round(abs(voltage - nominal_v) / nominal_v * 100.0, 2)
 
-        # Quality score: 100 = perfect, drops 8 points per 1% voltage deviation
         quality = round(max(0.0, 100.0 - voltage_dev_pct * 8.0), 1)
 
         return {
-            'power_voltage_v':            voltage,
-            'power_current_a':            current,
-            'power_watts':                watts,
-            'power_quality':              quality,
+            'power_voltage_v': voltage,
+            'power_current_a': current,
+            'power_watts': watts,
+            'power_quality': quality,
             'power_voltage_deviation_pct': voltage_dev_pct,
         }
 
@@ -517,9 +476,6 @@ class MonitoringAgent(BaseAgent):
         Args:
             event: Event object
         """
-        # Monitoring agent is primarily a producer
-        # Could handle configuration update events here
         if event.event_type == "config.updated":
             self.logger.info("Configuration updated, reloading...")
-            # Reload monitoring configuration
             self.metrics_config = self.config.get_section('monitoring.metrics')

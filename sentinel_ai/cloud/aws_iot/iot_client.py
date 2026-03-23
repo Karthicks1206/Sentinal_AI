@@ -50,15 +50,12 @@ class AWSIoTClient:
             self.client = None
             return
 
-        # MQTT client
         self.client = None
         self.connected = False
         self._message_handlers = {}
 
-        # Topics
         self.topics = self._init_topics()
 
-        # Initialize client
         self._init_client()
 
     def _init_topics(self) -> Dict[str, str]:
@@ -74,7 +71,6 @@ class AWSIoTClient:
     def _init_client(self):
         """Initialize MQTT client with TLS"""
         try:
-            # Get certificate paths
             cert_path = self.iot_config.get('cert_path')
             key_path = self.iot_config.get('key_path')
             ca_path = self.iot_config.get('ca_path')
@@ -84,13 +80,11 @@ class AWSIoTClient:
                 self.logger.error("AWS IoT certificates or endpoint not configured")
                 return
 
-            # Create MQTT client
             self.client = mqtt.Client(
                 client_id=self.device_id,
                 clean_session=True
             )
 
-            # Set up TLS
             self.client.tls_set(
                 ca_certs=ca_path,
                 certfile=cert_path,
@@ -99,16 +93,13 @@ class AWSIoTClient:
                 tls_version=ssl.PROTOCOL_TLSv1_2
             )
 
-            # Set callbacks
             self.client.on_connect = self._on_connect
             self.client.on_disconnect = self._on_disconnect
             self.client.on_message = self._on_message
 
-            # Connect
             self.logger.info(f"Connecting to AWS IoT endpoint: {endpoint}")
             self.client.connect(endpoint, 8883, 60)
 
-            # Start network loop
             self.client.loop_start()
 
         except Exception as e:
@@ -121,7 +112,6 @@ class AWSIoTClient:
             self.connected = True
             self.logger.info("Connected to AWS IoT Core")
 
-            # Subscribe to policy topic
             policy_topic = self.topics.get('policy')
             if policy_topic:
                 self.client.subscribe(policy_topic, qos=1)
@@ -144,7 +134,6 @@ class AWSIoTClient:
 
             self.logger.debug(f"Received message on topic {topic}")
 
-            # Call registered handlers
             for handler_topic, handler in self._message_handlers.items():
                 if topic.startswith(handler_topic):
                     handler(topic, payload)
@@ -322,7 +311,6 @@ class CloudWatchPublisher:
             return
 
         try:
-            # Flatten metrics
             metric_data = []
 
             for category, values in metrics.items():
@@ -339,7 +327,6 @@ class CloudWatchPublisher:
                             })
 
             if metric_data:
-                # Send in batches of 20 (CloudWatch limit)
                 for i in range(0, len(metric_data), 20):
                     batch = metric_data[i:i+20]
                     self.cloudwatch.put_metric_data(

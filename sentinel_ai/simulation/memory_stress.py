@@ -15,12 +15,10 @@ def main():
 
     print(f"[sentinel-memory-stress] PID={os.getpid()} allocating {mb}MB for {duration}s", flush=True)
 
-    # Allocate memory and touch every page so the OS actually maps it
-    chunk_size = 1024 * 1024  # 1 MB
+    chunk_size = 1024 * 1024
     blocks = []
     for i in range(mb):
         block = bytearray(chunk_size)
-        # Write to each page to force physical allocation
         for j in range(0, chunk_size, 4096):
             block[j] = i % 256
         blocks.append(block)

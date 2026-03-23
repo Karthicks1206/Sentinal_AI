@@ -25,11 +25,10 @@ from agents.base_agent import BaseAgent
 from core.event_bus import EventPriority
 
 
-# ── Threat severity levels ────────────────────────────────────────────────────
-SEVERITY_INFO     = 'info'
-SEVERITY_LOW      = 'low'
-SEVERITY_MEDIUM   = 'medium'
-SEVERITY_HIGH     = 'high'
+SEVERITY_INFO = 'info'
+SEVERITY_LOW = 'low'
+SEVERITY_MEDIUM = 'medium'
+SEVERITY_HIGH = 'high'
 SEVERITY_CRITICAL = 'critical'
 
 
@@ -46,23 +45,19 @@ class SecurityAgent(BaseAgent):
     def __init__(self, name: str, config, event_bus, logger, database=None):
         super().__init__(name, config, event_bus, logger)
 
-        self.database   = database
-        self.device_id  = config.device_id
+        self.database = database
+        self.device_id = config.device_id
         self.scan_interval = config.get('security.scan_interval_seconds', 30)
 
-        # Rolling counters (reset each scan cycle)
-        self._failed_conns: Dict[str, int] = {}   # ip -> count
+        self._failed_conns: Dict[str, int] = {}
         self._prev_net_stats = None
 
-        # Known safe listening ports for this device type (Raspberry Pi / IoT)
         self._expected_ports = {22, 80, 443, 1883, 5001, 8883}
 
-        # Threat log (in-memory, last 50)
         self.threat_history: List[Dict] = []
 
         self.logger.info("Security Agent initialized (demo/stub mode)")
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run(self):
         self.logger.info("Security Agent started")
@@ -78,7 +73,6 @@ class SecurityAgent(BaseAgent):
             if not self.wait(self.scan_interval):
                 break
 
-    # ── Threat detection ──────────────────────────────────────────────────────
 
     def _scan(self) -> List[Dict]:
         """Run all detection checks and return a list of threat dicts."""
@@ -96,8 +90,7 @@ class SecurityAgent(BaseAgent):
         if t:
             threats.append(t)
 
-        # Demo: occasionally inject a simulated threat so the dashboard has data
-        if random.random() < 0.04:   # ~4 % chance per scan → ~1 event / 12 min
+        if random.random() < 0.04:
             threats.append(self._synthetic_threat())
 
         return threats
@@ -113,10 +106,10 @@ class SecurityAgent(BaseAgent):
             unexpected = listening - self._expected_ports
             if unexpected:
                 return self._make_threat(
-                    category   = 'unexpected_port',
-                    severity   = SEVERITY_MEDIUM,
-                    title      = 'Unexpected listening port',
-                    detail     = f"Ports not in allowlist: {sorted(unexpected)}",
+                    category = 'unexpected_port',
+                    severity = SEVERITY_MEDIUM,
+                    title = 'Unexpected listening port',
+                    detail = f"Ports not in allowlist: {sorted(unexpected)}",
                     indicators = {'ports': sorted(unexpected)},
                 )
         except Exception as e:
@@ -130,10 +123,10 @@ class SecurityAgent(BaseAgent):
             total = len(conns)
             if total > 200:
                 return self._make_threat(
-                    category   = 'connection_flood',
-                    severity   = SEVERITY_HIGH if total > 500 else SEVERITY_MEDIUM,
-                    title      = 'High connection count',
-                    detail     = f"{total} concurrent connections detected",
+                    category = 'connection_flood',
+                    severity = SEVERITY_HIGH if total > 500 else SEVERITY_MEDIUM,
+                    title = 'High connection count',
+                    detail = f"{total} concurrent connections detected",
                     indicators = {'connection_count': total},
                 )
         except Exception as e:
@@ -158,10 +151,10 @@ class SecurityAgent(BaseAgent):
                     pass
             if suspicious:
                 return self._make_threat(
-                    category   = 'privileged_process',
-                    severity   = SEVERITY_LOW,
-                    title      = 'Privileged process observed',
-                    detail     = f"Root process(es): {', '.join(suspicious[:5])}",
+                    category = 'privileged_process',
+                    severity = SEVERITY_LOW,
+                    title = 'Privileged process observed',
+                    detail = f"Root process(es): {', '.join(suspicious[:5])}",
                     indicators = {'processes': suspicious[:5]},
                 )
         except Exception as e:
@@ -171,37 +164,36 @@ class SecurityAgent(BaseAgent):
     def _synthetic_threat(self) -> Dict:
         """Generate a realistic-looking synthetic threat for demo purposes."""
         templates = [
-            dict(category='brute_force',      severity=SEVERITY_HIGH,
+            dict(category='brute_force', severity=SEVERITY_HIGH,
                  title='SSH brute-force attempt',
                  detail='24 failed login attempts from 203.0.113.42 in 60s'),
             dict(category='data_exfiltration', severity=SEVERITY_CRITICAL,
                  title='Unusual data egress',
                  detail='Outbound transfer spike: 48 MB to unknown IP'),
-            dict(category='port_scan',         severity=SEVERITY_MEDIUM,
+            dict(category='port_scan', severity=SEVERITY_MEDIUM,
                  title='Port scan detected',
                  detail='192.168.1.77 probed 312 ports in 5s'),
             dict(category='malware_signature', severity=SEVERITY_CRITICAL,
                  title='Suspicious payload pattern',
                  detail='Network packet matched known C2 beacon signature'),
-            dict(category='auth_anomaly',      severity=SEVERITY_HIGH,
+            dict(category='auth_anomaly', severity=SEVERITY_HIGH,
                  title='Auth anomaly',
                  detail='Login from new geographic location'),
         ]
         t = random.choice(templates)
         return self._make_threat(**t, indicators={'synthetic': True, 'demo': True})
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _make_threat(self, category: str, severity: str, title: str,
                      detail: str, indicators: Dict = None) -> Dict:
         return {
-            'threat_id':  f"sec-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000,9999)}",
-            'timestamp':  datetime.utcnow().isoformat(),
-            'device_id':  self.device_id,
-            'category':   category,
-            'severity':   severity,
-            'title':      title,
-            'detail':     detail,
+            'threat_id': f"sec-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000,9999)}",
+            'timestamp': datetime.utcnow().isoformat(),
+            'device_id': self.device_id,
+            'category': category,
+            'severity': severity,
+            'title': title,
+            'detail': detail,
             'indicators': indicators or {},
         }
 
@@ -213,8 +205,8 @@ class SecurityAgent(BaseAgent):
 
         self.publish_event(
             event_type = 'security.threat',
-            data       = {'threat': threat, 'device_id': self.device_id},
-            priority   = EventPriority.HIGH,
+            data = {'threat': threat, 'device_id': self.device_id},
+            priority = EventPriority.HIGH,
         )
         self.logger.warning(
             f"[SECURITY] {threat['severity'].upper()} — {threat['title']}: {threat['detail']}"

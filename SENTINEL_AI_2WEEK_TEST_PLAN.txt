@@ -1,0 +1,290 @@
+============================================================
+  SENTINEL AI — 2-WEEK STRUCTURED TEST PLAN
+  Version 1.0  |  Start: 2026-03-23  |  End: 2026-04-03
+============================================================
+
+OBJECTIVE
+─────────
+Validate the complete Sentinel AI system end-to-end, covering:
+  • Unit correctness (all 52 unit tests green every day)
+  • Hub-local monitoring pipeline (anomaly → diagnosis → recovery)
+  • Distributed multi-device pipeline (remote client → hub agents)
+  • Per-device dashboard panel (feeds, charts, incident timeline)
+  • Remote stress simulation (stress_cpu / stress_memory / stress_disk)
+  • Edge cases, error recovery, and regression checks
+
+HOW TO RUN UNIT TESTS
+──────────────────────
+  cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+  source venv/bin/activate
+  python -m pytest tests/test_unit.py -v
+
+HOW TO START THE SYSTEM
+────────────────────────
+  cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+  kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+  source venv/bin/activate && brew services start ollama
+  python main.py
+  → Dashboard: http://localhost:5001
+
+
+════════════════════════════════════════════════════════════
+  WEEK 1  (2026-03-23 → 2026-03-29)  FUNCTIONAL TESTING
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────
+DAY 1  (Mon 2026-03-23)  UNIT TEST BASELINE + HUB SMOKE
+────────────────────────────────────────────────────────────
+Goals: Confirm all 52 unit tests pass; verify hub dashboard loads.
+
+  [ ] Run full unit test suite → expect 52 passed, 0 failed
+        python -m pytest tests/test_unit.py -v
+  [ ] Start system; open http://localhost:5001
+  [ ] Verify all 5 metric cards populate within 30s
+        (CPU, Memory, Disk, Network, Power)
+  [ ] Verify live chart scrolls with data
+  [ ] Verify Agent Status shows all 5 dots green
+  [ ] Check Logs tab — no ERROR lines on cold start
+  PASS CRITERIA: 52/52 unit tests green; dashboard loads with data.
+
+────────────────────────────────────────────────────────────
+DAY 2  (Tue 2026-03-24)  HUB ANOMALY DETECTION
+────────────────────────────────────────────────────────────
+Goals: Trigger CPU anomaly via Simulation Lab; confirm full pipeline fires.
+
+  [ ] Start system fresh (use ONE-LINE START COMMAND)
+  [ ] Wait 3 min for baseline to settle (warmup gate)
+  [ ] Click "CPU Spike" in Simulation Lab
+  [ ] Within 60s: toast notification appears (orange/red)
+  [ ] Anomaly Detection panel shows new entry
+  [ ] Diagnosis panel populates with root cause
+  [ ] Recovery panel shows action attempted
+  [ ] Incident Timeline shows new incident row
+  [ ] Click "Stop All" — metrics return to normal
+  [ ] Incident status updates to "resolved" or "attempted"
+  PASS CRITERIA: Full pipeline (anomaly → diagnosis → recovery → incident) fires.
+
+────────────────────────────────────────────────────────────
+DAY 3  (Wed 2026-03-25)  MEMORY + DISK SIMULATIONS
+────────────────────────────────────────────────────────────
+Goals: Validate memory and disk stress pipelines.
+
+  [ ] Click "Memory Pressure" → toast appears within 60s
+  [ ] Memory card shows elevated % value
+  [ ] Diagnosis fires with memory-related root cause
+  [ ] Recovery attempts compact_memory or kill_top_memory_process
+  [ ] Click "Disk Fill" → disk card may show minor increase
+        (NOTE: on large disks, disk_percent spike is expected to be small)
+  [ ] Click "Stop All" after each test
+  [ ] Confirm no lingering stress processes:
+        ps aux | grep sentinel_stress
+  PASS CRITERIA: Memory pipeline fires end-to-end; disk fill completes cleanly.
+
+────────────────────────────────────────────────────────────
+DAY 4  (Thu 2026-03-26)  POWER SAG + SECURITY DEMO
+────────────────────────────────────────────────────────────
+Goals: Validate power anomaly pipeline and security agent visibility.
+
+  [ ] Click "Power Sag" in Simulation Lab
+  [ ] Power card shows voltage drop (should dip ~0.75V below 5.0V)
+  [ ] Purple toast appears with ⚡ icon
+  [ ] Power anomaly appears in Anomaly Detection feed
+  [ ] Wait 10-30s: security agent fires a synthetic threat
+        (4% chance per 30s scan — trigger a few scans if needed)
+  [ ] Security toast appears immediately (bypasses warmup gate)
+  [ ] Agent Status card shows "Security" entry with purple "demo" label
+  PASS CRITERIA: Power anomaly detected; security threat shown in UI.
+
+────────────────────────────────────────────────────────────
+DAY 5  (Fri 2026-03-27)  DISTRIBUTED — DEVICE REGISTRATION
+────────────────────────────────────────────────────────────
+Goals: Register a remote device and confirm it appears in Distributed tab.
+
+  [ ] On a second machine (or localhost with different port):
+        python sentinel_client.py --hub http://<HUB_IP>:5001 --device test-device-1
+  [ ] Open Distributed tab in dashboard
+  [ ] "test-device-1" appears in device sidebar within 10s
+  [ ] Click device → full panel opens (metrics cards, chart, feeds)
+  [ ] Metrics cards update with remote machine's CPU/memory/disk
+  [ ] Live chart scrolls for the remote device
+  [ ] Device Link dot in Agent Status glows purple (connected)
+  [ ] Stop sentinel_client → device status transitions to "STALE" (30s),
+        then "OFFLINE" (60s)
+  PASS CRITERIA: Remote device registers, shows live data, transitions correctly.
+
+────────────────────────────────────────────────────────────
+DAY 6  (Sat 2026-03-28)  REMOTE STRESS SIMULATION
+────────────────────────────────────────────────────────────
+Goals: Confirm Controlled Instability buttons run stress on the remote machine only.
+
+  [ ] Register remote device (sentinel_client.py running on remote machine)
+  [ ] Select device in Distributed tab → click "CPU Spike"
+  [ ] Confirm on remote machine: CPU jumps (htop / Activity Monitor)
+  [ ] Confirm on hub machine: CPU is UNCHANGED
+  [ ] Remote device metrics card shows elevated CPU %
+  [ ] Anomaly/diagnosis/recovery feeds populate for that device
+  [ ] Click "Memory Pressure" → remote memory increases; hub unaffected
+  [ ] Click "Stop All" → remote stress threads stop within 2s
+  [ ] Run unit test: TestRemoteStressCommands (10 tests) → all pass
+  PASS CRITERIA: Stress isolated to remote machine; hub CPU/mem unchanged.
+
+────────────────────────────────────────────────────────────
+DAY 7  (Sun 2026-03-29)  WEEK-1 REGRESSION + METRICS REVIEW
+────────────────────────────────────────────────────────────
+Goals: Run full suite; review any failures; document findings.
+
+  [ ] Run full unit test suite → expect 52/52 green
+  [ ] Review browser console (F12) for JS errors during normal use
+  [ ] Check logs/ directory for any ERROR-level log lines
+  [ ] Confirm no ghost processes: ps aux | grep sentinel
+  [ ] Confirm DB size is manageable: ls -lh data/*.db
+  [ ] Note any flaky tests or UI glitches for Week 2 follow-up
+
+
+════════════════════════════════════════════════════════════
+  WEEK 2  (2026-03-30 → 2026-04-03)  EDGE CASES + RESILIENCE
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────
+DAY 8  (Mon 2026-03-30)  MULTI-DEVICE SIMULTANEOUS STRESS
+────────────────────────────────────────────────────────────
+Goals: Two remote devices running stress simultaneously; no cross-contamination.
+
+  [ ] Register 2 remote devices (device-A, device-B)
+  [ ] Select device-A → click CPU Spike
+  [ ] Select device-B → click Memory Pressure
+  [ ] Verify device-A Anomaly feed shows CPU anomaly only
+  [ ] Verify device-B Anomaly feed shows memory anomaly only
+  [ ] Verify hub-local metrics are unaffected
+  [ ] Stop All on both devices
+  [ ] Confirm incident timelines are separate (no cross-device bleed)
+  PASS CRITERIA: Per-device incident isolation confirmed.
+
+────────────────────────────────────────────────────────────
+DAY 9  (Tue 2026-03-31)  DEVICE RECONNECT + STATE RECOVERY
+────────────────────────────────────────────────────────────
+Goals: Simulate network drop; confirm device recovers gracefully.
+
+  [ ] Start remote sentinel_client.py
+  [ ] Kill the client process mid-run (Ctrl+C or kill PID)
+  [ ] Dashboard shows device as STALE (30s), then OFFLINE (60s)
+  [ ] Restart sentinel_client.py (same device name)
+  [ ] Dashboard shows device as CONNECTED again within 10s
+  [ ] Device Link dot returns to purple-pulse
+  [ ] Metrics resume updating
+  [ ] No duplicate device entries in sidebar
+  [ ] Unit test: test_device_stale_offline + test_device_offline_after_60s → pass
+  PASS CRITERIA: Reconnect is seamless; no stale state leftover.
+
+────────────────────────────────────────────────────────────
+DAY 10  (Wed 2026-04-01)  ESCALATION LEVEL CYCLING
+────────────────────────────────────────────────────────────
+Goals: Trigger repeated anomalies; confirm escalation levels 1→2→3→4.
+
+  [ ] Start fresh system (clean DB: rm data/*.db then restart)
+  [ ] Trigger CPU Spike → wait for recovery → Stop All → repeat 4 times
+        (cooldown is 5 min, so may need to wait between spikes or
+         reduce cooldown_minutes in config/config.yaml to 1 for testing)
+  [ ] After 1st incident: recovery log shows Level 1 actions
+  [ ] After 2nd incident: Level 2 actions (throttle_cpu_process)
+  [ ] After 3rd incident: Level 3 actions (kill_top_cpu_process)
+  [ ] After 4th incident: Level 4 actions (critical escalation)
+  [ ] Unit test: TestGraduatedEscalationTracker (12 tests) → all pass
+  PASS CRITERIA: Escalation levels progress correctly 1→2→3→4.
+
+────────────────────────────────────────────────────────────
+DAY 11  (Thu 2026-04-02)  DASHBOARD PANEL COMPLETENESS
+────────────────────────────────────────────────────────────
+Goals: Audit every panel in the per-device view for data completeness.
+
+  Hub local tab:
+  [ ] CPU card: value, progress bar, top process, cores, load avg
+  [ ] Memory card: value, bar, available, swap, top process
+  [ ] Disk card: value, bar, free, total
+  [ ] Network card: latency, sent, recv, status
+  [ ] Power card: voltage, current, watts, quality (color coded)
+  [ ] Live chart: CPU + memory + disk + power lines visible
+  [ ] Anomaly Detection: entries appear after simulation
+  [ ] Diagnosis: root cause + recommended actions populated
+  [ ] Recovery: action name + status + message populated
+  [ ] Incident Timeline: resolved/failed/attempted badges correct
+  [ ] Activity Log: entries stream in real-time
+
+  Distributed tab (per remote device):
+  [ ] Same 11 checks as above for a connected remote device
+  [ ] Controlled Instability buttons respond (green ✓ confirmation)
+  [ ] Agent Status dots: all hub agents green; Device Link purple
+  PASS CRITERIA: No empty/broken panels; all data fields populated.
+
+────────────────────────────────────────────────────────────
+DAY 12  (Fri 2026-04-03)  FINAL REGRESSION + SIGN-OFF
+────────────────────────────────────────────────────────────
+Goals: Full suite clean; all known issues documented or fixed.
+
+  [ ] Run full unit test suite → 52/52 green (or more if new tests added)
+        python -m pytest tests/test_unit.py -v
+  [ ] Run workflow test:
+        python test_workflow.py
+  [ ] Open dashboard in fresh browser (clear cache): no console errors
+  [ ] Register one remote device; run full stress cycle (CPU→Mem→Disk→Stop)
+  [ ] Confirm Incident Timeline has entries with correct device_id
+  [ ] Confirm DB is not excessively large: ls -lh data/*.db
+  [ ] Review MEMORY.md — update any stale project memories
+  [ ] Document any known issues in Known Issues section below
+
+  SIGN-OFF CHECKLIST:
+  [ ] 52+ unit tests passing
+  [ ] Hub pipeline: anomaly → diagnosis → recovery → incident ✓
+  [ ] Remote pipeline: register → push metrics → anomaly → recovery ✓
+  [ ] Stress isolation: stress on remote does NOT affect hub ✓
+  [ ] Device reconnect: stale → offline → reconnect ✓
+  [ ] Escalation levels: 1 → 2 → 3 → 4 ✓
+  [ ] Dashboard: all panels populated for hub + remote device ✓
+
+
+════════════════════════════════════════════════════════════
+  KNOWN ISSUES / NOTES
+════════════════════════════════════════════════════════════
+
+  1. Disk fill sim won't produce large disk_percent spikes on
+     machines with >500 GB free — this is expected (200 MB write).
+
+  2. Security threats are synthetic (4% chance per 30s scan).
+     If no toast appears after 2 minutes, trigger manually via:
+       curl -X POST http://localhost:5001/api/simulate/start/power_sag
+
+  3. First anomaly detection takes ~3 minutes after start
+     (warmup gate + baseline settling).
+
+  4. Ollama must be running for AI diagnosis:
+       brew services start ollama
+     Without Ollama, diagnosis falls back to rule-based (still works).
+
+  5. LSTM autoencoder trains after ~6.5 minutes (60+ sequences).
+     Multivariate ml_isolation_forest anomalies fire sooner (~2 min).
+
+  6. Multiple parallel main.py instances → incident flood.
+     Always pkill -f "python.*main.py" before restarting.
+
+  7. Remote stress_disk test may take up to 3s to clean up temp file
+     on slow disks — this is expected behaviour.
+
+
+════════════════════════════════════════════════════════════
+  TEST RESULTS LOG  (fill in as you go)
+════════════════════════════════════════════════════════════
+
+  DATE         UNIT TESTS    PIPELINE    DISTRIBUTED    NOTES
+  ──────────   ──────────    ────────    ───────────    ─────
+  2026-03-23   52/52 ✓       ...         ...
+  2026-03-24
+  2026-03-25
+  2026-03-26
+  2026-03-27
+  2026-03-28
+  2026-03-29   (Week 1 total)
+  2026-03-30
+  2026-03-31
+  2026-04-01
+  2026-04-02
+  2026-04-03   (Final sign-off)

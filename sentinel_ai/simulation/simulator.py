@@ -59,10 +59,8 @@ class FailureSimulator:
         """Main simulation loop"""
         while self.running:
             try:
-                # Randomly trigger scenarios
                 self._trigger_random_scenario()
 
-                # Wait before next scenario
                 time.sleep(random.randint(30, 120))
 
             except Exception as e:
@@ -104,33 +102,26 @@ class FailureSimulator:
 
         self.logger.warning(f"Simulating memory spike for {duration}s...")
 
-        # Allocate memory to cause spike
         try:
-            # Get available memory
             mem = psutil.virtual_memory()
             available_mb = mem.available / (1024 * 1024)
 
-            # Calculate how much to allocate (leave some headroom)
             target_mb = int(available_mb * 0.5)
 
-            # Allocate memory
             memory_hog = []
-            chunk_size = 1024 * 1024  # 1MB chunks
+            chunk_size = 1024 * 1024
 
             for _ in range(target_mb):
                 memory_hog.append(' ' * chunk_size)
 
-                # Check if we've reached target
                 current_percent = psutil.virtual_memory().percent
                 if current_percent >= target_percent:
                     break
 
             self.logger.info(f"Memory allocated, current usage: {psutil.virtual_memory().percent}%")
 
-            # Hold for duration
             time.sleep(duration)
 
-            # Release memory
             memory_hog.clear()
             del memory_hog
 
@@ -146,7 +137,6 @@ class FailureSimulator:
 
         self.logger.warning(f"Simulating MQTT drop for {duration}s...")
 
-        # Publish event to simulate MQTT failure
         if self.event_bus:
             self.event_bus.create_event(
                 event_type="simulation.mqtt_drop",
@@ -154,8 +144,6 @@ class FailureSimulator:
                 source='Simulator'
             )
 
-        # In real implementation, would actually disconnect MQTT
-        # For simulation, just wait
         time.sleep(duration)
 
         self.logger.info("MQTT drop simulation completed")
@@ -170,7 +158,6 @@ class FailureSimulator:
             f"Simulating latency increase ({multiplier}x) for {duration}s..."
         )
 
-        # Publish event
         if self.event_bus:
             self.event_bus.create_event(
                 event_type="simulation.latency_increase",
@@ -189,7 +176,6 @@ class FailureSimulator:
 
         self.logger.warning(f"Simulating sensor failure (rate: {failure_rate})...")
 
-        # Publish event
         if self.event_bus:
             self.event_bus.create_event(
                 event_type="simulation.sensor_failure",
@@ -197,7 +183,6 @@ class FailureSimulator:
                 source='Simulator'
             )
 
-        # Simulate for a period
         time.sleep(60)
 
         self.logger.info("Sensor failure simulation completed")
@@ -210,14 +195,11 @@ class FailureSimulator:
 
         self.logger.warning(f"Simulating CPU overload for {duration}s...")
 
-        # Spawn CPU-intensive threads
         def cpu_burner(stop_event):
             """Burn CPU cycles"""
             while not stop_event.is_set():
-                # Busy loop
                 _ = sum(i * i for i in range(10000))
 
-        # Calculate number of threads needed
         cpu_count = psutil.cpu_count()
         num_threads = int(cpu_count * (target_percent / 100))
 
@@ -225,7 +207,6 @@ class FailureSimulator:
         threads = []
 
         try:
-            # Start CPU burner threads
             for _ in range(num_threads):
                 t = threading.Thread(target=cpu_burner, args=(stop_event,), daemon=True)
                 t.start()
@@ -233,11 +214,9 @@ class FailureSimulator:
 
             self.logger.info(f"Started {num_threads} CPU burner threads")
 
-            # Let it run for duration
             time.sleep(duration)
 
         finally:
-            # Stop threads
             stop_event.set()
 
             for t in threads:
@@ -272,6 +251,5 @@ class FailureSimulator:
 
         method = scenario_methods.get(scenario_name)
         if method:
-            # Run in thread to avoid blocking
             thread = threading.Thread(target=method, daemon=True)
             thread.start()

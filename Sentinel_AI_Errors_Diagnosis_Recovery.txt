@@ -1,0 +1,712 @@
+================================================================================
+  SENTINEL AI — Errors, Diagnosis & Recovery Reference Guide
+  Self-Healing IoT Monitoring System
+  Generated: 2026-03-12
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HOW THE SYSTEM WORKS (Overview)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Every 5 seconds the Monitoring Agent collects metrics from the device
+  (CPU, Memory, Disk, Network, Power). These metrics flow through five
+  intelligent agents connected by an in-memory event bus:
+
+    [Monitoring] → [Anomaly Detection] → [Diagnosis] → [Recovery] → [Learning]
+
+  Anomalies must persist for 3 consecutive readings (15 seconds) before firing,
+  and a 5-minute cooldown prevents the same metric from re-alerting.
+
+  Detection uses six independent algorithms simultaneously:
+    1.  Z-Score         — statistical deviation from rolling baseline
+    2.  Spike Detection — sudden jump vs. local moving average
+    3.  Threshold       — hard limit breach (adaptive cap at config value)
+    4.  Isolation Forest— multivariate ML (sklearn), runs after 50+ samples
+    5.  Keras LSTM      — time-series deep learning, trains after 79 readings (~6.5 min)
+    6.  Rule-Based      — explicit YAML rules for known failure patterns
+
+  Diagnosis runs concurrently in a background thread (never blocks the event
+  bus). It tries AI providers in order: Groq → Ollama → OpenAI → Rule-Based.
+
+  Recovery executes actions automatically with up to 3 retries. A 5-minute
+  cooldown per action prevents thrashing. The system learns from outcomes and
+  refines thresholds over time.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 1 — CPU ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 1: High CPU Usage with Runaway Process
+  ─────────────────────────────────────────────
+  TRIGGER:
+    • cpu_percent > 80% (config threshold)
+    • top_process_cpu > 50% (single process consuming more than half the CPU)
+    • Must sustain for 3+ consecutive 5-second readings (15 seconds)
+
+  WHAT YOU SEE ON DASHBOARD:
+    • CPU progress bar turns red
+    • Toast notification: "cpu.cpu_percent · HIGH — spike detected — value: 98.XX"
+    • Anomaly counter increments
+
+  DIAGNOSIS:
+    Rule ID: cpu_high_with_process
+    Severity: HIGH
+    AI Message: "High CPU usage caused by process [name] consuming [X]%"
+    Methods Used: rule_based + groq_ai (or ollama fallback)
+    Root Cause: A single process is monopolising CPU resources, likely a
+                runaway computation loop or infinite retry in an IoT service.
+
+  RECOVERY ACTIONS:
+    1. kill_process
+       Strategy A (preferred): InstabilityRunner identifies the exact simulation
+       subprocess PID and terminates it cleanly via SIGTERM → SIGKILL.
+       Strategy B (fallback): Scans all processes, finds the one consuming the
+       most RAM above 500 MB, terminates it (skips critical system processes).
+    2. restart_service
+       On Linux: sudo systemctl restart sentinel-agent
+       On macOS: anomaly detection state is reset (equivalent lightweight recovery)
+
+  COOLDOWN: 5 minutes per action before re-execution.
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 2: Sustained High CPU (System-Wide)
+  ──────────────────────────────────────────
+  TRIGGER:
+    • cpu_percent > 85% for more than 5 minutes continuously
+
+  DIAGNOSIS:
+    Rule ID: cpu_sustained_high
+    Severity: CRITICAL
+    AI Message: "Sustained high CPU usage detected for over 5 minutes"
+    Root Cause: Resource exhaustion — possibly device is undersized for current
+                workload, or a background service is misbehaving.
+
+  RECOVERY ACTIONS:
+    1. investigate_processes  (advisory — logged, no automated kill)
+    2. scale_resources        (advisory — triggers cloud scaling notification)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 3: ML-Detected CPU Multivariate Anomaly
+  ───────────────────────────────────────────────
+  TRIGGER:
+    • Isolation Forest model flags [cpu%, memory%, disk%] as an outlier
+      (contamination threshold 10%) — fires as "ml_isolation_forest" type
+    • LSTM Autoencoder flags a sequence anomaly — fires as "ml_lstm_autoencoder"
+
+  DIAGNOSIS:
+    Severity: MEDIUM (AI/ML methods don't map to a named rule, so Groq/Ollama
+              diagnose contextually from the metric snapshot)
+    Root Cause: Unusual combination of resource usage not seen in training data.
+
+  RECOVERY ACTIONS: kill_process, restart_service (based on AI recommendation)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 2 — MEMORY ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 4: Memory Leak
+  ─────────────────────
+  TRIGGER:
+    • memory_percent > 85%
+    • memory trend is continuously increasing over a 30-minute window
+    • (z-score method also fires independently when deviation > 3σ)
+
+  WHAT YOU SEE ON DASHBOARD:
+    • Memory bar turns orange then red
+    • Toast: "memory.memory_percent · CRITICAL — z_score deviation"
+
+  DIAGNOSIS:
+    Rule ID: memory_leak
+    Severity: CRITICAL
+    AI Message: "Potential memory leak detected — memory usage increasing steadily"
+    Root Cause: A process is not releasing memory after use. Common in IoT edge
+                apps that buffer sensor data without garbage collection.
+
+  RECOVERY ACTIONS:
+    1. kill_process    — terminate the highest-memory process above 500 MB RSS
+    2. restart_service — restart sentinel-agent or reset in-process state
+    3. clear_cache     — delete /tmp/sentinel_cache and /var/cache/sentinel
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 5: Sudden Memory Spike
+  ─────────────────────────────
+  TRIGGER:
+    • memory_percent > 80%
+    • Memory jumped > 30% of total RAM in a short time window (spike detection:
+      current value > 2.5× local moving average)
+
+  DIAGNOSIS:
+    Rule ID: memory_spike
+    Severity: HIGH
+    AI Message: "Sudden memory spike detected — [X]% increase in short time"
+    Root Cause: Bulk data load, large sensor payload, or memory dump triggered
+                by another service.
+
+  RECOVERY ACTIONS:
+    1. kill_process   — same tiered kill strategy as CPU errors
+    2. clear_cache    — free temporary file buffers
+
+  SIMULATION: Click "Memory Pressure" in the Simulation Lab to trigger this.
+  The simulation allocates 20% of total RAM continuously for 90 seconds.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 3 — DISK ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 6: Critical Disk Full
+  ────────────────────────────
+  TRIGGER:
+    • disk_percent > 95%
+    • Sustained across 3+ consecutive readings
+
+  WHAT YOU SEE ON DASHBOARD:
+    • Disk bar hits red
+    • Toast: "disk.disk_percent · CRITICAL — threshold_exceeded"
+
+  DIAGNOSIS:
+    Rule ID: disk_full
+    Severity: CRITICAL
+    AI Message: "Critical disk space usage: [X]% used"
+    Root Cause: Log accumulation, uncompressed sensor data, or a filling temp
+                file. Common on IoT devices with small eMMC storage.
+
+  RECOVERY ACTIONS:
+    1. clear_cache    — remove /tmp/sentinel_cache, /var/cache/sentinel
+    2. cleanup_logs   — advisory: prune old log files
+    3. rotate_data    — advisory: archive and rotate historical sensor data
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 7: High Disk Usage
+  ─────────────────────────
+  TRIGGER:
+    • disk_percent > 85%
+
+  DIAGNOSIS:
+    Rule ID: disk_high
+    Severity: MEDIUM
+    AI Message: "High disk space usage: [X]% used"
+
+  RECOVERY ACTIONS:
+    1. clear_cache
+    2. cleanup_logs
+
+  SIMULATION: Click "Disk Fill" in the Simulation Lab. This writes a 200 MB
+  temporary file to /tmp and holds it for 90 seconds.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 4 — NETWORK ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 8: High Packet Loss
+  ──────────────────────────
+  TRIGGER:
+    • packet_loss_percent > 5% (max_packet_loss_percent threshold)
+    • Ping targets: 8.8.8.8 and 1.1.1.1
+
+  DIAGNOSIS:
+    Rule ID: network_packet_loss
+    Severity: HIGH
+    AI Message: "High network packet loss detected: [X]%"
+    Root Cause: Network congestion, RF interference (for wireless IoT), or
+                upstream ISP issues affecting device telemetry delivery.
+
+  RECOVERY ACTIONS:
+    1. check_network — runs socket test to 8.8.8.8:53 + DNS lookup for google.com
+    2. failover      — switches to backup MQTT broker if configured
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 9: Network Unreachable
+  ─────────────────────────────
+  TRIGGER:
+    • ping_success == false
+    • packet_loss_percent > 50%
+
+  DIAGNOSIS:
+    Rule ID: network_unreachable
+    Severity: CRITICAL
+    AI Message: "Network connectivity severely degraded or unreachable"
+    Root Cause: Physical disconnection, DHCP failure, or complete link failure.
+                On an IoT device this means all telemetry to cloud is lost.
+
+  RECOVERY ACTIONS:
+    1. check_network_interface — diagnostic run
+    2. restart_network         — advisory on Linux (systemctl restart networking)
+
+
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 6 — MQTT / IOT CONNECTIVITY ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 11: MQTT Broker Disconnected
+  ────────────────────────────────────
+  TRIGGER:
+    • mqtt_connected == false
+
+  NOTE: MQTT monitoring is disabled on macOS dev. Enable in config.yaml
+        under monitoring.metrics.mqtt.enabled = true for real IoT hardware.
+
+  DIAGNOSIS:
+    Rule ID: mqtt_disconnected
+    Severity: CRITICAL
+    AI Message: "MQTT broker connection lost"
+    Root Cause: Broker crashed, network interruption, or auth failure.
+                On IoT this means sensor data is no longer being published
+                to the cloud — a silent data gap forms.
+
+  RECOVERY ACTIONS:
+    1. restart_mqtt — brew services restart mosquitto (macOS) or
+                      sudo systemctl restart mosquitto (Linux)
+    2. failover     — switch to backup MQTT broker if BACKUP_MQTT_BROKER env set
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 12: MQTT High Latency
+  ────────────────────────────
+  TRIGGER:
+    • mqtt_latency_ms > 5000 ms (5 seconds)
+
+  DIAGNOSIS:
+    Rule ID: mqtt_high_latency
+    Severity: HIGH
+    AI Message: "MQTT broker experiencing high latency: [X] ms"
+    Root Cause: Network congestion between device and broker, broker overload,
+                or QoS retry storms from multiple clients.
+
+  RECOVERY ACTIONS:
+    1. check_network
+    2. restart_mqtt
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 7 — SENSOR ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 13: Sensor Read Timeout
+  ──────────────────────────────
+  TRIGGER:
+    • sensor_latency_ms > 5000 ms
+
+  NOTE: Sensor monitoring is disabled on macOS dev. Enable with
+        monitoring.metrics.sensors.enabled = true for real IoT hardware.
+
+  DIAGNOSIS:
+    Rule ID: sensor_timeout
+    Severity: HIGH
+    AI Message: "Sensor read timeout — latency [X] ms exceeds threshold"
+    Root Cause: I2C/SPI bus contention, sensor hardware malfunction, or
+                electrical noise causing read delays on the IoT bus.
+
+  RECOVERY ACTIONS:
+    1. reconnect_sensor — re-initialise the sensor bus connection (2-second pause)
+    2. restart_service  — restart the sensor polling service
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 14: Sensor Communication Failure
+  ───────────────────────────────────────
+  TRIGGER:
+    • sensor_success_rate < 50% (less than half of reads succeed)
+
+  DIAGNOSIS:
+    Rule ID: sensor_failure
+    Severity: CRITICAL
+    AI Message: "Sensor failure — success rate below 50%"
+    Root Cause: Wiring failure, damaged sensor, firmware corruption, or
+                incompatible voltage levels on the sensor bus.
+
+  RECOVERY ACTIONS:
+    1. reconnect_sensor
+    2. hardware_check  (advisory — alerts human operator)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 8 — COMBINED / CASCADING FAILURE ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 15: System-Wide Overload
+  ───────────────────────────────
+  TRIGGER (all three must be true simultaneously):
+    • cpu_percent > 80%
+    • memory_percent > 80%
+    • disk_io_wait > 50%
+
+  DIAGNOSIS:
+    Rule ID: system_overload
+    Severity: CRITICAL
+    AI Message: "System-wide resource overload detected across CPU, memory, and disk"
+    Root Cause: Multiple runaway processes, OOM pressure causing swap thrashing,
+                and heavy I/O creating a feedback loop — the classic IoT death spiral.
+
+  RECOVERY ACTIONS:
+    1. kill_process     — terminate the worst offender
+    2. restart_service  — reset agent state
+    3. scale_resources  — notify cloud orchestration layer
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Error 16: Cascading Failure Pattern
+  ─────────────────────────────────────
+  TRIGGER (all three must be true):
+    • mqtt_connected == false
+    • sensor_success_rate < 70%
+    • cpu_percent > 85%
+
+  DIAGNOSIS:
+    Rule ID: cascading_failure
+    Severity: CRITICAL
+    AI Message: "Cascading failure detected — MQTT down, sensors failing, CPU overloaded"
+    Root Cause: A single failure (e.g., network loss) cascades: without MQTT,
+                the device buffers all sensor data in RAM, exhausting memory and
+                CPU as it retries. The sensor bus then starves of CPU cycles.
+
+  RECOVERY ACTIONS:
+    1. full_system_restart — restart the entire Sentinel agent stack (simulated)
+    2. failover            — switch to backup MQTT broker
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 5 — POWER ERRORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error 10: Voltage Sag / Input Power Drop
+  ─────────────────────────────────────────
+  TRIGGER:
+    • power_voltage_v deviates > 10% from nominal 5.0 V (e.g., drops below 4.5 V)
+    • Z-score on voltage reading exceeds 3.0 standard deviations
+    • OR spike detection: voltage drops > 2.5× faster than local average
+
+  WHAT YOU SEE ON DASHBOARD:
+    • Power card: voltage value turns yellow/red
+    • Power quality bar shrinks
+    • Toast: "power.power_voltage_v · HIGH — z_score — value: 4.25"
+
+  DIAGNOSIS:
+    (No dedicated rule — Groq/Ollama AI diagnoses from context)
+    Severity: HIGH
+    AI Message: "Input voltage dropped to [X] V — possible power supply issue,
+                 brownout, or excessive current draw from connected sensors."
+    Root Cause: Inadequate power supply, undersized cable, load spike from
+                connected actuators, or failing power supply unit.
+
+  RECOVERY ACTIONS:
+    (AI-recommended, varies) — typically: restart_service, check_network
+
+  SIMULATION: Click "Power Sag" in the Simulation Lab. This injects a 0.75 V
+  drop into the simulated voltage for 60 seconds.
+
+  METRICS MONITORED:
+    • power_voltage_v       — input voltage (V) — anomaly-detected
+    • power_current_a       — current draw (A) — anomaly-detected
+    • power_watts           — total power (W) — display only
+    • power_quality         — score 0-100 — display only
+    • power_voltage_deviation_pct — % deviation from nominal — display only
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 9 — CYBERSECURITY THREATS (DEMO MODE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  The Security Agent scans every 30 seconds. In demo mode it also injects
+  one synthetic threat approximately every 12 minutes (4% chance per scan)
+  so the dashboard always has something meaningful to display.
+
+  REAL CHECKS (run on every scan):
+
+  Threat A: Unexpected Listening Port
+  ─────────────────────────────────────
+  WHAT IS CHECKED:
+    All TCP/UDP ports currently in LISTEN state are compared against the
+    allowlist: {22, 80, 443, 1883, 5001, 8883}
+  SEVERITY: MEDIUM
+  MEANING: A new service opened a port — could be a rogue process, backdoor,
+           or an accidental service deployment on the IoT device.
+  ICON: 🔍
+
+  Threat B: Connection Flood
+  ───────────────────────────
+  WHAT IS CHECKED:
+    Total concurrent TCP/UDP connections > 200 (HIGH at > 500)
+  SEVERITY: MEDIUM / HIGH
+  MEANING: The device is receiving an abnormally high number of connections,
+           typical of a port scan, DDoS attempt, or a malfunctioning client
+           that is not closing connections.
+  ICON: ⚠️
+
+  Threat C: Privileged Process Anomaly
+  ─────────────────────────────────────
+  WHAT IS CHECKED:
+    Processes running as root/SYSTEM that are not in the safe whitelist
+    (kernel_task, launchd, systemd, init, python, sshd, sentinel)
+  SEVERITY: LOW
+  MEANING: An unexpected process has escalated to root — possible privilege
+           escalation exploit or misconfigured IoT service.
+  ICON: 👤
+
+  SIMULATED THREATS (injected for demo visibility):
+
+  Threat D: SSH Brute-Force Attempt
+    Severity: HIGH
+    Detail: Multiple failed login attempts from external IP.
+
+  Threat E: Data Exfiltration
+    Severity: CRITICAL
+    Detail: Unusual outbound transfer of 847 MB to unknown external IP.
+
+  Threat F: Port Scan
+    Severity: MEDIUM
+    Detail: Sequential port scan detected from 192.168.x.x.
+
+  Threat G: Malware Signature
+    Severity: CRITICAL
+    Detail: Known malicious process signature detected in memory.
+
+  Threat H: Auth Anomaly
+    Severity: HIGH
+    Detail: 23 failed authentication attempts in 60 seconds.
+
+  SECURITY SCORE CALCULATION:
+    Starts at 100, deducted per recent threat:
+      critical → -30 points
+      high     → -20 points
+      medium   → -10 points
+      low      → -5 points
+    Score < 40: CRITICAL (red, pulsing)
+    Score 40-69: Threats Detected (orange)
+    Score 70-89: Elevated Risk (yellow)
+    Score 90-100: All Clear (green)
+
+  NOTE: No automated recovery for security threats in current implementation.
+  In production: integrate with Suricata IDS, Zeek, or AWS GuardDuty and
+  trigger network isolation or firewall rule updates.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 10 — RECOVERY ACTIONS REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Action            Risk    What It Actually Does
+  ────────────────  ──────  ─────────────────────────────────────────────────
+  kill_process      MEDIUM  Strategy 1: Terminates exact simulation subprocess
+                            via InstabilityRunner (PID-tracked, SIGTERM→SIGKILL)
+                            Strategy 2: Scans all procs, kills the one with
+                            highest RSS memory above 500 MB (skips system procs)
+
+  restart_service   MEDIUM  Linux: sudo systemctl restart sentinel-agent
+                            macOS: resets anomaly detection consecutive counters
+                            (equivalent lightweight recovery for dev/test)
+
+  restart_mqtt      LOW     macOS: brew services restart mosquitto
+                            Linux: sudo systemctl restart mosquitto
+                            If not installed: logs advisory, does not fail
+
+  clear_cache       LOW     Removes /tmp/sentinel_cache and /var/cache/sentinel,
+                            then recreates the empty directories
+
+  failover          HIGH    Switches MQTT client to backup broker address
+                            (configured via BACKUP_MQTT_BROKER env var)
+
+  check_network     LOW     Tests TCP connection to 8.8.8.8:53 (internet check)
+                            Tests DNS resolution for google.com
+
+  reconnect_sensor  LOW     Re-initialises sensor bus connection (2-second delay)
+                            Placeholder for real I2C/SPI reconnect in production
+
+  cleanup_logs      LOW     Advisory — logs the recommendation, does not delete
+                            (human operator expected to act)
+
+  rotate_data       MEDIUM  Advisory — logs the recommendation for data archival
+
+  scale_resources   MEDIUM  Advisory — notifies cloud orchestration layer
+
+  full_system_restart HIGH  Simulated on dev/macOS — in production restarts the
+                            entire Sentinel agent stack via systemctl
+
+  RETRY POLICY:
+    All actions retry up to 3 times with a 5-second delay between attempts.
+    After 3 failures the action is marked as "failed" and logged.
+
+  COOLDOWN:
+    After any action executes (success or fail), that action cannot be
+    triggered again for 5 minutes (cooldown_period_seconds: 300).
+    This prevents recovery loops and thrashing.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 11 — ANOMALY DETECTION ALGORITHM DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Z-Score (Statistical Baseline)
+  ───────────────────────────────
+  How: Maintains a rolling window of the last 100 values per metric.
+       Computes mean and standard deviation. If |current - mean| / std > 3.0,
+       it's an anomaly.
+  Good for: Catching gradual drift and values that are statistically unusual
+            even if they haven't crossed a hard threshold yet.
+  Limitation: Needs 10+ values to build a reliable baseline (first ~50 seconds
+              of operation produce no z-score anomalies).
+
+  Spike Detection
+  ────────────────
+  How: Compares current value to the moving average of the last 5 readings.
+       If current > 2.5 × average, it's a spike.
+  Good for: Sudden jumps (e.g., CPU going 0%→98% instantly) that z-score might
+            miss if the baseline is already elevated.
+
+  Threshold Checks
+  ─────────────────
+  How: Hard limits from config. CPU > 80%, Memory > 85%, Disk > 90%,
+       Packet Loss > 5%, Power deviation > 10%.
+  Adaptive: The dashboard recalculates thresholds every 30 seconds using the
+            lower 60% of recent data as the "normal" baseline, then caps
+            the adaptive value at the config maximum. This prevents stress-test
+            data from inflating the threshold so high that real anomalies go
+            undetected.
+
+  Isolation Forest (ML)
+  ──────────────────────
+  How: Trains on [cpu%, memory%, disk%, packet_loss%] together. Points that
+       are easy to isolate (short path in the tree) are anomalies.
+  Trains after: 50+ metric samples (~4 minutes at 5s interval).
+  Contamination: 10% — expects roughly 1 in 10 future points to be anomalous.
+  Retrains: Every 24 hours with accumulated data.
+  Good for: Catching correlated anomalies, e.g., low CPU + high memory + low
+            disk — a combination no single-metric check would catch.
+
+  Keras LSTM Autoencoder (Deep Learning)
+  ────────────────────────────────────────
+  How: Learns normal time-series sequences of [cpu%, memory%, disk%] using a
+       20-step sliding window. During inference, reconstructs the sequence and
+       measures error. High reconstruction error = anomaly.
+  Trains after: 79 readings (6.5 minutes at 5s interval) — visible as a
+                progress bar in the Agent Status card.
+  Good for: Detecting periodic patterns, slow ramps, and temporal anomalies
+            that point-in-time methods miss (e.g., memory growing slowly over
+            10 minutes before hitting a threshold).
+  Platform: Runs on Apple Silicon via PyTorch with MPS fallback enabled.
+
+  Consecutive Readings Gate
+  ──────────────────────────
+  All anomalies (regardless of method) must be detected on 3 or more
+  consecutive readings before firing. This suppresses one-off spikes and
+  sensor noise. At a 5-second collection interval, this means an anomaly
+  must persist for at least 15 seconds before an alert is generated.
+
+  Cooldown
+  ─────────
+  Once an anomaly fires for a specific metric, that metric cannot fire again
+  for 5 minutes (cooldown_minutes: 5). This prevents alert storms when a
+  system is stuck in a degraded state.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 12 — AI DIAGNOSIS PROVIDERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Priority Order (highest to lowest):
+
+  1. Groq (llama-3.1-8b-instant)
+     Cloud API. Fast inference (~1-2 seconds). Free tier.
+     Configured via GROQ_API_KEY in .env file.
+     Prompt includes: anomaly data, last 30 min of metric history,
+     last 100 log lines, and a structured JSON response format.
+
+  2. Ollama (llama3.2:3b)
+     Local inference. No API cost. ~3-8 seconds depending on hardware.
+     Must be running: brew services start ollama
+     Falls back here if Groq is unavailable or rate-limited.
+
+  3. OpenAI (gpt-4o)
+     Disabled (no billing credits). Can be re-enabled in config.yaml.
+
+  4. AWS Bedrock (Claude 3 Sonnet)
+     Disabled (requires AWS credentials). Enterprise fallback.
+
+  5. Rule-Based Engine
+     Always available. Evaluates YAML diagnosis rules from
+     config/diagnosis_rules.yaml. No AI required.
+     Falls back here if all AI providers fail.
+
+  Diagnosis runs in a background thread so it never blocks the event bus.
+  The badge next to "Diagnosis Agent" in the dashboard shows the active provider.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 13 — METRICS EXCLUDED FROM ANOMALY DETECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  These metrics are collected and displayed but NOT passed through anomaly
+  detection algorithms (to prevent false positives):
+
+  CPU:      cpu_count, cpu_freq_current, top_process_cpu, top_process_pid,
+            load_avg_1m, load_avg_5m, load_avg_15m
+  Memory:   top_process_memory, memory_total_mb, swap_used_mb,
+            memory_available_mb, memory_used_mb
+  Disk:     disk_read_mb, disk_write_mb, disk_total_gb, disk_used_gb, disk_free_gb
+  Network:  bytes_sent_mb, bytes_recv_mb, packets_sent, packets_recv,
+            errors_in, errors_out
+  MQTT:     mqtt_latency_ms
+  Sensors:  sensor_count, sensors_online
+  Power:    power_quality, power_watts, power_voltage_deviation_pct
+
+  Reason: These are either always-changing (PID numbers, byte counters),
+          correlated with a metric already being monitored, or display-only
+          derived values where anomalies would be redundant.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  QUICK REFERENCE — DEMO SCRIPT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Step 1 — Start the system:
+    cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+    kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+    source venv/bin/activate && brew services start ollama
+    python main.py
+    Open: http://localhost:5001
+
+  Step 2 — Wait ~3 minutes for ML baselines to stabilise
+    (toast notifications for anomalies are suppressed during warmup)
+    Watch the LSTM progress bar in Agent Status until it shows "trained"
+
+  Step 3 — Trigger CPU Spike
+    Click "CPU Spike" → System saturates all cores
+    After 15 seconds (3 readings): anomaly toast fires (CPU · HIGH)
+    After ~5 seconds: Diagnosis runs (Groq AI or Ollama)
+    Recovery: kill_process terminates the stress subprocess
+    Timeline shows: DETECTED → DIAGNOSED → RESOLVED
+
+  Step 4 — Trigger Memory Pressure
+    Click "Memory Pressure" → 20% RAM allocated
+    Toast fires after 15 seconds: memory.memory_percent · HIGH
+    Recovery: kill_process + clear_cache
+
+  Step 5 — Trigger Power Sag
+    Click "Power Sag" → Voltage drops 0.75 V for 60 seconds
+    Watch Power card voltage reading fall and quality bar shrink
+    Toast: power.power_voltage_v · HIGH
+
+  Step 6 — Watch Security Panel
+    Security score and threat feed update every 10 seconds
+    Synthetic threats appear ~every 12 minutes
+    Click Stop All to end simulations
+
+  Step 7 — Expand Statistics
+    Click "Anomalies" stat box to see every detected anomaly
+    Click "Diagnoses" to see AI root cause analysis
+    Click "Recoveries" to see action results
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

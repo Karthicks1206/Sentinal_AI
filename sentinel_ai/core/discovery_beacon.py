@@ -24,9 +24,9 @@ import time
 from typing import Optional
 
 
-DISCOVERY_PORT = 47474          # UDP port (same constant in sentinel_client.py)
-DISCOVERY_MSG  = b"SENTINEL_DISCOVER"
-BEACON_INTERVAL = 10            # seconds between broadcasts
+DISCOVERY_PORT = 47474
+DISCOVERY_MSG = b"SENTINEL_DISCOVER"
+BEACON_INTERVAL = 10
 
 
 class DiscoveryBeacon:
@@ -39,10 +39,9 @@ class DiscoveryBeacon:
 
     def __init__(self, http_port: int = 5001):
         self._http_port = http_port
-        self._running   = False
+        self._running = False
         self._threads: list[threading.Thread] = []
 
-    # ── Lifecycle ─────────────────────────────────────────────────────────
 
     def start(self):
         self._running = True
@@ -60,15 +59,14 @@ class DiscoveryBeacon:
     def stop(self):
         self._running = False
 
-    # ── Payload ───────────────────────────────────────────────────────────
 
     def _build_payload(self) -> bytes:
         """Build the JSON announcement payload containing this hub's URL."""
         local_ip = self._local_ip()
-        payload  = {
+        payload = {
             'sentinel_hub': True,
-            'url':          f"http://{local_ip}:{self._http_port}",
-            'version':      '1.0',
+            'url': f"http://{local_ip}:{self._http_port}",
+            'version': '1.0',
         }
         return json.dumps(payload).encode()
 
@@ -84,7 +82,6 @@ class DiscoveryBeacon:
         except Exception:
             return '127.0.0.1'
 
-    # ── Listener: reply to discovery requests ────────────────────────────
 
     def _listen_loop(self):
         """Listen for SENTINEL_DISCOVER UDP packets and reply immediately."""
@@ -94,7 +91,6 @@ class DiscoveryBeacon:
         try:
             sock.bind(('', DISCOVERY_PORT))
         except OSError:
-            # Port already in use — likely another Sentinel instance
             return
 
         while self._running:
@@ -109,7 +105,6 @@ class DiscoveryBeacon:
 
         sock.close()
 
-    # ── Broadcaster: proactive announcements every N seconds ─────────────
 
     def _broadcast_loop(self):
         """Broadcast hub presence every BEACON_INTERVAL seconds."""
@@ -128,7 +123,6 @@ class DiscoveryBeacon:
             except Exception:
                 pass
 
-            # Sleep in short chunks so stop() is responsive
             for _ in range(BEACON_INTERVAL * 2):
                 if not self._running:
                     break

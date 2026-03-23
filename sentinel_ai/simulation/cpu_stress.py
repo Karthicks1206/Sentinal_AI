@@ -14,7 +14,6 @@ def burn_cpu(duration: float):
     """Burn one CPU core for the given duration."""
     end = time.time() + duration
     while time.time() < end:
-        # Pure computation — no sleep, no I/O
         _ = sum(i * i for i in range(10_000))
 
 

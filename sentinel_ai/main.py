@@ -11,7 +11,6 @@ import threading
 import webbrowser
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.config import get_config
@@ -44,10 +43,8 @@ class SentinelAI:
         Args:
             config_path: Optional path to config file
         """
-        # Load configuration
         self.config = get_config(config_path)
 
-        # Setup logging
         setup_logging(self.config)
         self.logger = get_logger('SentinelAI')
 
@@ -58,20 +55,15 @@ class SentinelAI:
         self.logger.info(f"Environment: {self.config.environment}")
         self.logger.info("="*60)
 
-        # Initialize core infrastructure
         self.event_bus = get_event_bus(self.config)
         self.database = get_database(self.config)
 
-        # Remote device manager (accepts metric pushes from sentinel_client.py)
         self.remote_device_manager = RemoteDeviceManager(
             self.event_bus, get_logger('RemoteDeviceManager')
         )
 
-        # UDP discovery beacon — allows sentinel_client.py to find the hub
-        # automatically on the LAN without any IP configuration
         self.discovery_beacon = DiscoveryBeacon(http_port=5001)
 
-        # Initialize AWS integration
         self.aws_iot = None
         self.cloudwatch = None
 
@@ -83,11 +75,9 @@ class SentinelAI:
             except Exception as e:
                 self.logger.error(f"Failed to initialize AWS integration: {e}")
 
-        # Initialize agents
         self.agents = {}
         self._init_agents()
 
-        # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
@@ -98,7 +88,6 @@ class SentinelAI:
         self.logger.info("Initializing agents...")
 
         try:
-            # Monitoring Agent
             if self.config.is_enabled('monitoring'):
                 self.agents['monitoring'] = MonitoringAgent(
                     name='MonitoringAgent',
@@ -107,9 +96,8 @@ class SentinelAI:
                     logger=get_logger('MonitoringAgent'),
                     database=self.database
                 )
-                self.logger.info("✓ Monitoring Agent initialized")
+                self.logger.info(" Monitoring Agent initialized")
 
-            # Anomaly Detection Agent
             if self.config.is_enabled('anomaly_detection'):
                 self.agents['anomaly'] = AnomalyDetectionAgent(
                     name='AnomalyDetectionAgent',
@@ -118,9 +106,8 @@ class SentinelAI:
                     logger=get_logger('AnomalyDetectionAgent'),
                     database=self.database
                 )
-                self.logger.info("✓ Anomaly Detection Agent initialized")
+                self.logger.info(" Anomaly Detection Agent initialized")
 
-            # Diagnosis Agent
             if self.config.is_enabled('diagnosis'):
                 self.agents['diagnosis'] = DiagnosisAgent(
                     name='DiagnosisAgent',
@@ -129,9 +116,8 @@ class SentinelAI:
                     logger=get_logger('DiagnosisAgent'),
                     database=self.database
                 )
-                self.logger.info("✓ Diagnosis Agent initialized")
+                self.logger.info(" Diagnosis Agent initialized")
 
-            # Recovery Agent
             if self.config.is_enabled('recovery'):
                 self.agents['recovery'] = RecoveryAgent(
                     name='RecoveryAgent',
@@ -141,9 +127,8 @@ class SentinelAI:
                     database=self.database,
                     remote_device_manager=self.remote_device_manager,
                 )
-                self.logger.info("✓ Recovery Agent initialized")
+                self.logger.info(" Recovery Agent initialized")
 
-            # Learning Agent
             if self.config.is_enabled('learning'):
                 self.agents['learning'] = LearningAgent(
                     name='LearningAgent',
@@ -152,9 +137,8 @@ class SentinelAI:
                     logger=get_logger('LearningAgent'),
                     database=self.database
                 )
-                self.logger.info("✓ Learning Agent initialized")
+                self.logger.info(" Learning Agent initialized")
 
-            # Security Agent (always enabled — demo/stub mode)
             self.agents['security'] = SecurityAgent(
                 name='SecurityAgent',
                 config=self.config,
@@ -162,7 +146,7 @@ class SentinelAI:
                 logger=get_logger('SecurityAgent'),
                 database=self.database
             )
-            self.logger.info("✓ Security Agent initialized")
+            self.logger.info(" Security Agent initialized")
 
             self.logger.info(f"Successfully initialized {len(self.agents)} agents")
 
@@ -175,29 +159,24 @@ class SentinelAI:
         self.logger.info("Starting Sentinel AI system...")
 
         try:
-            # Start all agents
             for name, agent in self.agents.items():
                 agent.start()
                 self.logger.info(f"Started {name}")
 
-            # Start remote device manager
             self.remote_device_manager.start()
-            self.logger.info("✓ Remote Device Manager started (listening for client connections)")
+            self.logger.info(" Remote Device Manager started (listening for client connections)")
 
-            # Start UDP discovery beacon so clients auto-find this hub
             self.discovery_beacon.start()
-            self.logger.info("✓ Discovery Beacon started — clients can auto-discover this hub")
+            self.logger.info(" Discovery Beacon started — clients can auto-discover this hub")
 
             self.running = True
-            self.logger.info("✓ All agents started successfully")
+            self.logger.info(" All agents started successfully")
 
-            # Subscribe to events for AWS publishing
             if self.aws_iot:
                 self._setup_aws_subscriptions()
 
             self.logger.info("Sentinel AI is now operational")
 
-            # Main monitoring loop
             self._run()
 
         except Exception as e:
@@ -207,19 +186,16 @@ class SentinelAI:
 
     def _setup_aws_subscriptions(self):
         """Setup event subscriptions for AWS publishing"""
-        # Publish health metrics to AWS IoT
         def publish_metrics(event):
             if self.aws_iot and self.aws_iot.connected:
                 self.aws_iot.publish_telemetry(event.data)
             if self.cloudwatch:
                 self.cloudwatch.publish_metrics(event.data.get('metrics', {}))
 
-        # Publish anomalies
         def publish_anomalies(event):
             if self.aws_iot and self.aws_iot.connected:
                 self.aws_iot.publish_anomaly(event.data)
 
-        # Publish recovery actions
         def publish_recovery(event):
             if self.aws_iot and self.aws_iot.connected:
                 self.aws_iot.publish_recovery(event.data)
@@ -234,10 +210,8 @@ class SentinelAI:
         """Main system loop"""
         try:
             while self.running:
-                # Monitor system health
                 self._check_system_health()
 
-                # Sleep
                 time.sleep(10)
 
         except KeyboardInterrupt:
@@ -261,7 +235,6 @@ class SentinelAI:
         self.logger.info("Stopping Sentinel AI system...")
         self.running = False
 
-        # Stop discovery beacon and remote device manager
         try:
             self.discovery_beacon.stop()
         except Exception as e:
@@ -272,7 +245,6 @@ class SentinelAI:
         except Exception as e:
             self.logger.error(f"Error stopping RemoteDeviceManager: {e}")
 
-        # Stop all agents
         for name, agent in self.agents.items():
             try:
                 agent.stop()
@@ -280,21 +252,18 @@ class SentinelAI:
             except Exception as e:
                 self.logger.error(f"Error stopping {name}: {e}")
 
-        # Stop event bus
         try:
             self.event_bus.stop()
             self.logger.info("Event bus stopped")
         except Exception as e:
             self.logger.error(f"Error stopping event bus: {e}")
 
-        # Disconnect from AWS IoT
         if self.aws_iot:
             try:
                 self.aws_iot.disconnect()
             except Exception as e:
                 self.logger.error(f"Error disconnecting from AWS IoT: {e}")
 
-        # Close database
         try:
             self.database.close()
             self.logger.info("Database closed")
@@ -347,23 +316,20 @@ def main():
 
     args = parser.parse_args()
 
-    # Print AI stack explanation so it's clear in the terminal what Ollama is for
     print("\n" + "="*70)
-    print("  Sentinel AI — Autonomous Self-Healing IoT Infrastructure")
+    print(" Sentinel AI — Autonomous Self-Healing IoT Infrastructure")
     print("="*70)
-    print("  AI Diagnosis Stack (priority order):")
-    print("    1. Groq  — fast cloud inference (llama-3.1-8b-instant, free tier)")
-    print("    2. Ollama — LOCAL LLM on this device (llama3.2:3b, no data sent out)")
-    print("       └─ Ollama is started so Sentinel AI can diagnose anomalies")
-    print("          offline, without any external API dependency.")
-    print("    3. Rule-based — instant fallback when no LLM is reachable")
+    print(" AI Diagnosis Stack (priority order):")
+    print(" 1. Groq — fast cloud inference (llama-3.1-8b-instant, free tier)")
+    print(" 2. Ollama — LOCAL LLM on this device (llama3.2:3b, no data sent out)")
+    print(" Ollama is started so Sentinel AI can diagnose anomalies")
+    print(" offline, without any external API dependency.")
+    print(" 3. Rule-based — instant fallback when no LLM is reachable")
     print("="*70 + "\n")
 
-    # Start dashboard in a background thread
     def start_dashboard():
         try:
             from dashboard.app import run_dashboard
-            # run_agents=False: SentinelAI (main.py) owns the agents; dashboard is display-only
             run_dashboard(host='0.0.0.0', port=5001, debug=False, run_agents=False)
         except Exception as e:
             print(f"Dashboard error: {e}")
@@ -371,17 +337,14 @@ def main():
     dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
     dashboard_thread.start()
 
-    # Give the dashboard a moment to start, then open browser
     def open_browser():
         time.sleep(3)
         webbrowser.open('http://localhost:5001')
 
     threading.Thread(target=open_browser, daemon=True).start()
 
-    # Initialize and start system
     sentinel = SentinelAI(config_path=args.config)
 
-    # Register SentinelAI's agents and remote device manager with the dashboard
     try:
         import dashboard.app as _dash_app
         _dash_app.external_agents = sentinel.agents

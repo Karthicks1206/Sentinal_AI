@@ -45,10 +45,8 @@ class Config:
             with open(self.config_path, 'r') as f:
                 raw_content = f.read()
 
-            # Substitute environment variables
             content = self._substitute_env_vars(raw_content)
 
-            # Parse YAML
             self._config = yaml.safe_load(content)
 
             if not self._config:
@@ -71,7 +69,6 @@ class Config:
         """
         import re
 
-        # Pattern: ${VAR:-default} or ${VAR}
         pattern = r'\$\{([^}:]+)(?::-(.[^}]*))?\}'
 
         def replacer(match):
@@ -175,7 +172,6 @@ class Config:
         return self._config.copy()
 
 
-# Global configuration instance
 _global_config: Optional[Config] = None
 
 

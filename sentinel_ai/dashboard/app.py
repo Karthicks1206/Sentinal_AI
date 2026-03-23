@@ -22,7 +22,6 @@ def now_cst() -> str:
     """Return current time formatted in CST/CDT."""
     return datetime.now(CST).strftime('%H:%M:%S')
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.config import get_config
@@ -37,7 +36,6 @@ from agents.recovery import RecoveryAgent
 from agents.learning import LearningAgent
 
 
-# Flask app
 app = Flask(__name__)
 CORS(app)
 
@@ -56,20 +54,18 @@ class DashboardState:
         self.agents_status = {}
         self.alert_active = False
         self.current_alert = None
-        # Rolling history for live graphs (last 60 data points)
         self.cpu_history = deque(maxlen=60)
         self.memory_history = deque(maxlen=60)
         self.disk_history = deque(maxlen=60)
-        self.network_latency_history = deque(maxlen=60)  # ping latency ms
-        self.power_voltage_history = deque(maxlen=60)   # input voltage V
-        self.power_quality_history = deque(maxlen=60)   # power quality 0-100
+        self.network_latency_history = deque(maxlen=60)
+        self.power_voltage_history = deque(maxlen=60)
+        self.power_quality_history = deque(maxlen=60)
         self.timestamps = deque(maxlen=60)
-        # Per-device state (keyed by device_id)
-        self.device_anomalies: dict  = {}   # device_id → deque(maxlen=50)
-        self.device_diagnoses: dict  = {}   # device_id → deque(maxlen=50)
-        self.device_recoveries: dict = {}   # device_id → deque(maxlen=50)
-        self.device_logs: dict       = {}   # device_id → deque(maxlen=100)
-        self.device_history: dict    = {}   # device_id → {cpu,mem,disk,net,timestamps}
+        self.device_anomalies: dict = {}
+        self.device_diagnoses: dict = {}
+        self.device_recoveries: dict = {}
+        self.device_logs: dict = {}
+        self.device_history: dict = {}
 
     def _device_history(self, device_id: str) -> dict:
         if device_id not in self.device_history:
@@ -86,7 +82,6 @@ class DashboardState:
         return store[device_id]
 
 
-# Global state
 state = DashboardState()
 
 
@@ -99,26 +94,21 @@ class SentinelDashboard:
 
     def __init__(self, run_agents: bool = True):
         """Initialize dashboard"""
-        # Configuration
         self.config = get_config()
         self.local_device_id = self.config.device_id
-        self.config.set('aws.enabled', False)  # Disable AWS for dashboard
+        self.config.set('aws.enabled', False)
 
         setup_logging(self.config)
         self.logger = get_logger('Dashboard')
 
-        # Infrastructure
         self.event_bus = get_event_bus(self.config)
         self.database = get_database(self.config)
 
-        # Subscribe to events (always — for display)
         self._setup_event_subscriptions()
 
-        # Only initialize agents in standalone mode
         self._run_agents = run_agents
         self.agents = self._init_agents() if run_agents else {}
 
-        # Update state
         state.system_status = "initialized"
 
     def _setup_event_subscriptions(self):
@@ -131,16 +121,15 @@ class SentinelDashboard:
 
     def _on_metric(self, event):
         """Handle metric event"""
-        metrics    = event.data.get('metrics', {})
-        device_id  = event.data.get('device_id') or self.local_device_id
-        timestamp  = now_cst()
+        metrics = event.data.get('metrics', {})
+        device_id = event.data.get('device_id') or self.local_device_id
+        timestamp = now_cst()
 
-        cpu  = metrics.get('cpu',    {}).get('cpu_percent',    0)
-        mem  = metrics.get('memory', {}).get('memory_percent', 0)
-        disk = metrics.get('disk',   {}).get('disk_percent',   0)
-        net  = metrics.get('network',{}).get('ping_latency_ms',0)
+        cpu = metrics.get('cpu', {}).get('cpu_percent', 0)
+        mem = metrics.get('memory', {}).get('memory_percent', 0)
+        disk = metrics.get('disk', {}).get('disk_percent', 0)
+        net = metrics.get('network',{}).get('ping_latency_ms',0)
 
-        # Always update per-device rolling history
         dh = state._device_history(device_id)
         dh['cpu'].append(round(cpu, 1))
         dh['memory'].append(round(mem, 1))
@@ -152,10 +141,9 @@ class SentinelDashboard:
         dl.append({'timestamp': timestamp, 'level': 'INFO',
                    'message': f'Metrics: CPU={cpu:.1f}% MEM={mem:.1f}% DISK={disk:.1f}%'})
 
-        # Update local-only state (main dashboard cards/chart)
         if device_id == self.local_device_id:
             state.latest_metrics = metrics
-            power       = metrics.get('power', {})
+            power = metrics.get('power', {})
             pwr_voltage = power.get('power_voltage_v', 0)
             pwr_quality = power.get('power_quality', 100)
             state.cpu_history.append(round(cpu, 1))
@@ -170,10 +158,10 @@ class SentinelDashboard:
 
     def _on_anomaly(self, event):
         """Handle anomaly event"""
-        anomaly   = event.data.get('anomaly', {})
+        anomaly = event.data.get('anomaly', {})
         device_id = event.data.get('device_id') or self.local_device_id
-        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
-        entry     = {'timestamp': ts_str, 'anomaly': anomaly, 'device_id': device_id}
+        ts_str = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry = {'timestamp': ts_str, 'anomaly': anomaly, 'device_id': device_id}
 
         state.anomalies.append(entry)
         state._device_deque(state.device_anomalies, device_id, 50).append(entry)
@@ -197,8 +185,8 @@ class SentinelDashboard:
         """Handle diagnosis event"""
         diagnosis = event.data.get('diagnosis', {})
         device_id = event.data.get('device_id') or self.local_device_id
-        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
-        entry     = {'timestamp': ts_str, 'diagnosis': diagnosis, 'device_id': device_id}
+        ts_str = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry = {'timestamp': ts_str, 'diagnosis': diagnosis, 'device_id': device_id}
 
         state.diagnoses.append(entry)
         state._device_deque(state.device_diagnoses, device_id, 50).append(entry)
@@ -211,8 +199,8 @@ class SentinelDashboard:
         timestamp = now_cst()
         for msg in [
             f"[{device_id}] DIAGNOSIS: {diagnosis.get('diagnosis', 'N/A')}",
-            f"[{device_id}]   Root Cause: {diagnosis.get('root_cause', 'Unknown')}",
-            f"[{device_id}]   Actions: {', '.join(diagnosis.get('recommended_actions', []))}",
+            f"[{device_id}] Root Cause: {diagnosis.get('root_cause', 'Unknown')}",
+            f"[{device_id}] Actions: {', '.join(diagnosis.get('recommended_actions', []))}",
         ]:
             state.logs.append({'timestamp': timestamp, 'level': 'WARNING', 'message': msg})
             state._device_deque(state.device_logs, device_id, 100).append(
@@ -229,22 +217,20 @@ class SentinelDashboard:
             'message': f"[SECURITY] {threat.get('severity', '?').upper()} — "
                        f"{threat.get('title', '?')}: {threat.get('detail', '')}"
         })
-        # Attach to current_alert for SSE stream pickup
         state.security_threats = getattr(state, 'security_threats', [])
         state.security_threats.append({
             'timestamp': timestamp,
-            'threat':    threat
+            'threat': threat
         })
-        # Keep only last 50
         if len(state.security_threats) > 50:
             state.security_threats = state.security_threats[-50:]
 
     def _on_recovery(self, event):
         """Handle recovery event"""
-        actions   = event.data.get('actions', [])
+        actions = event.data.get('actions', [])
         device_id = event.data.get('device_id') or self.local_device_id
-        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
-        entry     = {'timestamp': ts_str, 'actions': actions, 'device_id': device_id}
+        ts_str = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry = {'timestamp': ts_str, 'actions': actions, 'device_id': device_id}
 
         state.recoveries.append(entry)
         state._device_deque(state.device_recoveries, device_id, 50).append(entry)
@@ -253,7 +239,7 @@ class SentinelDashboard:
         msgs = [f"[{device_id}] RECOVERY: Executing {len(actions)} action(s)"]
         for action in actions:
             status = 'OK' if action.get('status') == 'success' else action.get('status','?').upper()
-            msgs.append(f"[{device_id}]   [{status}] {action.get('action_name','?')}: {action.get('message','N/A')}")
+            msgs.append(f"[{device_id}] [{status}] {action.get('action_name','?')}: {action.get('message','N/A')}")
 
         for msg in msgs:
             lvl = 'INFO'
@@ -303,7 +289,6 @@ class SentinelDashboard:
 
         state.system_status = "running"
 
-        # Add startup log
         timestamp = now_cst()
         state.logs.append({
             'timestamp': timestamp,
@@ -347,14 +332,11 @@ def _active_ai_provider() -> str:
         return 'unknown'
 
 
-# Global dashboard instance
 dashboard = None
 
-# Optional: external agent registry (set by main.py when run_agents=False)
 external_agents = {}
 
 
-# Flask Routes
 @app.route('/')
 def index():
     """Render dashboard"""
@@ -370,7 +352,6 @@ def get_status():
             return agent.is_running() if agent else False
         return dashboard.get_agent_status(name) if dashboard else False
 
-    # LSTM status from anomaly agent
     lstm_status = {}
     try:
         if external_agents:
@@ -453,29 +434,26 @@ def get_thresholds():
 
     The anomaly detection agent uses no hardcoded thresholds — all bounds
     are computed at runtime from the rolling data stream via IQR and z-score
-    statistics.  This endpoint reads those learned values directly from the
+    statistics. This endpoint reads those learned values directly from the
     agent's AdaptiveMetricBaseline instances so the dashboard always shows
     what the detector is actually using.
 
     Falls back to config reference values during warm-up (first ~2.5 minutes).
     """
     config = get_config()
-    # Reference values for display fallback only — NOT used for detection
     ref = {
-        'cpu':     config.get('monitoring.metrics.cpu.threshold_percent', 80),
-        'memory':  config.get('monitoring.metrics.memory.threshold_percent', 85),
-        'disk':    config.get('monitoring.metrics.disk.threshold_percent', 90),
+        'cpu': config.get('monitoring.metrics.cpu.threshold_percent', 80),
+        'memory': config.get('monitoring.metrics.memory.threshold_percent', 85),
+        'disk': config.get('monitoring.metrics.disk.threshold_percent', 90),
         'network': config.get('monitoring.metrics.network.max_packet_loss_percent', 5),
     }
 
-    # Map dashboard key → flattened metric name used by the anomaly agent
     metric_map = {
-        'cpu':    'cpu.cpu_percent',
+        'cpu': 'cpu.cpu_percent',
         'memory': 'memory.memory_percent',
-        'disk':   'disk.disk_percent',
+        'disk': 'disk.disk_percent',
     }
 
-    # Try to pull live bounds from the anomaly agent's baselines
     try:
         anomaly_agent = (
             external_agents.get('anomaly')
@@ -491,15 +469,14 @@ def get_thresholds():
                 if baseline and baseline.ready:
                     stats = baseline.stats()
                     if stats:
-                        # Show the IQR mild-fence as the "adaptive threshold" line
                         result[key] = round(stats['upper_mild'], 1)
                         baseline_info[key] = {
-                            'mean':          round(stats['mean'], 1),
-                            'std':           round(stats['std'], 2),
-                            'upper_mild':    round(stats['upper_mild'], 1),
+                            'mean': round(stats['mean'], 1),
+                            'std': round(stats['std'], 2),
+                            'upper_mild': round(stats['upper_mild'], 1),
                             'upper_extreme': round(stats['upper_extreme'], 1),
-                            'iqr':           round(stats['iqr'], 2),
-                            'warmup_done':   True,
+                            'iqr': round(stats['iqr'], 2),
+                            'warmup_done': True,
                         }
                     else:
                         result[key] = ref[key]
@@ -514,7 +491,7 @@ def get_thresholds():
             return jsonify(result)
 
     except Exception as e:
-        pass  # fall through to config fallback
+        pass
 
     return jsonify({**ref, 'adaptive': False, 'baselines': {}})
 
@@ -536,20 +513,17 @@ def get_incidents():
             except Exception:
                 actions = []
 
-            # Determine overall status
-            # "skipped" means cooldown/not-applicable — not a failure
             if any(a.get('status') == 'success' for a in actions):
                 status = 'resolved'
             elif any(a.get('status') == 'failed' for a in actions):
                 status = 'failed'
             elif all(a.get('status') == 'skipped' for a in actions) and actions:
-                status = 'attempted'   # all skipped = cooldown active, not a failure
+                status = 'attempted'
             elif actions:
                 status = 'attempted'
             else:
                 status = 'detected'
 
-            # Parse metrics JSON
             metrics_raw = row.get('metrics') or '{}'
             try:
                 metrics = _json.loads(metrics_raw) if isinstance(metrics_raw, str) else (metrics_raw or {})
@@ -557,15 +531,15 @@ def get_incidents():
                 metrics = {}
 
             result.append({
-                'incident_id':   row['incident_id'][:8],
-                'timestamp':     row['timestamp'],
-                'anomaly_type':  row['anomaly_type'],
-                'severity':      row['severity'],
-                'diagnosis':     row.get('diagnosis') or 'Pending diagnosis',
-                'root_cause':    row.get('root_cause') or 'Unknown',
-                'actions':       actions,
-                'status':        status,
-                'metrics':       metrics,
+                'incident_id': row['incident_id'][:8],
+                'timestamp': row['timestamp'],
+                'anomaly_type': row['anomaly_type'],
+                'severity': row['severity'],
+                'diagnosis': row.get('diagnosis') or 'Pending diagnosis',
+                'root_cause': row.get('root_cause') or 'Unknown',
+                'actions': actions,
+                'status': status,
+                'metrics': metrics,
                 'resolution_time': row.get('resolution_time_seconds'),
             })
         return jsonify(result)
@@ -577,13 +551,13 @@ def get_incidents():
 def get_history():
     """Get rolling metric history for live graphs"""
     return jsonify({
-        'timestamps':     list(state.timestamps),
-        'cpu':            list(state.cpu_history),
-        'memory':         list(state.memory_history),
-        'disk':           list(state.disk_history),
-        'network':        list(state.network_latency_history),
-        'power_voltage':  list(state.power_voltage_history),
-        'power_quality':  list(state.power_quality_history),
+        'timestamps': list(state.timestamps),
+        'cpu': list(state.cpu_history),
+        'memory': list(state.memory_history),
+        'disk': list(state.disk_history),
+        'network': list(state.network_latency_history),
+        'power_voltage': list(state.power_voltage_history),
+        'power_quality': list(state.power_quality_history),
     })
 
 
@@ -591,28 +565,24 @@ def get_history():
 def stream():
     """Server-sent events for real-time updates"""
     def event_stream():
-        last_log_count     = 0
+        last_log_count = 0
         last_anomaly_count = 0
-        last_threat_count  = 0
+        last_threat_count = 0
 
         while True:
-            # Check for new logs
             if len(state.logs) > last_log_count:
                 last_log_count = len(state.logs)
                 yield f"data: {json.dumps({'type': 'log', 'data': list(state.logs)[-1]})}\n\n"
 
-            # Check for new anomalies
             if len(state.anomalies) > last_anomaly_count:
                 last_anomaly_count = len(state.anomalies)
                 yield f"data: {json.dumps({'type': 'anomaly', 'data': list(state.anomalies)[-1]})}\n\n"
 
-            # Check for new security threats
             threats = getattr(state, 'security_threats', [])
             if len(threats) > last_threat_count:
                 last_threat_count = len(threats)
                 yield f"data: {json.dumps({'type': 'security', 'data': threats[-1]})}\n\n"
 
-            # Send heartbeat
             yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now(CST).isoformat()})}\n\n"
 
             time.sleep(1)
@@ -627,7 +597,6 @@ def simulate_start(scenario):
         data = request.get_json(silent=True) or {}
         duration = float(data.get('duration', 60))
 
-        # Power sag is handled by the monitoring agent directly (no subprocess needed)
         if scenario == 'power_sag':
             monitoring_agent = external_agents.get('monitoring')
             if monitoring_agent and hasattr(monitoring_agent, 'trigger_power_event'):
@@ -689,11 +658,6 @@ def simulate_status():
         return jsonify({'error': str(e)}), 500
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Multi-Device API — remote client registration & metric ingestion
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Global remote device manager (initialized by main.py or lazily here)
 remote_device_manager = None
 
 
@@ -714,7 +678,7 @@ def _get_remote_manager():
 def register_device():
     """Called by sentinel_client.py when a remote machine connects."""
     try:
-        data      = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
         if not device_id:
             return jsonify({'error': 'device_id required'}), 400
@@ -723,8 +687,8 @@ def register_device():
         ts = now_cst()
         state.logs.append({
             'timestamp': ts,
-            'level':     'INFO',
-            'message':   f"Remote device connected: {device_id} "
+            'level': 'INFO',
+            'message': f"Remote device connected: {device_id} "
                          f"({data.get('hostname', '?')} / {data.get('platform', '?')})",
         })
         return jsonify({'status': 'registered', 'device_id': device_id})
@@ -736,14 +700,14 @@ def register_device():
 def push_metrics():
     """Accept a metric payload from a remote sentinel_client.py instance."""
     try:
-        data      = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
         timestamp = data.get('timestamp', datetime.utcnow().isoformat())
-        metrics   = data.get('metrics', {})
+        metrics = data.get('metrics', {})
         if not device_id or not metrics:
             return jsonify({'error': 'device_id and metrics required'}), 400
         mgr = _get_remote_manager()
-        ok  = mgr.push_metrics(device_id, timestamp, metrics)
+        ok = mgr.push_metrics(device_id, timestamp, metrics)
         return jsonify({'status': 'ok' if ok else 'error', 'device_id': device_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -821,14 +785,14 @@ def get_device_incidents(device_id):
             else:
                 status = 'detected'
             result.append({
-                'incident_id':  row['incident_id'][:8],
-                'timestamp':    row['timestamp'],
+                'incident_id': row['incident_id'][:8],
+                'timestamp': row['timestamp'],
                 'anomaly_type': row['anomaly_type'],
-                'severity':     row['severity'],
-                'diagnosis':    row.get('diagnosis') or 'Pending',
-                'root_cause':   row.get('root_cause') or 'Unknown',
-                'actions':      actions,
-                'status':       status,
+                'severity': row['severity'],
+                'diagnosis': row.get('diagnosis') or 'Pending',
+                'root_cause': row.get('root_cause') or 'Unknown',
+                'actions': actions,
+                'status': status,
             })
         return jsonify(result)
     except Exception as e:
@@ -840,8 +804,8 @@ def queue_device_command(device_id):
     """Queue a single recovery command for a remote device (from device dashboard UI)."""
     import uuid as _uuid
     try:
-        mgr    = _get_remote_manager()
-        data   = request.get_json(force=True) or {}
+        mgr = _get_remote_manager()
+        data = request.get_json(force=True) or {}
         action = data.get('action')
         if not action:
             return jsonify({'error': 'action required'}), 400
@@ -857,8 +821,8 @@ def queue_device_command(device_id):
 def get_device_commands(device_id):
     """Remote client polls this to pick up queued recovery commands."""
     try:
-        mgr   = _get_remote_manager()
-        cmds  = mgr.pop_commands(device_id)
+        mgr = _get_remote_manager()
+        cmds = mgr.pop_commands(device_id)
         return jsonify({'commands': cmds})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -881,7 +845,7 @@ def get_device_metrics(device_id):
     """Return the latest metrics snapshot for a specific remote device."""
     try:
         mgr = _get_remote_manager()
-        m   = mgr.get_device_metrics(device_id)
+        m = mgr.get_device_metrics(device_id)
         if m is None:
             return jsonify({'error': f'Device {device_id!r} not found'}), 404
         return jsonify(m)
@@ -901,25 +865,21 @@ def run_dashboard(host='0.0.0.0', port=5001, debug=False, run_agents=True):
     """
     global dashboard
 
-    # Initialize dashboard (agents optional)
     dashboard = SentinelDashboard(run_agents=run_agents)
 
     if run_agents:
-        # Start agents in background thread
         agent_thread = threading.Thread(target=dashboard.start, daemon=True)
         agent_thread.start()
     else:
         state.system_status = "running"
 
-    # Wait for agents to start
     time.sleep(2)
 
-    # Run Flask app
     print(f"\n{'='*80}")
     print(f"Sentinel AI Dashboard Running")
     print(f"{'='*80}")
     print(f"\nOpen your browser and navigate to:")
-    print(f"\n  http://localhost:{port}")
+    print(f"\n http://localhost:{port}")
     print(f"\nPress Ctrl+C to stop\n")
 
     try:

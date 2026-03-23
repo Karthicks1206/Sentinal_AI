@@ -1,1 +1,0 @@
-# Sentinel AI - Simulation module

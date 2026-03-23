@@ -8,10 +8,10 @@ Instead of blindly killing processes or resetting interfaces, this engine:
   4. Uses the local Ollama LLM to validate classification in ambiguous cases
 
 Classification taxonomy:
-  CPU  → COMPUTE_BOUND | IO_WAIT_BOUND | MEMORY_THRASH | TRANSIENT_SPIKE | MULTI_PROCESS
-  MEM  → MEMORY_LEAK | CACHE_BLOAT | SWAP_PRESSURE | HEAP_FRAGMENTATION | NORMAL_GROWTH
+  CPU → COMPUTE_BOUND | IO_WAIT_BOUND | MEMORY_THRASH | TRANSIENT_SPIKE | MULTI_PROCESS
+  MEM → MEMORY_LEAK | CACHE_BLOAT | SWAP_PRESSURE | HEAP_FRAGMENTATION | NORMAL_GROWTH
   DISK → IO_THROUGHPUT_HOG | DISK_CAPACITY | INODE_EXHAUSTION | IO_LATENCY | WRITE_BURST
-  NET  → CONNECTION_LEAK | DNS_FAILURE | HIGH_LATENCY | PACKET_LOSS | INTERFACE_ERROR
+  NET → CONNECTION_LEAK | DNS_FAILURE | HIGH_LATENCY | PACKET_LOSS | INTERFACE_ERROR
 """
 
 import json
@@ -27,7 +27,7 @@ from typing import Dict, List, Optional, Tuple
 import psutil
 
 _IS_MACOS = platform.system() == 'Darwin'
-_IS_LINUX  = platform.system() == 'Linux'
+_IS_LINUX = platform.system() == 'Linux'
 
 
 def _try_resolve(hostname: str) -> bool:
@@ -46,91 +46,83 @@ _CRITICAL_PROCESSES = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Data classes for profiling results
-# ─────────────────────────────────────────────────────────────────────────────
-
 @dataclass
 class ProcessSample:
-    pid:            int
-    name:           str
-    cpu_pct:        float
-    mem_pct:        float
-    mem_rss_mb:     float
-    status:         str
-    num_threads:    int
-    io_read_mb:     float = 0.0
-    io_write_mb:    float = 0.0
+    pid: int
+    name: str
+    cpu_pct: float
+    mem_pct: float
+    mem_rss_mb: float
+    status: str
+    num_threads: int
+    io_read_mb: float = 0.0
+    io_write_mb: float = 0.0
 
 @dataclass
 class CPUProfile:
-    classification:         str          # COMPUTE_BOUND | IO_WAIT_BOUND | etc.
-    dominant_process:       Optional[ProcessSample]
-    dominant_cpu_pct:       float
-    iowait_pct:             float        # % of CPU time in I/O wait (Linux only)
-    cpu_per_core:           List[float]  # per-core utilization
-    single_core_saturated:  bool         # True if any core > 95%
-    trajectory:             str          # RISING | STABLE | FALLING
-    cpu_samples:            List[float]  # raw total CPU readings
-    top_procs:              List[ProcessSample]
-    evidence:               Dict         = field(default_factory=dict)
+    classification: str
+    dominant_process: Optional[ProcessSample]
+    dominant_cpu_pct: float
+    iowait_pct: float
+    cpu_per_core: List[float]
+    single_core_saturated: bool
+    trajectory: str
+    cpu_samples: List[float]
+    top_procs: List[ProcessSample]
+    evidence: Dict = field(default_factory=dict)
 
 @dataclass
 class MemoryProfile:
-    classification:         str          # MEMORY_LEAK | CACHE_BLOAT | etc.
-    total_mb:               float
-    used_mb:                float
-    available_mb:           float
-    cached_mb:              float
-    swap_used_mb:           float
-    swap_pct:               float
-    leaking_processes:      List[Dict]   # [{name, pid, slope_mb_per_s, rss_mb}]
-    top_consumers:          List[ProcessSample]
-    trajectory:             str          # RISING | STABLE | FALLING
-    mem_samples:            List[float]  # raw used % readings
-    evidence:               Dict         = field(default_factory=dict)
+    classification: str
+    total_mb: float
+    used_mb: float
+    available_mb: float
+    cached_mb: float
+    swap_used_mb: float
+    swap_pct: float
+    leaking_processes: List[Dict]
+    top_consumers: List[ProcessSample]
+    trajectory: str
+    mem_samples: List[float]
+    evidence: Dict = field(default_factory=dict)
 
 @dataclass
 class DiskProfile:
-    classification:         str          # IO_THROUGHPUT_HOG | DISK_CAPACITY | etc.
-    disk_pct:               float
-    free_gb:                float
-    inode_pct:              float        # 0 if unavailable
-    top_writers:            List[Dict]   # [{name, pid, write_mb_per_s}]
-    io_util_pct:            float        # disk utilization % (Linux only)
-    largest_dirs:           List[Dict]   # [{path, size_mb}] for targeted cleanup
-    evidence:               Dict         = field(default_factory=dict)
+    classification: str
+    disk_pct: float
+    free_gb: float
+    inode_pct: float
+    top_writers: List[Dict]
+    io_util_pct: float
+    largest_dirs: List[Dict]
+    evidence: Dict = field(default_factory=dict)
 
 @dataclass
 class NetworkProfile:
-    classification:         str          # CONNECTION_LEAK | DNS_FAILURE | etc.
-    ping_ms:                float
-    packet_loss_pct:        float
-    conn_established:       int
-    conn_time_wait:         int
-    conn_close_wait:        int
-    top_conn_process:       Optional[str]
-    top_conn_count:         int
-    dns_ok:                 bool
-    internet_ok:            bool
-    trajectory:             str          # WORSENING | STABLE | IMPROVING
-    evidence:               Dict         = field(default_factory=dict)
+    classification: str
+    ping_ms: float
+    packet_loss_pct: float
+    conn_established: int
+    conn_time_wait: int
+    conn_close_wait: int
+    top_conn_process: Optional[str]
+    top_conn_count: int
+    dns_ok: bool
+    internet_ok: bool
+    trajectory: str
+    evidence: Dict = field(default_factory=dict)
 
 @dataclass
 class HealResult:
-    success:         bool
-    classification:  str
-    algorithm:       str          # which algorithm was applied
+    success: bool
+    classification: str
+    algorithm: str
     evidence_before: Dict
-    evidence_after:  Dict
-    actions_taken:   List[str]
-    message:         str
-    parameters:      Dict         = field(default_factory=dict)
+    evidence_after: Dict
+    actions_taken: List[str]
+    message: str
+    parameters: Dict = field(default_factory=dict)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# System Profiler — multi-sample snapshot engine
-# ─────────────────────────────────────────────────────────────────────────────
 
 class SystemProfiler:
     """Collects multi-sample system snapshots and classifies root causes."""
@@ -145,7 +137,6 @@ class SystemProfiler:
                 getattr(self.logger, level, self.logger.info)(f"[Profiler] {msg}")
         return _log
 
-    # ── CPU Profiling ──────────────────────────────────────────────────────
 
     def profile_cpu(self, n_samples: int = 3, interval: float = 1.2) -> CPUProfile:
         """
@@ -153,10 +144,9 @@ class SystemProfiler:
         Returns a CPUProfile with classification and supporting evidence.
         """
         self._log(f"CPU profiling: {n_samples} samples × {interval}s")
-        cpu_readings  = []
-        proc_samples  = []   # list of dicts keyed by pid
+        cpu_readings = []
+        proc_samples = []
 
-        # Warm up cpu_percent (first call always 0.0)
         psutil.cpu_percent(interval=None, percpu=True)
         for proc in psutil.process_iter(['pid', 'name']):
             try:
@@ -166,10 +156,10 @@ class SystemProfiler:
         time.sleep(0.2)
 
         for i in range(n_samples):
-            total_cpu  = psutil.cpu_percent(interval=interval, percpu=False)
-            per_core   = psutil.cpu_percent(interval=None, percpu=True)
-            cpu_times  = psutil.cpu_times_percent(interval=None)
-            iowait     = getattr(cpu_times, 'iowait', 0.0)
+            total_cpu = psutil.cpu_percent(interval=interval, percpu=False)
+            per_core = psutil.cpu_percent(interval=None, percpu=True)
+            cpu_times = psutil.cpu_times_percent(interval=None)
+            iowait = getattr(cpu_times, 'iowait', 0.0)
             cpu_readings.append(total_cpu)
 
             snapshot = {}
@@ -178,13 +168,12 @@ class SystemProfiler:
                                               'memory_info']):
                 try:
                     info = proc.info
-                    rss  = info['memory_info'].rss / (1024 * 1024) if info['memory_info'] else 0
-                    # Accumulate I/O bytes on Linux
+                    rss = info['memory_info'].rss / (1024 * 1024) if info['memory_info'] else 0
                     io_r, io_w = 0.0, 0.0
                     if _IS_LINUX:
                         try:
-                            io   = proc.io_counters()
-                            io_r = io.read_bytes  / (1024 * 1024)
+                            io = proc.io_counters()
+                            io_r = io.read_bytes / (1024 * 1024)
                             io_w = io.write_bytes / (1024 * 1024)
                         except Exception:
                             pass
@@ -202,14 +191,12 @@ class SystemProfiler:
                     pass
             proc_samples.append(snapshot)
 
-        # Aggregate top processes (average CPU across all samples)
         cpu_totals: Dict[int, List[float]] = defaultdict(list)
         for snap in proc_samples:
             for pid, ps in snap.items():
                 cpu_totals[pid].append(ps.cpu_pct)
         avg_cpu = {pid: sum(v) / len(v) for pid, v in cpu_totals.items()}
 
-        # Build top_procs list from last sample
         last_snap = proc_samples[-1] if proc_samples else {}
         top_procs = sorted(
             [ps for pid, ps in last_snap.items()
@@ -221,7 +208,6 @@ class SystemProfiler:
         dominant = top_procs[0] if top_procs else None
         dominant_cpu = avg_cpu.get(dominant.pid, 0.0) if dominant else 0.0
 
-        # Trajectory
         if len(cpu_readings) >= 2:
             diff = cpu_readings[-1] - cpu_readings[0]
             trajectory = 'RISING' if diff > 5 else ('FALLING' if diff < -5 else 'STABLE')
@@ -234,13 +220,11 @@ class SystemProfiler:
         cpu_times_last = psutil.cpu_times_percent(interval=None)
         iowait_pct = getattr(cpu_times_last, 'iowait', 0.0)
 
-        # I/O write activity (identify heavy writers)
         heavy_writers = [
             ps for ps in top_procs
             if ps.io_write_mb > 10.0
         ]
 
-        # Classification logic
         classification = self._classify_cpu(
             cpu_mean=sum(cpu_readings) / len(cpu_readings),
             iowait_pct=iowait_pct,
@@ -276,27 +260,21 @@ class SystemProfiler:
     @staticmethod
     def _classify_cpu(cpu_mean, iowait_pct, dominant_cpu, trajectory,
                       single_core_sat, heavy_writers, top_procs, cpu_readings) -> str:
-        # Transient spike: short burst, already falling
         if trajectory == 'FALLING' and cpu_mean > 60:
             return 'TRANSIENT_SPIKE'
-        # I/O wait causing CPU stall
         if iowait_pct > 25:
             return 'IO_WAIT_BOUND'
-        # Memory thrashing: check if multiple processes are paging
         if any(ps.status == 'disk-sleep' for ps in top_procs):
             return 'MEMORY_THRASH'
-        # Single dominant compute-bound process
         if dominant_cpu > 40 and single_core_sat:
             return 'COMPUTE_BOUND'
-        # Many processes each contributing moderate load
         procs_over_10 = sum(1 for ps in top_procs if ps.cpu_pct > 10)
         if procs_over_10 >= 3:
             return 'MULTI_PROCESS'
         if dominant_cpu > 20:
             return 'COMPUTE_BOUND'
-        return 'COMPUTE_BOUND'  # safe default
+        return 'COMPUTE_BOUND'
 
-    # ── Memory Profiling ───────────────────────────────────────────────────
 
     def profile_memory(self, n_samples: int = 4, interval: float = 2.0) -> MemoryProfile:
         """
@@ -305,8 +283,8 @@ class SystemProfiler:
         """
         self._log(f"Memory profiling: {n_samples} samples × {interval}s")
 
-        rss_history: Dict[int, List[Tuple[float, float]]] = defaultdict(list)  # pid → [(time, rss_mb)]
-        proc_meta: Dict[int, str] = {}  # pid → name
+        rss_history: Dict[int, List[Tuple[float, float]]] = defaultdict(list)
+        proc_meta: Dict[int, str] = {}
         mem_samples: List[float] = []
 
         for i in range(n_samples):
@@ -316,8 +294,8 @@ class SystemProfiler:
             for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'memory_percent']):
                 try:
                     info = proc.info
-                    rss  = info['memory_info'].rss / (1024 * 1024) if info['memory_info'] else 0
-                    if rss > 20:  # ignore tiny processes
+                    rss = info['memory_info'].rss / (1024 * 1024) if info['memory_info'] else 0
+                    if rss > 20:
                         rss_history[info['pid']].append((t, rss))
                         proc_meta[info['pid']] = info['name'] or '?'
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -328,7 +306,6 @@ class SystemProfiler:
         vm = psutil.virtual_memory()
         swap = psutil.swap_memory()
 
-        # Compute linear slope (MB/s) for each process
         leaking = []
         for pid, history in rss_history.items():
             if len(history) < 2:
@@ -338,26 +315,24 @@ class SystemProfiler:
                 continue
             xs = [t for t, _ in history]
             ys = [r for _, r in history]
-            n  = len(xs)
+            n = len(xs)
             x_mean = sum(xs) / n
             y_mean = sum(ys) / n
-            denom  = sum((x - x_mean) ** 2 for x in xs)
+            denom = sum((x - x_mean) ** 2 for x in xs)
             if denom < 1e-9:
                 continue
             slope = sum((xs[i] - x_mean) * (ys[i] - y_mean) for i in range(n)) / denom
-            # slope is MB/s; a positive slope > 0.5 MB/s is suspicious
             if slope > 0.5 and ys[-1] > 50:
                 leaking.append({
-                    'pid':          pid,
-                    'name':         name,
+                    'pid': pid,
+                    'name': name,
                     'slope_mb_per_s': round(slope, 3),
-                    'rss_mb':       round(ys[-1], 1),
-                    'growth_mb':    round(ys[-1] - ys[0], 1),
+                    'rss_mb': round(ys[-1], 1),
+                    'growth_mb': round(ys[-1] - ys[0], 1),
                 })
 
         leaking.sort(key=lambda x: x['slope_mb_per_s'], reverse=True)
 
-        # Top memory consumers (last sample)
         top_consumers = sorted(
             [ProcessSample(
                 pid=pid,
@@ -425,19 +400,17 @@ class SystemProfiler:
         if cache_ratio > 0.5 and used_pct > 70:
             return 'CACHE_BLOAT'
         if used_pct > 80 and trajectory == 'RISING':
-            return 'NORMAL_GROWTH'  # rising but no clear leak — general pressure
+            return 'NORMAL_GROWTH'
         return 'NORMAL_GROWTH'
 
-    # ── Disk Profiling ─────────────────────────────────────────────────────
 
     def profile_disk(self) -> DiskProfile:
         """Classify disk anomaly: capacity, I/O hog, inode exhaustion, write burst."""
         self._log("Disk profiling")
         disk = psutil.disk_usage('/')
-        disk_pct  = disk.percent
-        free_gb   = disk.free / (1024 ** 3)
+        disk_pct = disk.percent
+        free_gb = disk.free / (1024 ** 3)
 
-        # Inode check
         inode_pct = 0.0
         try:
             if _IS_LINUX:
@@ -450,7 +423,6 @@ class SystemProfiler:
         except Exception:
             pass
 
-        # Disk I/O per-process (Linux: /proc/<pid>/io)
         top_writers = []
         if _IS_LINUX:
             for proc in psutil.process_iter(['pid', 'name']):
@@ -459,16 +431,15 @@ class SystemProfiler:
                     write_mb = io.write_bytes / (1024 * 1024)
                     if write_mb > 5 and proc.info['name'].lower() not in _CRITICAL_PROCESSES:
                         top_writers.append({
-                            'pid':          proc.info['pid'],
-                            'name':         proc.info['name'],
-                            'write_mb':     round(write_mb, 1),
+                            'pid': proc.info['pid'],
+                            'name': proc.info['name'],
+                            'write_mb': round(write_mb, 1),
                         })
                 except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
                     pass
             top_writers.sort(key=lambda x: x['write_mb'], reverse=True)
             top_writers = top_writers[:5]
 
-        # Disk I/O utilization (Linux: /proc/diskstats)
         io_util_pct = 0.0
         try:
             if _IS_LINUX:
@@ -482,7 +453,6 @@ class SystemProfiler:
         except Exception:
             pass
 
-        # Find largest directories for targeted cleanup
         largest_dirs = self._find_large_dirs()
 
         classification = self._classify_disk(disk_pct, inode_pct, top_writers, io_util_pct)
@@ -546,16 +516,14 @@ class SystemProfiler:
         result.sort(key=lambda x: x['size_mb'], reverse=True)
         return result[:8]
 
-    # ── Network Profiling ──────────────────────────────────────────────────
 
     def profile_network(self) -> NetworkProfile:
         """Classify network anomaly: connection leak, DNS, latency, packet loss."""
         self._log("Network profiling")
         import socket as _socket
 
-        # Connection state counts
         conn_by_state: Dict[str, int] = defaultdict(int)
-        conn_by_proc:  Dict[str, int] = defaultdict(int)
+        conn_by_proc: Dict[str, int] = defaultdict(int)
         try:
             for conn in psutil.net_connections(kind='inet'):
                 state = conn.status or 'UNKNOWN'
@@ -569,13 +537,11 @@ class SystemProfiler:
         except (psutil.AccessDenied, PermissionError):
             pass
 
-        top_conn_proc  = max(conn_by_proc, key=conn_by_proc.get) if conn_by_proc else None
+        top_conn_proc = max(conn_by_proc, key=conn_by_proc.get) if conn_by_proc else None
         top_conn_count = conn_by_proc.get(top_conn_proc, 0) if top_conn_proc else 0
 
-        # Ping test (latency + packet loss)
         ping_ms, loss_pct = self._measure_latency()
 
-        # DNS check (getaddrinfo has no timeout kwarg — use a thread)
         dns_ok = False
         def _dns_check():
             try:
@@ -590,7 +556,6 @@ class SystemProfiler:
         _t.join(timeout=4)
         dns_ok = _dns_result[0]
 
-        # Internet check
         internet_ok = False
         try:
             _socket.create_connection(('8.8.8.8', 53), timeout=3)
@@ -640,8 +605,6 @@ class SystemProfiler:
                   ['ping', '-c', str(count), '-t', '1', host]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             out = r.stdout
-            # Parse avg from "rtt min/avg/max/mdev = 1.2/3.4/5.6/1.0 ms"
-            # or "round-trip min/avg/max/stddev = ..." (macOS)
             avg_ms = 0.0
             for line in out.split('\n'):
                 if 'avg' in line and '/' in line:
@@ -649,7 +612,6 @@ class SystemProfiler:
                     if len(parts) >= 2:
                         avg_ms = float(parts[1])
                         break
-            # Parse loss
             loss_pct = 0.0
             for line in out.split('\n'):
                 if 'packet loss' in line:
@@ -680,10 +642,6 @@ class SystemProfiler:
         return 'HIGH_LATENCY'
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Algorithmic Recovery Engine — applies targeted fixes based on classification
-# ─────────────────────────────────────────────────────────────────────────────
-
 class AlgorithmicRecoveryEngine:
     """
     Applies targeted, algorithm-level fixes based on profiled root cause.
@@ -691,12 +649,11 @@ class AlgorithmicRecoveryEngine:
     """
 
     def __init__(self, logger=None, ollama_model: str = 'llama3.2:3b'):
-        self.profiler     = SystemProfiler(logger=logger)
-        self.logger       = logger
+        self.profiler = SystemProfiler(logger=logger)
+        self.logger = logger
         self.ollama_model = ollama_model
-        self._log         = self.profiler._log
+        self._log = self.profiler._log
 
-    # ── Public entry points ────────────────────────────────────────────────
 
     def heal_cpu(self, anomaly_value: float, metrics: dict, diagnosis: dict) -> HealResult:
         """
@@ -706,18 +663,16 @@ class AlgorithmicRecoveryEngine:
         self._log("Starting algorithmic CPU analysis", 'info')
         try:
             profile = self.profiler.profile_cpu(n_samples=3, interval=1.2)
-            before  = {**profile.evidence, 'anomaly_value': anomaly_value}
+            before = {**profile.evidence, 'anomaly_value': anomaly_value}
 
             self._log(f"CPU classified as: {profile.classification} "
                       f"(dominant={profile.dominant_process.name if profile.dominant_process else '?'}, "
                       f"iowait={profile.iowait_pct:.1f}%)")
 
-            # Ask Ollama to validate the classification
             ai_hint = self._ask_ollama_cpu(profile)
             if ai_hint:
                 self._log(f"AI validation: {ai_hint}")
 
-            # Apply algorithm based on classification
             if profile.classification == 'TRANSIENT_SPIKE':
                 return self._cpu_wait_and_verify(profile, before)
 
@@ -730,7 +685,7 @@ class AlgorithmicRecoveryEngine:
             elif profile.classification == 'MULTI_PROCESS':
                 return self._cpu_fix_multi_process(profile, before)
 
-            else:  # COMPUTE_BOUND — default
+            else:
                 return self._cpu_fix_compute_bound(profile, before)
 
         except Exception as e:
@@ -745,7 +700,7 @@ class AlgorithmicRecoveryEngine:
         self._log("Starting algorithmic memory analysis", 'info')
         try:
             profile = self.profiler.profile_memory(n_samples=4, interval=2.0)
-            before  = {**profile.evidence, 'anomaly_value': anomaly_value}
+            before = {**profile.evidence, 'anomaly_value': anomaly_value}
 
             self._log(f"Memory classified as: {profile.classification} "
                       f"(swap={profile.swap_pct:.1f}%, cached={profile.cached_mb:.0f}MB)")
@@ -760,7 +715,7 @@ class AlgorithmicRecoveryEngine:
                 return self._memory_fix_swap(profile, before)
             elif profile.classification == 'CACHE_BLOAT':
                 return self._memory_fix_cache(profile, before)
-            else:  # NORMAL_GROWTH — general pressure
+            else:
                 return self._memory_fix_general(profile, before)
 
         except Exception as e:
@@ -775,7 +730,7 @@ class AlgorithmicRecoveryEngine:
         self._log("Starting algorithmic disk analysis", 'info')
         try:
             profile = self.profiler.profile_disk()
-            before  = {**profile.evidence, 'anomaly_value': anomaly_value}
+            before = {**profile.evidence, 'anomaly_value': anomaly_value}
 
             self._log(f"Disk classified as: {profile.classification} "
                       f"(disk={profile.disk_pct:.1f}%, inode={profile.inode_pct:.1f}%)")
@@ -786,7 +741,7 @@ class AlgorithmicRecoveryEngine:
                 return self._disk_fix_io_hog(profile, before)
             elif profile.classification == 'IO_LATENCY':
                 return self._disk_fix_io_latency(profile, before)
-            else:  # DISK_CAPACITY
+            else:
                 return self._disk_fix_capacity(profile, before)
 
         except Exception as e:
@@ -801,7 +756,7 @@ class AlgorithmicRecoveryEngine:
         self._log("Starting algorithmic network analysis", 'info')
         try:
             profile = self.profiler.profile_network()
-            before  = {**profile.evidence, 'anomaly_value': anomaly_value}
+            before = {**profile.evidence, 'anomaly_value': anomaly_value}
 
             self._log(f"Network classified as: {profile.classification} "
                       f"(ping={profile.ping_ms:.1f}ms, loss={profile.packet_loss_pct:.1f}%)")
@@ -812,7 +767,7 @@ class AlgorithmicRecoveryEngine:
                 return self._network_fix_connection_leak(profile, before)
             elif profile.classification == 'HIGH_LATENCY':
                 return self._network_fix_latency(profile, before)
-            else:  # PACKET_LOSS | INTERFACE_ERROR
+            else:
                 return self._network_fix_interface(profile, before)
 
         except Exception as e:
@@ -822,9 +777,6 @@ class AlgorithmicRecoveryEngine:
                 message=f"Network algorithmic analysis failed: {e}",
             )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # CPU healing algorithms
-    # ─────────────────────────────────────────────────────────────────────
 
     def _cpu_wait_and_verify(self, profile: CPUProfile, before: dict) -> HealResult:
         """Transient spike — wait 10s and verify it resolves on its own."""
@@ -854,7 +806,6 @@ class AlgorithmicRecoveryEngine:
         actions = []
         targets_hit = 0
 
-        # Find processes with highest I/O write activity
         io_hogs = sorted(
             [ps for ps in profile.top_procs if ps.io_write_mb > 5],
             key=lambda p: p.io_write_mb,
@@ -865,14 +816,12 @@ class AlgorithmicRecoveryEngine:
             if ps.name.lower() in _CRITICAL_PROCESSES:
                 continue
             if _IS_LINUX:
-                # ionice -c 3 (idle I/O class): process only gets I/O when no other process needs it
                 r = subprocess.run(
                     ['ionice', '-c', '3', '-p', str(ps.pid)],
                     capture_output=True, text=True, timeout=5,
                 )
                 ok = r.returncode == 0
             elif _IS_MACOS:
-                # taskpolicy -d background: macOS QoS background I/O tier
                 r = subprocess.run(
                     ['taskpolicy', '-d', 'background', str(ps.pid)],
                     capture_output=True, text=True, timeout=5,
@@ -885,7 +834,6 @@ class AlgorithmicRecoveryEngine:
                 actions.append(f"Reduced I/O priority of '{ps.name}' (PID {ps.pid})")
                 targets_hit += 1
             else:
-                # Fallback: renice to lower priority reduces CPU time which reduces I/O pressure
                 try:
                     proc = psutil.Process(ps.pid)
                     proc.nice(10)
@@ -894,20 +842,17 @@ class AlgorithmicRecoveryEngine:
                 except Exception:
                     pass
 
-        # Flush dirty write-back pages to relieve I/O wait (Linux)
         if _IS_LINUX:
             try:
                 subprocess.run(['sync'], capture_output=True, timeout=10)
-                # Tune vm.dirty_ratio down temporarily to reduce write-back buildup
                 with open('/proc/sys/vm/dirty_ratio', 'w') as f:
                     f.write('5\n')
                 actions.append("sync + tuned vm.dirty_ratio=5 to drain write-back queue")
             except Exception:
                 pass
 
-        # Measure after
         time.sleep(3)
-        after_cpu   = psutil.cpu_percent(interval=1)
+        after_cpu = psutil.cpu_percent(interval=1)
         after_times = psutil.cpu_times_percent(interval=0.5)
         after_iowait = getattr(after_times, 'iowait', 0.0)
         after = {'cpu_pct': after_cpu, 'iowait_pct': round(after_iowait, 1)}
@@ -935,7 +880,6 @@ class AlgorithmicRecoveryEngine:
         self._log("Algorithm: MEMORY_THRASH — applying anti-thrash memory policy")
         actions = []
 
-        # Drop page cache to free RAM (reduces paging)
         if _IS_LINUX:
             try:
                 subprocess.run(
@@ -943,7 +887,6 @@ class AlgorithmicRecoveryEngine:
                     capture_output=True, text=True, timeout=15,
                 )
                 actions.append("Dropped page cache (echo 1 > /proc/sys/vm/drop_caches)")
-                # Reduce swappiness so kernel prefers to keep pages in RAM
                 with open('/proc/sys/vm/swappiness', 'w') as f:
                     f.write('10\n')
                 actions.append("Set vm.swappiness=10 to prefer RAM over swap")
@@ -954,7 +897,6 @@ class AlgorithmicRecoveryEngine:
             if r.returncode == 0:
                 actions.append("macOS purge: page cache cleared")
 
-        # Renice all disk-sleep processes to reduce their scheduling priority
         thrashing_procs = [ps for ps in profile.top_procs if ps.status == 'disk-sleep']
         for ps in thrashing_procs[:3]:
             if ps.name.lower() not in _CRITICAL_PROCESSES:
@@ -997,7 +939,6 @@ class AlgorithmicRecoveryEngine:
                 pass
 
             if _IS_LINUX:
-                # SCHED_BATCH: kernel gives time slices in larger chunks — reduces context switch overhead
                 try:
                     subprocess.run(
                         ['chrt', '-b', '-p', '0', str(ps.pid)],
@@ -1043,10 +984,9 @@ class AlgorithmicRecoveryEngine:
                 message="No eligible dominant process found",
             )
 
-        pid  = proc_obj.pid
+        pid = proc_obj.pid
         name = proc_obj.name
 
-        # 1. CPU affinity: pin to half the cores (leave other half for system)
         try:
             proc = psutil.Process(pid)
             all_cores = list(proc.cpu_affinity())
@@ -1058,10 +998,8 @@ class AlgorithmicRecoveryEngine:
                     f"restricted to cores {half} of {all_cores}"
                 )
         except (psutil.AccessDenied, AttributeError, psutil.NoSuchProcess):
-            # cpu_affinity not available on macOS — use nice instead
             pass
 
-        # 2. Renice to +10 — reduces scheduler priority
         try:
             proc = psutil.Process(pid)
             old_nice = proc.nice()
@@ -1070,7 +1008,6 @@ class AlgorithmicRecoveryEngine:
         except (psutil.AccessDenied, psutil.NoSuchProcess):
             pass
 
-        # 3. Linux scheduling class: SCHED_BATCH reduces CPU-hogging
         if _IS_LINUX:
             try:
                 r = subprocess.run(
@@ -1082,7 +1019,6 @@ class AlgorithmicRecoveryEngine:
             except Exception:
                 pass
 
-        # 4. macOS: use taskpolicy for background QoS
         if _IS_MACOS:
             try:
                 r = subprocess.run(
@@ -1112,9 +1048,6 @@ class AlgorithmicRecoveryEngine:
             parameters={'pid': pid, 'process': name},
         )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Memory healing algorithms
-    # ─────────────────────────────────────────────────────────────────────
 
     def _memory_fix_leak(self, profile: MemoryProfile, before: dict) -> HealResult:
         """
@@ -1130,9 +1063,9 @@ class AlgorithmicRecoveryEngine:
         leakers = profile.leaking_processes
 
         for leak in leakers[:2]:
-            pid  = leak['pid']
+            pid = leak['pid']
             name = leak['name']
-            rss  = leak['rss_mb']
+            rss = leak['rss_mb']
             slope = leak['slope_mb_per_s']
 
             actions.append(
@@ -1140,7 +1073,6 @@ class AlgorithmicRecoveryEngine:
                 f"RSS={rss:.0f}MB, growth={slope:.3f}MB/s"
             )
 
-            # OOM score adjustment: higher value → kernel more likely to kill this proc first
             oom_path = f'/proc/{pid}/oom_score_adj'
             if os.path.exists(oom_path):
                 try:
@@ -1150,7 +1082,6 @@ class AlgorithmicRecoveryEngine:
                 except PermissionError:
                     pass
 
-            # Send SIGUSR1 to trigger GC if it's a Python process (common in IoT environments)
             if 'python' in name.lower():
                 try:
                     import signal
@@ -1159,7 +1090,6 @@ class AlgorithmicRecoveryEngine:
                 except Exception:
                     pass
 
-            # Only terminate if RSS > 60% of total RAM (last resort)
             rss_ratio = rss / profile.total_mb if profile.total_mb > 0 else 0
             if rss_ratio > 0.60 and name.lower() not in _CRITICAL_PROCESSES:
                 try:
@@ -1181,7 +1111,6 @@ class AlgorithmicRecoveryEngine:
                     f"oom_score adjusted; termination deferred (threshold: 60%)"
                 )
 
-        # Compact memory after adjustments
         if _IS_LINUX:
             try:
                 with open('/proc/sys/vm/compact_memory', 'w') as f:
@@ -1191,9 +1120,9 @@ class AlgorithmicRecoveryEngine:
                 pass
 
         time.sleep(3)
-        vm    = psutil.virtual_memory()
+        vm = psutil.virtual_memory()
         after = {
-            'mem_pct':     vm.percent,
+            'mem_pct': vm.percent,
             'available_mb': round(vm.available / (1024 * 1024), 1),
         }
         return HealResult(
@@ -1221,13 +1150,11 @@ class AlgorithmicRecoveryEngine:
         self._log("Algorithm: SWAP_PRESSURE — tuning swappiness + cache eviction")
         actions = []
 
-        # Lower swappiness
         if _IS_LINUX:
             try:
                 with open('/proc/sys/vm/swappiness', 'w') as f:
                     f.write('10\n')
                 actions.append("Set vm.swappiness=10 (was 60 default) — discourages further swap use")
-                # Drop clean page cache to free RAM (reduces need to swap)
                 subprocess.run(
                     ['sh', '-c', 'sync && echo 1 > /proc/sys/vm/drop_caches'],
                     capture_output=True, timeout=15,
@@ -1240,7 +1167,6 @@ class AlgorithmicRecoveryEngine:
             if r.returncode == 0:
                 actions.append("macOS purge: reclaimed compressed memory pages")
 
-        # Find top memory consumers and renice them to reduce working set
         for ps in profile.top_consumers[:3]:
             if ps.mem_rss_mb > 200 and ps.name.lower() not in _CRITICAL_PROCESSES:
                 try:
@@ -1251,8 +1177,8 @@ class AlgorithmicRecoveryEngine:
                     pass
 
         time.sleep(3)
-        vm    = psutil.virtual_memory()
-        swap  = psutil.swap_memory()
+        vm = psutil.virtual_memory()
+        swap = psutil.swap_memory()
         after = {'mem_pct': vm.percent, 'swap_pct': swap.percent}
         return HealResult(
             success=bool(actions),
@@ -1279,7 +1205,6 @@ class AlgorithmicRecoveryEngine:
         vm_before = psutil.virtual_memory()
         if _IS_LINUX:
             try:
-                # echo 1 drops page cache only (not dentries/inodes — that's echo 3)
                 subprocess.run(
                     ['sh', '-c', 'sync && echo 1 > /proc/sys/vm/drop_caches'],
                     capture_output=True, timeout=15,
@@ -1294,11 +1219,11 @@ class AlgorithmicRecoveryEngine:
         elif _IS_MACOS:
             r = subprocess.run(['purge'], capture_output=True, timeout=30)
             if r.returncode == 0:
-                vm_after  = psutil.virtual_memory()
-                freed_mb  = (vm_after.available - vm_before.available) / (1024 * 1024)
+                vm_after = psutil.virtual_memory()
+                freed_mb = (vm_after.available - vm_before.available) / (1024 * 1024)
                 actions.append(f"macOS purge: freed {freed_mb:.0f}MB from inactive memory")
 
-        vm    = psutil.virtual_memory()
+        vm = psutil.virtual_memory()
         after = {'mem_pct': vm.percent, 'available_mb': round(vm.available / (1024 * 1024), 1)}
         return HealResult(
             success=bool(actions),
@@ -1340,7 +1265,7 @@ class AlgorithmicRecoveryEngine:
             actions.append("macOS purge attempted")
 
         time.sleep(3)
-        vm    = psutil.virtual_memory()
+        vm = psutil.virtual_memory()
         after = {'mem_pct': vm.percent, 'available_mb': round(vm.available / (1024 * 1024), 1)}
         return HealResult(
             success=bool(actions),
@@ -1352,9 +1277,6 @@ class AlgorithmicRecoveryEngine:
             message=f"Memory pressure relief: {'; '.join(actions)}",
         )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Disk healing algorithms
-    # ─────────────────────────────────────────────────────────────────────
 
     def _disk_fix_inodes(self, profile: DiskProfile, before: dict) -> HealResult:
         """
@@ -1365,9 +1287,8 @@ class AlgorithmicRecoveryEngine:
         actions = []
         cleaned = 0
 
-        # Find directories with the most files (small files exhaust inodes)
         inode_hogs = []
-        scan_dirs  = ['/tmp', '/var/tmp', '/var/cache', 'logs', '/var/spool']
+        scan_dirs = ['/tmp', '/var/tmp', '/var/cache', 'logs', '/var/spool']
         for base in scan_dirs:
             if not os.path.isdir(base):
                 continue
@@ -1381,7 +1302,6 @@ class AlgorithmicRecoveryEngine:
 
         for hog in inode_hogs[:3]:
             path = hog['path']
-            # Remove files older than 1 hour from inode hog directories
             cutoff = time.time() - 3600
             try:
                 for entry in os.scandir(path):
@@ -1395,7 +1315,6 @@ class AlgorithmicRecoveryEngine:
             except PermissionError:
                 pass
 
-        # __pycache__ cleanup: large number of small .pyc files
         pyc_count = 0
         for root, dirs, files in os.walk('.'):
             for d in list(dirs):
@@ -1431,7 +1350,7 @@ class AlgorithmicRecoveryEngine:
         actions = []
 
         for writer in profile.top_writers[:3]:
-            pid  = writer['pid']
+            pid = writer['pid']
             name = writer['name']
             if name.lower() in _CRITICAL_PROCESSES:
                 continue
@@ -1474,7 +1393,6 @@ class AlgorithmicRecoveryEngine:
         actions = []
 
         if _IS_LINUX:
-            # Check current I/O scheduler
             try:
                 for sched_file in ['/sys/block/sda/queue/scheduler',
                                    '/sys/block/nvme0n1/queue/scheduler',
@@ -1483,7 +1401,6 @@ class AlgorithmicRecoveryEngine:
                         with open(sched_file) as f:
                             sched = f.read().strip()
                         actions.append(f"I/O scheduler ({os.path.basename(os.path.dirname(sched_file))}): {sched}")
-                        # Switch to mq-deadline for better latency if not already set
                         if 'mq-deadline' not in sched and '[mq-deadline]' not in sched:
                             try:
                                 with open(sched_file, 'w') as f:
@@ -1494,7 +1411,6 @@ class AlgorithmicRecoveryEngine:
             except Exception:
                 pass
 
-            # Limit max I/O queue depth to reduce contention
             try:
                 for nr_file in ['/sys/block/sda/queue/nr_requests',
                                 '/sys/block/mmcblk0/queue/nr_requests']:
@@ -1530,23 +1446,21 @@ class AlgorithmicRecoveryEngine:
 
         disk_before = psutil.disk_usage('/')
 
-        # 1. Smart log rotation: compress large uncompressed logs in known log dirs
         for log_dir in ['logs', '/var/log']:
             if not os.path.isdir(log_dir):
                 continue
             for log_file in _glob.glob(f'{log_dir}/*.log') + _glob.glob(f'{log_dir}/**/*.log'):
                 try:
                     size_mb = os.path.getsize(log_file) / (1024 * 1024)
-                    if size_mb > 5:  # only compress logs > 5MB
+                    if size_mb > 5:
                         with open(log_file, 'rb') as fin, gzip.open(log_file + '.gz', 'wb') as fout:
                             shutil.copyfileobj(fin, fout)
-                        os.truncate(log_file, 0)  # truncate in place (don't delete — allows processes to keep writing)
+                        os.truncate(log_file, 0)
                         freed_mb += size_mb * 0.9
                         actions.append(f"Compressed and truncated {os.path.basename(log_file)} ({size_mb:.1f}MB → ~{size_mb*0.1:.1f}MB)")
                 except Exception:
                     pass
 
-        # 2. Remove temp files older than 1 day
         cutoff = time.time() - 86400
         for tmp_dir in ['/tmp', '/var/tmp']:
             if not os.path.isdir(tmp_dir):
@@ -1570,7 +1484,6 @@ class AlgorithmicRecoveryEngine:
         if freed_mb > 0:
             actions.append(f"Temp cleanup: {freed_mb:.1f}MB freed from /tmp")
 
-        # 3. Remove compressed logs older than 7 days
         old_gz = 0
         for log_dir in ['logs', '/var/log']:
             for f in _glob.glob(f'{log_dir}/*.gz'):
@@ -1585,7 +1498,6 @@ class AlgorithmicRecoveryEngine:
         if old_gz:
             actions.append(f"Removed {old_gz} compressed logs older than 7 days")
 
-        # 4. __pycache__ cleanup
         pc_count = 0
         for root, dirs, _ in os.walk('.'):
             for d in list(dirs):
@@ -1618,9 +1530,6 @@ class AlgorithmicRecoveryEngine:
             parameters={'freed_mb': round(actual_freed, 1)},
         )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Network healing algorithms
-    # ─────────────────────────────────────────────────────────────────────
 
     def _network_fix_dns(self, profile: NetworkProfile, before: dict) -> HealResult:
         """
@@ -1650,7 +1559,6 @@ class AlgorithmicRecoveryEngine:
                 except Exception:
                     pass
 
-        # Test if Cloudflare DNS resolves
         _cf_ok = [False]
         _tc = threading.Thread(
             target=lambda: _cf_ok.__setitem__(0, _try_resolve('cloudflare.com'))
@@ -1663,19 +1571,17 @@ class AlgorithmicRecoveryEngine:
         else:
             actions.append("Alternate DNS also failing — network-level issue")
 
-        # On Linux, add 8.8.8.8 as fallback nameserver if resolv.conf is writable
         if _IS_LINUX and os.path.isfile('/etc/resolv.conf'):
             try:
                 with open('/etc/resolv.conf') as f:
                     content = f.read()
                 if '8.8.8.8' not in content:
                     with open('/etc/resolv.conf', 'a') as f:
-                        f.write('\nnameserver 8.8.8.8  # Sentinel AI emergency fallback\n')
+                        f.write('\nnameserver 8.8.8.8 # Sentinel AI emergency fallback\n')
                     actions.append("Added Google DNS 8.8.8.8 as emergency fallback in /etc/resolv.conf")
             except PermissionError:
                 pass
 
-        # Verify after
         time.sleep(2)
         _after_ok = [False]
         _ta = threading.Thread(
@@ -1723,11 +1629,11 @@ class AlgorithmicRecoveryEngine:
 
         if _IS_LINUX:
             sysctl_params = {
-                'net.ipv4.tcp_fin_timeout':       '15',   # default 60s — speeds up TIME_WAIT cleanup
-                'net.ipv4.tcp_tw_reuse':          '1',    # allow reuse of TIME_WAIT sockets
-                'net.ipv4.tcp_keepalive_time':    '300',  # faster detection of dead connections
-                'net.ipv4.tcp_keepalive_intvl':   '30',
-                'net.ipv4.tcp_keepalive_probes':  '5',
+                'net.ipv4.tcp_fin_timeout': '15',
+                'net.ipv4.tcp_tw_reuse': '1',
+                'net.ipv4.tcp_keepalive_time': '300',
+                'net.ipv4.tcp_keepalive_intvl': '30',
+                'net.ipv4.tcp_keepalive_probes': '5',
             }
             for param, value in sysctl_params.items():
                 try:
@@ -1741,11 +1647,10 @@ class AlgorithmicRecoveryEngine:
                     pass
 
         elif _IS_MACOS:
-            # macOS equivalent sysctl parameters
             macos_params = {
-                'net.inet.tcp.msl':          '5000',  # reduce MSL from 15s to 5s
-                'net.inet.tcp.keepidle':     '300',   # keepalive idle time
-                'net.inet.tcp.keepintvl':    '30',
+                'net.inet.tcp.msl': '5000',
+                'net.inet.tcp.keepidle': '300',
+                'net.inet.tcp.keepintvl': '30',
             }
             for param, value in macos_params.items():
                 try:
@@ -1758,7 +1663,6 @@ class AlgorithmicRecoveryEngine:
                 except Exception:
                     pass
 
-        # Measure after
         time.sleep(3)
         conn_after = defaultdict(int)
         try:
@@ -1796,15 +1700,12 @@ class AlgorithmicRecoveryEngine:
         actions.append(f"Baseline latency: {profile.ping_ms:.1f}ms")
 
         if _IS_LINUX:
-            # Check current congestion algorithm
             try:
                 r = subprocess.run(['sysctl', 'net.ipv4.tcp_congestion_control'],
                                    capture_output=True, text=True, timeout=5)
                 current_cc = r.stdout.strip().split('=')[-1].strip()
                 actions.append(f"Current TCP congestion control: {current_cc}")
 
-                # BBR provides better throughput with high latency links
-                # Switch to BBR if not already set (requires kernel 4.9+)
                 if current_cc != 'bbr':
                     r2 = subprocess.run(
                         ['sysctl', '-w', 'net.ipv4.tcp_congestion_control=bbr'],
@@ -1815,13 +1716,12 @@ class AlgorithmicRecoveryEngine:
             except Exception:
                 pass
 
-            # Increase TCP buffer sizes for high-latency links
             try:
                 params = {
-                    'net.core.rmem_max':          '16777216',
-                    'net.core.wmem_max':          '16777216',
-                    'net.ipv4.tcp_rmem':          '4096 87380 16777216',
-                    'net.ipv4.tcp_wmem':          '4096 65536 16777216',
+                    'net.core.rmem_max': '16777216',
+                    'net.core.wmem_max': '16777216',
+                    'net.ipv4.tcp_rmem': '4096 87380 16777216',
+                    'net.ipv4.tcp_wmem': '4096 65536 16777216',
                     'net.ipv4.tcp_window_scaling': '1',
                 }
                 for param, value in params.items():
@@ -1833,7 +1733,6 @@ class AlgorithmicRecoveryEngine:
             except Exception:
                 pass
 
-        # Measure after
         time.sleep(2)
         ping_after, loss_after = self.profiler._measure_latency()
         after = {'ping_ms': round(ping_after, 1), 'loss_pct': loss_after}
@@ -1855,7 +1754,6 @@ class AlgorithmicRecoveryEngine:
         self._log("Algorithm: INTERFACE_ERROR — ARP flush + interface diagnostics")
         actions = []
 
-        # Flush ARP cache (stale ARP entries cause intermittent packet loss)
         if _IS_LINUX:
             try:
                 r = subprocess.run(['ip', 'neigh', 'flush', 'all'],
@@ -1864,7 +1762,6 @@ class AlgorithmicRecoveryEngine:
                     actions.append("Flushed ARP neighbor cache (stale entries removed)")
             except Exception:
                 pass
-            # Check interface error counters
             try:
                 ifaces = psutil.net_if_stats()
                 for iface, stats in ifaces.items():
@@ -1901,9 +1798,6 @@ class AlgorithmicRecoveryEngine:
             ),
         )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # AI validation helpers — Groq (primary) → Ollama (fallback)
-    # ─────────────────────────────────────────────────────────────────────
 
     def _ask_ollama_cpu(self, profile: CPUProfile) -> Optional[str]:
         """Ask LLM to validate CPU classification and suggest any adjustments."""
@@ -1935,10 +1829,8 @@ class AlgorithmicRecoveryEngine:
         Call Groq (llama-3.3-70b-versatile) first for fast, high-quality validation.
         Falls back to local Ollama if Groq is unavailable or fails.
         """
-        # ── Try Groq first ────────────────────────────────────────────────
         groq_key = os.environ.get('GROQ_API_KEY', '')
         if not groq_key:
-            # Try loading from .env
             env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
             try:
                 for line in open(os.path.abspath(env_path)):
@@ -1966,7 +1858,6 @@ class AlgorithmicRecoveryEngine:
             except Exception as e:
                 self._log(f"Groq unavailable ({e}) — falling back to Ollama")
 
-        # ── Fallback: local Ollama ─────────────────────────────────────────
         try:
             import ollama as _ollama
             response = _ollama.chat(

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Sentinel AI — Remote Client
-Compatible with Python 3.7+  (Windows / Linux / macOS)
+Compatible with Python 3.7+ (Windows / Linux / macOS)
 
 Copy this single file to any machine you want monitored.
 
@@ -15,63 +14,59 @@ Auto-discovery (same LAN, no router AP-isolation):
 If you see "Connection failed" run the test command to diagnose:
   python sentinel_client.py --test --hub http://192.168.x.x:5001
 """
-from __future__ import annotations   # makes type hints work on Python 3.7+
+from __future__ import annotations
 
 import argparse
 import json
 import platform
 import socket
 import sys
+import threading
 import time
 import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
+_stress_stop = threading.Event()
+_stress_threads: list = []
+
 try:
     import psutil
 except ImportError:
     print("[ERROR] psutil not installed.")
-    print("        Run:  pip install psutil")
+    print(" Run: pip install psutil")
     sys.exit(1)
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-DISCOVERY_PORT  = 47474
-DISCOVERY_MSG   = b"SENTINEL_DISCOVER"
+DISCOVERY_PORT = 47474
+DISCOVERY_MSG = b"SENTINEL_DISCOVER"
 DISCOVERY_TRIES = 6
-DISCOVERY_WAIT  = 2.0
+DISCOVERY_WAIT = 2.0
 
 VERSION = "1.2"
 
 
-# ── Pretty-print helpers ───────────────────────────────────────────────────────
+def _ok(msg): print(" [OK] " + msg, flush=True)
+def _err(msg): print(" [ERR] " + msg, flush=True)
+def _info(msg):print(" [..] " + msg, flush=True)
 
-def _ok(msg):  print("  [OK]  " + msg, flush=True)
-def _err(msg): print("  [ERR] " + msg, flush=True)
-def _info(msg):print("  [..] " + msg,  flush=True)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pre-flight connectivity test
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_connectivity(hub_url: str) -> bool:
     """
     Run a series of diagnostic checks against the hub URL and print
-    step-by-step results.  Returns True if the hub is fully reachable.
+    step-by-step results. Returns True if the hub is fully reachable.
     """
     from urllib.parse import urlparse
-    parsed  = urlparse(hub_url)
-    host    = parsed.hostname or ''
-    port    = parsed.port or 5001
+    parsed = urlparse(hub_url)
+    host = parsed.hostname or ''
+    port = parsed.port or 5001
 
     print()
     print("=" * 60)
-    print("  Connectivity Diagnostics")
+    print(" Connectivity Diagnostics")
     print("=" * 60)
 
-    # ── Step 1: DNS / IP resolution ───────────────────────────────────
-    print("\n  Step 1 — Resolve host ...")
+    print("\n Step 1 — Resolve host ...")
     try:
         ip = socket.gethostbyname(host)
         _ok("Host resolved: {} → {}".format(host, ip))
@@ -80,8 +75,7 @@ def test_connectivity(hub_url: str) -> bool:
         _err("Check that you typed the correct IP address.")
         return False
 
-    # ── Step 2: TCP reachability ──────────────────────────────────────
-    print("\n  Step 2 — TCP connect to {}:{} ...".format(host, port))
+    print("\n Step 2 — TCP connect to {}:{} ...".format(host, port))
     try:
         s = socket.create_connection((host, port), timeout=4)
         s.close()
@@ -99,8 +93,7 @@ def test_connectivity(hub_url: str) -> bool:
         _print_network_help(host, port)
         return False
 
-    # ── Step 3: HTTP GET /api/status ─────────────────────────────────
-    print("\n  Step 3 — HTTP GET {}/api/status ...".format(hub_url))
+    print("\n Step 3 — HTTP GET {}/api/status ...".format(hub_url))
     try:
         req = urllib.request.Request(hub_url + "/api/status")
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -111,7 +104,7 @@ def test_connectivity(hub_url: str) -> bool:
         return False
 
     print()
-    print("  All checks passed!  Hub is reachable.")
+    print(" All checks passed! Hub is reachable.")
     print("=" * 60)
     print()
     return True
@@ -119,30 +112,26 @@ def test_connectivity(hub_url: str) -> bool:
 
 def _print_network_help(host: str, port: int):
     print()
-    print("  ── Possible causes & fixes ──────────────────────────────")
-    print("  1. Router AP/Client Isolation (most common on WiFi):")
-    print("     Your router may block device-to-device traffic.")
-    print("     Fix: Log into router → disable 'AP Isolation' or")
-    print("          'Client Isolation' on your WiFi network.")
+    print(" Possible causes & fixes ")
+    print(" 1. Router AP/Client Isolation (most common on WiFi):")
+    print(" Your router may block device-to-device traffic.")
+    print(" Fix: Log into router → disable 'AP Isolation' or")
+    print(" 'Client Isolation' on your WiFi network.")
     print()
-    print("  2. macOS Firewall (on the hub machine):")
-    print("     Open System Settings → Privacy & Security → Firewall")
-    print("     → Firewall Options → make sure python3 is ALLOWED.")
+    print(" 2. macOS Firewall (on the hub machine):")
+    print(" Open System Settings → Privacy & Security → Firewall")
+    print(" → Firewall Options → make sure python3 is ALLOWED.")
     print()
-    print("  3. Windows Firewall (on this machine):")
-    print("     Open Windows Defender Firewall → Allow an app → add")
-    print("     python.exe and allow it on Private networks.")
+    print(" 3. Windows Firewall (on this machine):")
+    print(" Open Windows Defender Firewall → Allow an app → add")
+    print(" python.exe and allow it on Private networks.")
     print()
-    print("  4. Wrong IP — verify hub IP by running on the Mac:")
-    print("     ipconfig getifaddr en0")
+    print(" 4. Wrong IP — verify hub IP by running on the Mac:")
+    print(" ipconfig getifaddr en0")
     print()
-    print("  Hub address used: {}:{}".format(host, port))
-    print("  ─────────────────────────────────────────────────────────")
+    print(" Hub address used: {}:{}".format(host, port))
+    print(" ")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hub auto-discovery via UDP broadcast
-# ─────────────────────────────────────────────────────────────────────────────
 
 def discover_hub(timeout_per_try: float = DISCOVERY_WAIT) -> str | None:
     """Broadcast on the LAN; return hub URL string or None."""
@@ -166,10 +155,10 @@ def discover_hub(timeout_per_try: float = DISCOVERY_WAIT) -> str | None:
                 payload = json.loads(data.decode())
                 if payload.get('sentinel_hub'):
                     hub_url = payload['url']
-                    print("  Found hub at {}  (via {})".format(hub_url, addr[0]))
+                    print(" Found hub at {} (via {})".format(hub_url, addr[0]))
                     return hub_url
             except socket.timeout:
-                print("  No response yet (attempt {}/{})".format(attempt, DISCOVERY_TRIES))
+                print(" No response yet (attempt {}/{})".format(attempt, DISCOVERY_TRIES))
             except (json.JSONDecodeError, KeyError):
                 pass
     finally:
@@ -178,18 +167,14 @@ def discover_hub(timeout_per_try: float = DISCOVERY_WAIT) -> str | None:
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HTTP helpers (stdlib only — no external dependencies)
-# ─────────────────────────────────────────────────────────────────────────────
-
-_last_error: str = ""   # stores the last connection error for diagnostics
+_last_error: str = ""
 
 
 def _post(url: str, payload: dict, timeout: int = 8) -> int:
     """POST JSON; return HTTP status code, or -1 on connection error."""
     global _last_error
     body = json.dumps(payload).encode()
-    req  = urllib.request.Request(
+    req = urllib.request.Request(
         url, data=body,
         headers={'Content-Type': 'application/json'},
         method='POST',
@@ -226,10 +211,6 @@ def _get_json(url, timeout=5):
     except Exception:
         return None
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Remote recovery executor
-# ─────────────────────────────────────────────────────────────────────────────
 
 _CRITICAL_PROCS = {
     'system', 'svchost', 'lsass', 'csrss', 'wininit', 'services',
@@ -315,6 +296,60 @@ def _exec_remote_command(action):
             return {'status': 'success',
                     'message': 'removed {} temp/log files'.format(removed)}
 
+        elif action == 'stress_cpu':
+            _stress_stop.clear()
+            def _cpu_stress():
+                end = time.time() + 60
+                while time.time() < end and not _stress_stop.is_set():
+                    _ = sum(i * i for i in range(50000))
+            t = threading.Thread(target=_cpu_stress, daemon=True, name='sentinel_stress_cpu')
+            _stress_threads.append(t)
+            t.start()
+            return {'status': 'success', 'message': 'CPU stress running for 60s'}
+
+        elif action == 'stress_memory':
+            _stress_stop.clear()
+            def _mem_stress():
+                data = bytearray(250 * 1024 * 1024)
+                end = time.time() + 60
+                while time.time() < end and not _stress_stop.is_set():
+                    time.sleep(0.5)
+                del data
+            t = threading.Thread(target=_mem_stress, daemon=True, name='sentinel_stress_mem')
+            _stress_threads.append(t)
+            t.start()
+            return {'status': 'success', 'message': 'Memory stress running for 60s (250 MB held)'}
+
+        elif action == 'stress_disk':
+            import os as _os, tempfile
+            _stress_stop.clear()
+            def _disk_stress():
+                fpath = _os.path.join(tempfile.gettempdir(), 'sentinel_disk_stress.tmp')
+                try:
+                    with open(fpath, 'wb') as fp:
+                        for _ in range(100):
+                            if _stress_stop.is_set():
+                                break
+                            fp.write(b'S' * 1024 * 1024)
+                            fp.flush()
+                    end = time.time() + 30
+                    while time.time() < end and not _stress_stop.is_set():
+                        time.sleep(0.5)
+                finally:
+                    try:
+                        _os.remove(fpath)
+                    except Exception:
+                        pass
+            t = threading.Thread(target=_disk_stress, daemon=True, name='sentinel_stress_disk')
+            _stress_threads.append(t)
+            t.start()
+            return {'status': 'success', 'message': 'Disk stress running (100 MB write)'}
+
+        elif action == 'stop_stress':
+            _stress_stop.set()
+            alive = [t for t in _stress_threads if t.is_alive()]
+            return {'status': 'success', 'message': 'Stress stop signal sent ({} threads)'.format(len(alive))}
+
         else:
             return {'status': 'skipped',
                     'message': "action '{}' not supported on remote client".format(action)}
@@ -334,118 +369,109 @@ def poll_and_execute_commands(hub_url, device_id):
 
     results = []
     for cmd in commands:
-        action    = cmd.get('action', '')
+        action = cmd.get('action', '')
         action_id = cmd.get('action_id', '')
-        print("  [RECOVERY] remote action: {}".format(action), flush=True)
+        print(" [RECOVERY] remote action: {}".format(action), flush=True)
         result = _exec_remote_command(action)
         result['action_id'] = action_id
-        result['action']    = action
-        print("  [RECOVERY] {} — {}".format(result['status'], result['message']), flush=True)
+        result['action'] = action
+        print(" [RECOVERY] {} — {}".format(result['status'], result['message']), flush=True)
         results.append(result)
 
     _post("{}/api/devices/{}/command_results".format(hub_url, device_id),
           {'device_id': device_id, 'results': results})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Metric collection (psutil only — no extra dependencies)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def collect_metrics() -> dict:
     """Collect system metrics compatible with the Sentinel AI hub schema."""
 
-    # ── CPU ──────────────────────────────────────────────────────────────
     cpu = {
-        'cpu_percent':      psutil.cpu_percent(interval=1),
-        'cpu_count':        psutil.cpu_count(),
-        'load_avg_1min':    0.0,
-        'load_avg_5min':    0.0,
-        'load_avg_15min':   0.0,
+        'cpu_percent': psutil.cpu_percent(interval=1),
+        'cpu_count': psutil.cpu_count(),
+        'load_avg_1min': 0.0,
+        'load_avg_5min': 0.0,
+        'load_avg_15min': 0.0,
         'top_process_name': 'unknown',
-        'top_process_cpu':  0.0,
-        'top_process_pid':  0,
+        'top_process_cpu': 0.0,
+        'top_process_pid': 0,
     }
     try:
         la = psutil.getloadavg()
         cpu['load_avg_1min'], cpu['load_avg_5min'], cpu['load_avg_15min'] = la
     except AttributeError:
-        pass  # Windows does not expose getloadavg
+        pass
     try:
         top = max(
             psutil.process_iter(['pid', 'name', 'cpu_percent']),
             key=lambda p: p.info.get('cpu_percent') or 0,
         )
         cpu['top_process_name'] = top.info['name'] or 'unknown'
-        cpu['top_process_cpu']  = top.info.get('cpu_percent') or 0
-        cpu['top_process_pid']  = top.info['pid']
+        cpu['top_process_cpu'] = top.info.get('cpu_percent') or 0
+        cpu['top_process_pid'] = top.info['pid']
     except Exception:
         pass
 
-    # ── Memory ───────────────────────────────────────────────────────────
     vm = psutil.virtual_memory()
     sw = psutil.swap_memory()
     memory = {
-        'memory_percent':      vm.percent,
-        'memory_total_mb':     vm.total    / (1024 * 1024),
+        'memory_percent': vm.percent,
+        'memory_total_mb': vm.total / (1024 * 1024),
         'memory_available_mb': vm.available / (1024 * 1024),
-        'memory_used_mb':      vm.used     / (1024 * 1024),
-        'swap_percent':        sw.percent,
-        'swap_used_mb':        sw.used     / (1024 * 1024),
-        'top_process_name':    'unknown',
-        'top_process_memory':  0.0,
+        'memory_used_mb': vm.used / (1024 * 1024),
+        'swap_percent': sw.percent,
+        'swap_used_mb': sw.used / (1024 * 1024),
+        'top_process_name': 'unknown',
+        'top_process_memory': 0.0,
     }
     try:
         top = max(
             psutil.process_iter(['pid', 'name', 'memory_percent']),
             key=lambda p: p.info.get('memory_percent') or 0,
         )
-        memory['top_process_name']   = top.info['name'] or 'unknown'
+        memory['top_process_name'] = top.info['name'] or 'unknown'
         memory['top_process_memory'] = top.info.get('memory_percent') or 0
     except Exception:
         pass
 
-    # ── Disk ─────────────────────────────────────────────────────────────
     try:
-        # On Windows use C:\ instead of /
         disk_path = 'C:\\' if platform.system() == 'Windows' else '/'
         du = psutil.disk_usage(disk_path)
     except Exception:
         du = psutil.disk_usage('/')
     disk = {
-        'disk_percent':  du.percent,
+        'disk_percent': du.percent,
         'disk_total_gb': du.total / (1024 ** 3),
-        'disk_used_gb':  du.used  / (1024 ** 3),
-        'disk_free_gb':  du.free  / (1024 ** 3),
-        'disk_read_mb':  0.0,
+        'disk_used_gb': du.used / (1024 ** 3),
+        'disk_free_gb': du.free / (1024 ** 3),
+        'disk_read_mb': 0.0,
         'disk_write_mb': 0.0,
     }
     try:
         io = psutil.disk_io_counters()
         if io:
-            disk['disk_read_mb']  = io.read_bytes  / (1024 * 1024)
+            disk['disk_read_mb'] = io.read_bytes / (1024 * 1024)
             disk['disk_write_mb'] = io.write_bytes / (1024 * 1024)
     except Exception:
         pass
 
-    # ── Network ──────────────────────────────────────────────────────────
     nio = psutil.net_io_counters()
     network = {
-        'bytes_sent_mb':       (nio.bytes_sent  / (1024 * 1024)) if nio else 0,
-        'bytes_recv_mb':       (nio.bytes_recv  / (1024 * 1024)) if nio else 0,
-        'packets_sent':         nio.packets_sent if nio else 0,
-        'packets_recv':         nio.packets_recv if nio else 0,
-        'errors_in':            nio.errin        if nio else 0,
-        'errors_out':           nio.errout       if nio else 0,
-        'ping_success':         False,
-        'ping_latency_ms':      0.0,
-        'packet_loss_percent':  0.0,
+        'bytes_sent_mb': (nio.bytes_sent / (1024 * 1024)) if nio else 0,
+        'bytes_recv_mb': (nio.bytes_recv / (1024 * 1024)) if nio else 0,
+        'packets_sent': nio.packets_sent if nio else 0,
+        'packets_recv': nio.packets_recv if nio else 0,
+        'errors_in': nio.errin if nio else 0,
+        'errors_out': nio.errout if nio else 0,
+        'ping_success': False,
+        'ping_latency_ms': 0.0,
+        'packet_loss_percent': 0.0,
     }
     for host in ['8.8.8.8', '1.1.1.1']:
         try:
             t0 = time.time()
-            s  = socket.create_connection((host, 53), timeout=2)
+            s = socket.create_connection((host, 53), timeout=2)
             s.close()
-            network['ping_success']    = True
+            network['ping_success'] = True
             network['ping_latency_ms'] = round((time.time() - t0) * 1000, 2)
             break
         except Exception:
@@ -454,17 +480,13 @@ def collect_metrics() -> dict:
     return {'cpu': cpu, 'memory': memory, 'disk': disk, 'network': network}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main
-# ─────────────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(
         description='Sentinel AI Remote Client v{} — streams metrics to hub'.format(VERSION)
     )
     parser.add_argument(
         '--hub', default=None,
-        help='Hub URL, e.g.  http://192.168.1.100:5001  (auto-discovered if omitted)',
+        help='Hub URL, e.g. http://192.168.1.100:5001 (auto-discovered if omitted)',
     )
     parser.add_argument(
         '--device', default=None,
@@ -481,18 +503,17 @@ def main():
     args = parser.parse_args()
 
     device_id = args.device or socket.gethostname()
-    interval  = max(1, args.interval)
+    interval = max(1, args.interval)
 
     print("=" * 60)
-    print("  Sentinel AI Remote Client  v{}".format(VERSION))
+    print(" Sentinel AI Remote Client v{}".format(VERSION))
     print("=" * 60)
-    print("  Device   : {}".format(device_id))
-    print("  Platform : {} {}".format(platform.system(), platform.release()))
-    print("  Python   : {}".format(platform.python_version()))
-    print("  Interval : {}s".format(interval))
+    print(" Device : {}".format(device_id))
+    print(" Platform : {} {}".format(platform.system(), platform.release()))
+    print(" Python : {}".format(platform.python_version()))
+    print(" Interval : {}s".format(interval))
     print("=" * 60 + "\n")
 
-    # ── Step 1: Resolve hub URL ───────────────────────────────────────────
     hub_url = args.hub
     if hub_url:
         hub_url = hub_url.rstrip('/')
@@ -501,18 +522,16 @@ def main():
         hub_url = discover_hub()
 
     if not hub_url:
-        print("\n[ERROR] Could not find hub.  Options:")
-        print("  1. Make sure main.py is running on the hub machine")
-        print("  2. Provide the hub IP manually:")
-        print("       python sentinel_client.py --hub http://<HUB_IP>:5001")
+        print("\n[ERROR] Could not find hub. Options:")
+        print(" 1. Make sure main.py is running on the hub machine")
+        print(" 2. Provide the hub IP manually:")
+        print(" python sentinel_client.py --hub http://<HUB_IP>:5001")
         sys.exit(1)
 
-    # ── --test mode: run diagnostics and exit ─────────────────────────────
     if args.test:
         ok = test_connectivity(hub_url)
         sys.exit(0 if ok else 1)
 
-    # ── Step 2: Pre-flight check before registering ───────────────────────
     print("\nChecking hub connectivity ...", flush=True)
     try:
         from urllib.parse import urlparse
@@ -528,18 +547,17 @@ def main():
             int(hub_url.split(":")[-1]) if hub_url.count(":") == 2 else 5001,
         )
         print()
-        print("  Run with --test for full diagnostics:")
-        print("    python sentinel_client.py --test --hub {}".format(hub_url))
+        print(" Run with --test for full diagnostics:")
+        print(" python sentinel_client.py --test --hub {}".format(hub_url))
         sys.exit(1)
 
-    # ── Step 3: Register ──────────────────────────────────────────────────
     print("\nRegistering with hub ...", flush=True)
     reg_payload = {
         'device_id': device_id,
-        'hostname':  socket.gethostname(),
-        'platform':  platform.system(),
-        'version':   platform.version(),
-        'python':    platform.python_version(),
+        'hostname': socket.gethostname(),
+        'platform': platform.system(),
+        'version': platform.version(),
+        'python': platform.python_version(),
     }
 
     attempts = 0
@@ -551,23 +569,22 @@ def main():
 
         attempts += 1
         if _last_error:
-            print("  [ERR] Registration failed: {} (attempt #{})".format(_last_error, attempts), flush=True)
+            print(" [ERR] Registration failed: {} (attempt #{})".format(_last_error, attempts), flush=True)
         else:
-            print("  [ERR] HTTP {} — retrying in 5s (attempt #{})".format(status, attempts), flush=True)
+            print(" [ERR] HTTP {} — retrying in 5s (attempt #{})".format(status, attempts), flush=True)
 
         if attempts >= 3:
             print()
-            print("  Still failing after {} attempts.".format(attempts))
-            print("  Running diagnostics ...")
+            print(" Still failing after {} attempts.".format(attempts))
+            print(" Running diagnostics ...")
             test_connectivity(hub_url)
-            print("  Continuing to retry every 5s.  Press Ctrl+C to stop.")
+            print(" Continuing to retry every 5s. Press Ctrl+C to stop.")
 
         time.sleep(5)
 
-    # ── Step 4: Stream metrics ────────────────────────────────────────────
-    print("\nStreaming metrics.  Press Ctrl+C to stop.\n")
-    print("  {:<10} {:<10} {:<10} {:<10}".format("TIME", "CPU %", "MEM %", "DISK %"))
-    print("  " + "-" * 42)
+    print("\nStreaming metrics. Press Ctrl+C to stop.\n")
+    print(" {:<10} {:<10} {:<10} {:<10}".format("TIME", "CPU %", "MEM %", "DISK %"))
+    print(" " + "-" * 42)
 
     errors = 0
     while True:
@@ -576,24 +593,24 @@ def main():
             payload = {
                 'device_id': device_id,
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'metrics':   metrics,
+                'metrics': metrics,
             }
             status = _post("{}/api/metrics/push".format(hub_url), payload)
 
             if status == 200:
                 errors = 0
-                ts    = datetime.now().strftime('%H:%M:%S')
-                cpu   = metrics['cpu']['cpu_percent']
-                mem   = metrics['memory']['memory_percent']
-                dsk   = metrics['disk']['disk_percent']
-                print("  {:<10} {:<10.1f} {:<10.1f} {:<10.1f}".format(ts, cpu, mem, dsk), flush=True)
+                ts = datetime.now().strftime('%H:%M:%S')
+                cpu = metrics['cpu']['cpu_percent']
+                mem = metrics['memory']['memory_percent']
+                dsk = metrics['disk']['disk_percent']
+                print(" {:<10} {:<10.1f} {:<10.1f} {:<10.1f}".format(ts, cpu, mem, dsk), flush=True)
                 poll_and_execute_commands(hub_url, device_id)
             else:
                 errors += 1
                 reason = _last_error or "HTTP {}".format(status)
-                print("  [WARN] Push failed: {} (#{})".format(reason, errors), flush=True)
+                print(" [WARN] Push failed: {} (#{})".format(reason, errors), flush=True)
                 if errors >= 5:
-                    print("  [WARN] Too many errors — re-registering ...", flush=True)
+                    print(" [WARN] Too many errors — re-registering ...", flush=True)
                     _post("{}/api/devices/register".format(hub_url), reg_payload)
                     errors = 0
 
@@ -602,7 +619,7 @@ def main():
             break
         except Exception as e:
             errors += 1
-            print("  [ERR] {}".format(e), flush=True)
+            print(" [ERR] {}".format(e), flush=True)
 
         time.sleep(interval)
 

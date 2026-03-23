@@ -44,7 +44,6 @@ class Database:
     def _init_db(self):
         """Initialize database schema"""
         with self.connection:
-            # Incidents table
             self.connection.execute("""
                 CREATE TABLE IF NOT EXISTS incidents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +64,6 @@ class Database:
                 )
             """)
 
-            # Metrics history table
             self.connection.execute("""
                 CREATE TABLE IF NOT EXISTS metrics_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +77,6 @@ class Database:
                 )
             """)
 
-            # Anomalies table
             self.connection.execute("""
                 CREATE TABLE IF NOT EXISTS anomalies (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +94,6 @@ class Database:
                 )
             """)
 
-            # Recovery actions table
             self.connection.execute("""
                 CREATE TABLE IF NOT EXISTS recovery_actions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +110,6 @@ class Database:
                 )
             """)
 
-            # Learning data table
             self.connection.execute("""
                 CREATE TABLE IF NOT EXISTS learning_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +124,6 @@ class Database:
                 )
             """)
 
-            # Create indexes for performance
             self.connection.execute("""
                 CREATE INDEX IF NOT EXISTS idx_incidents_timestamp
                 ON incidents(timestamp)
@@ -379,7 +373,6 @@ class Database:
         """
         now = datetime.utcnow().isoformat()
 
-        # Convert value to JSON if not string
         if not isinstance(value, str):
             value = json.dumps(value)
 
@@ -432,12 +425,10 @@ class Database:
         """
         cutoff = (datetime.utcnow() - timedelta(days=retention_days)).isoformat()
 
-        # Delete old metrics
         self.connection.execute("""
             DELETE FROM metrics_history WHERE timestamp < ?
         """, (cutoff,))
 
-        # Delete old anomalies
         self.connection.execute("""
             DELETE FROM anomalies WHERE timestamp < ?
         """, (cutoff,))
@@ -485,7 +476,6 @@ class Database:
             self._local.connection.close()
 
 
-# Global database instance
 _global_db: Optional[Database] = None
 
 

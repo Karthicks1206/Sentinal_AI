@@ -21,7 +21,7 @@ def main():
     os.makedirs(STRESS_DIR, exist_ok=True)
     print(f"[sentinel-disk-stress] PID={os.getpid()} writing {mb}MB to {STRESS_DIR} for {duration}s", flush=True)
 
-    chunk = b'X' * (1024 * 1024)  # 1 MB chunk
+    chunk = b'X' * (1024 * 1024)
     files = []
     for i in range(mb):
         path = os.path.join(STRESS_DIR, f'stress_{i:04d}.bin')
@@ -32,7 +32,6 @@ def main():
     print(f"[sentinel-disk-stress] {mb}MB written. Holding for {duration}s...", flush=True)
     time.sleep(duration)
 
-    # Cleanup
     shutil.rmtree(STRESS_DIR, ignore_errors=True)
     print(f"[sentinel-disk-stress] Done. Files removed.", flush=True)
 

@@ -77,21 +77,16 @@ class EventBus:
         self.max_buffer_size = max_buffer_size
         self.max_retries = max_retries
 
-        # Subscribers: event_type -> list of handlers
         self._subscribers: Dict[str, List[EventHandler]] = defaultdict(list)
         self._async_subscribers: Dict[str, List[AsyncEventHandler]] = defaultdict(list)
 
-        # Wildcard subscribers (receive all events)
         self._wildcard_subscribers: List[EventHandler] = []
         self._async_wildcard_subscribers: List[AsyncEventHandler] = []
 
-        # Event buffer for persistence/replay
         self._event_buffer: deque = deque(maxlen=max_buffer_size)
 
-        # Thread safety
         self._lock = threading.RLock()
 
-        # Statistics
         self._stats = {
             'events_published': 0,
             'events_delivered': 0,
@@ -99,7 +94,6 @@ class EventBus:
             'subscribers_count': 0
         }
 
-        # Event loop for async handlers
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._loop_thread: Optional[threading.Thread] = None
         self._running = False
@@ -111,7 +105,6 @@ class EventBus:
 
         self._running = True
 
-        # Create event loop in separate thread
         def run_loop():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
@@ -120,7 +113,6 @@ class EventBus:
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
 
-        # Wait for loop to be ready
         while self._loop is None:
             threading.Event().wait(0.01)
 
@@ -196,22 +188,18 @@ class EventBus:
             event: Event to publish
         """
         with self._lock:
-            # Add to buffer
             self._event_buffer.append(event)
             self._stats['events_published'] += 1
 
-            # Get handlers for this event type
             handlers = self._subscribers.get(event.event_type, []).copy()
             handlers.extend(self._wildcard_subscribers)
 
             async_handlers = self._async_subscribers.get(event.event_type, []).copy()
             async_handlers.extend(self._async_wildcard_subscribers)
 
-        # Execute sync handlers
         for handler in handlers:
             self._execute_handler(handler, event)
 
-        # Execute async handlers
         for handler in async_handlers:
             self._execute_async_handler(handler, event)
 
@@ -225,7 +213,6 @@ class EventBus:
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     self._stats['events_failed'] += 1
-                    # Log error (would use logger in production)
                     print(f"Handler {handler.__name__} failed after {self.max_retries} attempts: {e}")
 
     def _execute_async_handler(self, handler: AsyncEventHandler, event: Event):
@@ -307,7 +294,6 @@ class EventBus:
             self._event_buffer.clear()
 
 
-# Global event bus instance
 _global_event_bus: Optional[EventBus] = None
 
 

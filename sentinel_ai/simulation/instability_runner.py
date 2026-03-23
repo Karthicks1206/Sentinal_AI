@@ -83,23 +83,22 @@ class InstabilityRunner:
                     cls._instance = InstabilityRunner()
         return cls._instance
 
-    # ── Public API ─────────────────────────────────────────────────────────
 
     def start(self, scenario: str, duration: float = 60.0, **kwargs) -> Dict:
         """
         Start a named simulation scenario.
 
         Scenarios:
-          cpu_spike      — Burns CPU across multiple cores
+          cpu_spike — Burns CPU across multiple cores
           memory_pressure — Allocates a large chunk of RAM
-          disk_fill      — Writes temp files to disk
+          disk_fill — Writes temp files to disk
 
         Returns dict with pid and status.
         """
         handlers = {
-            'cpu_spike':        self._start_cpu_spike,
-            'memory_pressure':  self._start_memory_pressure,
-            'disk_fill':        self._start_disk_fill,
+            'cpu_spike': self._start_cpu_spike,
+            'memory_pressure': self._start_memory_pressure,
+            'disk_fill': self._start_disk_fill,
         }
         handler = handlers.get(scenario)
         if not handler:
@@ -171,7 +170,6 @@ class InstabilityRunner:
                     return True
         return False
 
-    # ── Scenario Implementations ───────────────────────────────────────────
 
     def _start_cpu_spike(self, duration: float = 60.0, **kwargs) -> Dict:
         """Spawn cpu_stress.py as a separate process."""
@@ -199,10 +197,9 @@ class InstabilityRunner:
         """Spawn memory_stress.py as a separate process."""
         import psutil
         available_mb = psutil.virtual_memory().available // (1024 * 1024)
-        # Allocate enough to push memory_percent by ~15-20 percentage points
         total_mb = psutil.virtual_memory().total // (1024 * 1024)
         if mb is None:
-            mb = min(int(total_mb * 0.20), available_mb - 512)  # 20% of total, leave 512MB free
+            mb = min(int(total_mb * 0.20), available_mb - 512)
         mb = max(512, mb)
 
         script = str(_SCRIPT_DIR / 'memory_stress.py')

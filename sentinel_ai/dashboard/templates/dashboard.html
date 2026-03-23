@@ -22,7 +22,7 @@
             min-height: 100vh;
         }
 
-        /* ── Animated background ──────────────────────────────────────── */
+        
         .bg-mesh {
             position: fixed;
             inset: 0;
@@ -36,7 +36,7 @@
         }
 
         @keyframes meshMove {
-            0%   { background-position: 0 0, 0 0; }
+            0% { background-position: 0 0, 0 0; }
             100% { background-position: 60px 60px, 60px 60px; }
         }
 
@@ -50,7 +50,7 @@
             pointer-events: none;
         }
 
-        /* ── Header ───────────────────────────────────────────────────── */
+        
         .header {
             position: relative;
             z-index: 10;
@@ -77,7 +77,7 @@
         }
 
         @keyframes titleGlow {
-            0%   { filter: drop-shadow(0 0 20px rgba(0,212,255,0.4)); }
+            0% { filter: drop-shadow(0 0 20px rgba(0,212,255,0.4)); }
             100% { filter: drop-shadow(0 0 40px rgba(0,212,255,0.7)) drop-shadow(0 0 80px rgba(168,85,247,0.2)); }
         }
 
@@ -89,7 +89,7 @@
             margin-bottom: 14px;
         }
 
-        /* Mini live stats in header */
+        
         .header-live-bar {
             display: flex;
             align-items: center;
@@ -134,12 +134,12 @@
 
         @keyframes statusPulse {
             0%,100% { box-shadow: 0 0 15px rgba(0,255,136,0.3); }
-            50%      { box-shadow: 0 0 30px rgba(0,255,136,0.6); }
+            50% { box-shadow: 0 0 30px rgba(0,255,136,0.6); }
         }
 
         .status-stopped { background: #ef4444; color: #fff; }
 
-        /* ── Container & Grid ─────────────────────────────────────────── */
+        
         .container {
             position: relative;
             z-index: 1;
@@ -155,7 +155,7 @@
             margin-bottom: 20px;
         }
 
-        /* ── Cards ────────────────────────────────────────────────────── */
+        
         .card {
             background: rgba(10,14,28,0.85);
             border-radius: 16px;
@@ -198,22 +198,22 @@
             padding-bottom: 12px;
         }
 
-        /* Category-specific card borders */
-        .card-cpu   { border-top: 2px solid rgba(0,212,255,0.5); }
-        .card-mem   { border-top: 2px solid rgba(168,85,247,0.5); }
-        .card-disk  { border-top: 2px solid rgba(245,158,11,0.5); }
+        
+        .card-cpu { border-top: 2px solid rgba(0,212,255,0.5); }
+        .card-mem { border-top: 2px solid rgba(168,85,247,0.5); }
+        .card-disk { border-top: 2px solid rgba(245,158,11,0.5); }
         .card-power { border-top: 2px solid rgba(236,72,153,0.5); }
-        .card-net   { border-top: 2px solid rgba(34,197,94,0.5); }
-        .card-sec   { border-top: 2px solid rgba(239,68,68,0.5); }
+        .card-net { border-top: 2px solid rgba(34,197,94,0.5); }
+        .card-sec { border-top: 2px solid rgba(239,68,68,0.5); }
 
-        .card-cpu:hover   { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,255,0.15); }
-        .card-mem:hover   { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(168,85,247,0.15); }
-        .card-disk:hover  { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(245,158,11,0.15); }
+        .card-cpu:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,255,0.15); }
+        .card-mem:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(168,85,247,0.15); }
+        .card-disk:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(245,158,11,0.15); }
         .card-power:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(236,72,153,0.15); }
-        .card-net:hover   { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(34,197,94,0.15); }
-        .card-sec:hover   { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(239,68,68,0.15); }
+        .card-net:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(34,197,94,0.15); }
+        .card-sec:hover { box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(239,68,68,0.15); }
 
-        /* ── Metric Display ───────────────────────────────────────────── */
+        
         .metric { margin: 14px 0; }
 
         .metric-label {
@@ -257,30 +257,30 @@
         }
 
         .progress-fill.warning { background: linear-gradient(90deg, #f59e0b, #ef4444); }
-        .progress-fill.danger  { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+        .progress-fill.danger { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 8px rgba(239,68,68,0.6); }
 
-        /* ── Gauge SVG ────────────────────────────────────────────────── */
+        
         svg.gauge-arc-svg { transform: rotate(0deg); }
         svg.gauge-arc-svg path.gauge-bg-path { stroke: rgba(255,255,255,0.06); }
-        /* Value text inside the gauge arc */
+        
         .gauge-center-text { font-family: 'Segoe UI', system-ui, sans-serif; pointer-events: none; }
-        /* Hide the old above-arc value label — number is now inside the SVG */
+        
         .metric .metric-value { display: none; }
-        svg.gauge-arc-svg path#cpuGaugeArc    { filter: drop-shadow(0 0 8px rgba(0,212,255,0.7)); }
+        svg.gauge-arc-svg path#cpuGaugeArc { filter: drop-shadow(0 0 8px rgba(0,212,255,0.7)); }
         svg.gauge-arc-svg path#memoryGaugeArc { stroke: #a855f7 !important; filter: drop-shadow(0 0 8px rgba(168,85,247,0.7)); }
-        svg.gauge-arc-svg path#diskGaugeArc   { stroke: #f59e0b !important; filter: drop-shadow(0 0 8px rgba(245,158,11,0.7)); }
+        svg.gauge-arc-svg path#diskGaugeArc { stroke: #f59e0b !important; filter: drop-shadow(0 0 8px rgba(245,158,11,0.7)); }
         svg.gauge-arc-svg path#powerQualityGaugeArc { stroke: #ec4899 !important; filter: drop-shadow(0 0 8px rgba(236,72,153,0.7)); }
 
-        /* Override SVG inline styles for gauge arcs */
-        #memoryGaugeArc   { stroke: #a855f7 !important; }
-        #diskGaugeArc     { stroke: #f59e0b !important; }
+        
+        #memoryGaugeArc { stroke: #a855f7 !important; }
+        #diskGaugeArc { stroke: #f59e0b !important; }
         #powerQualityGaugeArc { stroke: #ec4899 !important; }
 
-        /* Override when danger/warning */
-        .gauge-arc-svg path[data-level="danger"]  { stroke: #ef4444 !important; filter: drop-shadow(0 0 10px rgba(239,68,68,0.8)) !important; }
+        
+        .gauge-arc-svg path[data-level="danger"] { stroke: #ef4444 !important; filter: drop-shadow(0 0 10px rgba(239,68,68,0.8)) !important; }
         .gauge-arc-svg path[data-level="warning"] { stroke: #f59e0b !important; filter: drop-shadow(0 0 8px rgba(245,158,11,0.7)) !important; }
 
-        /* ── Agent Status ─────────────────────────────────────────────── */
+        
         .agent-status {
             display: flex;
             align-items: center;
@@ -346,9 +346,9 @@
             }
         }
 
-        .log-entry.INFO    { background: rgba(0,212,255,0.04);  border-left-color: #00d4ff; color: #94a3b8; }
+        .log-entry.INFO { background: rgba(0,212,255,0.04); border-left-color: #00d4ff; color: #94a3b8; }
         .log-entry.WARNING { background: rgba(245,158,11,0.06); border-left-color: #f59e0b; color: #fcd34d; }
-        .log-entry.ERROR   { background: rgba(239,68,68,0.08);  border-left-color: #ef4444; color: #fca5a5; }
+        .log-entry.ERROR { background: rgba(239,68,68,0.08); border-left-color: #ef4444; color: #fca5a5; }
 
         .log-entry.ERROR {
             background: rgba(255, 68, 68, 0.1);
@@ -360,7 +360,7 @@
             margin-right: 10px;
         }
 
-        /* ── Toast Notification System ─────────────────────────────── */
+        
         .toast-container {
             position: fixed;
             top: 20px;
@@ -388,21 +388,21 @@
         }
 
         .toast.severity-critical { border-left-color: #ff2222; }
-        .toast.severity-high     { border-left-color: #ff6600; }
-        .toast.severity-medium   { border-left-color: #ffaa00; }
-        .toast.severity-low      { border-left-color: #00d4ff; }
-        .toast.severity-info     { border-left-color: #00ff88; }
-        .toast.type-power        { border-left-color: #cc44ff; }
-        .toast.type-security     { border-left-color: #cc44ff; }
+        .toast.severity-high { border-left-color: #ff6600; }
+        .toast.severity-medium { border-left-color: #ffaa00; }
+        .toast.severity-low { border-left-color: #00d4ff; }
+        .toast.severity-info { border-left-color: #00ff88; }
+        .toast.type-power { border-left-color: #cc44ff; }
+        .toast.type-security { border-left-color: #cc44ff; }
 
         @keyframes toastIn {
             from { opacity: 0; transform: translateX(110%) scale(0.92); }
-            to   { opacity: 1; transform: translateX(0)   scale(1); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
         }
 
         @keyframes toastOut {
-            from { opacity: 1; transform: translateX(0) scale(1);   max-height: 200px; margin-bottom: 0; }
-            to   { opacity: 0; transform: translateX(110%) scale(0.92); max-height: 0;   margin-bottom: -10px; }
+            from { opacity: 1; transform: translateX(0) scale(1); max-height: 200px; margin-bottom: 0; }
+            to { opacity: 0; transform: translateX(110%) scale(0.92); max-height: 0; margin-bottom: -10px; }
         }
 
         .toast.removing { animation: toastOut 0.3s ease forwards; }
@@ -445,7 +445,7 @@
             padding-left: 22px;
         }
 
-        /* Shrinking timer bar at bottom of each toast */
+        
         .toast-timer {
             position: absolute;
             bottom: 0;
@@ -499,7 +499,7 @@
             margin-top: 4px;
         }
 
-        /* Statistics dropdown panel */
+        
         .stat-dropdown {
             display: none;
             margin-top: 16px;
@@ -539,11 +539,11 @@
         }
 
         .stat-item.sev-critical { border-left-color: #ff2222; }
-        .stat-item.sev-high     { border-left-color: #ff6600; }
-        .stat-item.sev-medium   { border-left-color: #ffaa00; }
-        .stat-item.sev-low      { border-left-color: #00d4ff; }
-        .stat-item.sev-success  { border-left-color: #00ff88; }
-        .stat-item.sev-failed   { border-left-color: #ff4444; }
+        .stat-item.sev-high { border-left-color: #ff6600; }
+        .stat-item.sev-medium { border-left-color: #ffaa00; }
+        .stat-item.sev-low { border-left-color: #00d4ff; }
+        .stat-item.sev-success { border-left-color: #00ff88; }
+        .stat-item.sev-failed { border-left-color: #ff4444; }
 
         .stat-item-row {
             display: flex;
@@ -599,7 +599,7 @@
             margin-top: 6px;
         }
 
-        /* Incident Timeline */
+        
         .timeline {
             display: flex;
             flex-direction: column;
@@ -615,9 +615,9 @@
         }
 
         .incident-card.severity-critical { border-left-color: #ff2222; }
-        .incident-card.severity-high     { border-left-color: #ff6600; }
-        .incident-card.severity-medium   { border-left-color: #ffaa00; }
-        .incident-card.severity-low      { border-left-color: #00d4ff; }
+        .incident-card.severity-high { border-left-color: #ff6600; }
+        .incident-card.severity-medium { border-left-color: #ffaa00; }
+        .incident-card.severity-low { border-left-color: #00d4ff; }
 
         .incident-header {
             display: flex;
@@ -642,9 +642,9 @@
             text-transform: uppercase;
         }
         .sev-critical { background: #ff2222; color: #fff; }
-        .sev-high     { background: #ff6600; color: #fff; }
-        .sev-medium   { background: #ffaa00; color: #000; }
-        .sev-low      { background: #00d4ff; color: #000; }
+        .sev-high { background: #ff6600; color: #fff; }
+        .sev-medium { background: #ffaa00; color: #000; }
+        .sev-low { background: #00d4ff; color: #000; }
 
         .status-pill {
             padding: 2px 10px;
@@ -653,9 +653,9 @@
             font-weight: bold;
         }
         .status-resolved { background: #00ff88; color: #000; }
-        .status-failed   { background: #ff4444; color: #fff; }
+        .status-failed { background: #ff4444; color: #fff; }
         .status-attempted{ background: #ffaa00; color: #000; }
-        .status-detected { background: #888;    color: #fff; }
+        .status-detected { background: #888; color: #fff; }
 
         .incident-row {
             display: flex;
@@ -683,9 +683,9 @@
             border-radius: 6px;
             font-size: 0.82em;
         }
-        .chip-success  { background: rgba(0,255,136,0.15); border: 1px solid #00ff88; color: #00ff88; }
-        .chip-failed   { background: rgba(255,68,68,0.15);  border: 1px solid #ff4444; color: #ff4444; }
-        .chip-skipped  { background: rgba(136,136,136,0.15);border: 1px solid #888;    color: #aaa; }
+        .chip-success { background: rgba(0,255,136,0.15); border: 1px solid #00ff88; color: #00ff88; }
+        .chip-failed { background: rgba(255,68,68,0.15); border: 1px solid #ff4444; color: #ff4444; }
+        .chip-skipped { background: rgba(136,136,136,0.15);border: 1px solid #888; color: #aaa; }
 
         .incident-ts {
             font-size: 0.78em;
@@ -786,7 +786,7 @@
             height: 280px;
         }
 
-        /* ── Simulation Lab ───────────────────────────────────────────── */
+        
         .sim-lab {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -822,19 +822,19 @@
         .sim-btn:hover::after { opacity: 0.12; }
         .sim-btn:active { transform: translateY(0) scale(0.98); }
 
-        .sim-btn-cpu   { border: 2px solid #ef4444; color: #ef4444; box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+        .sim-btn-cpu { border: 2px solid #ef4444; color: #ef4444; box-shadow: 0 0 20px rgba(239,68,68,0.15); }
         .sim-btn-cpu:hover { box-shadow: 0 8px 30px rgba(239,68,68,0.5), 0 0 0 1px #ef4444; }
 
-        .sim-btn-mem   { border: 2px solid #a855f7; color: #a855f7; box-shadow: 0 0 20px rgba(168,85,247,0.15); }
+        .sim-btn-mem { border: 2px solid #a855f7; color: #a855f7; box-shadow: 0 0 20px rgba(168,85,247,0.15); }
         .sim-btn-mem:hover { box-shadow: 0 8px 30px rgba(168,85,247,0.5), 0 0 0 1px #a855f7; }
 
-        .sim-btn-disk  { border: 2px solid #f59e0b; color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.15); }
+        .sim-btn-disk { border: 2px solid #f59e0b; color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.15); }
         .sim-btn-disk:hover { box-shadow: 0 8px 30px rgba(245,158,11,0.5), 0 0 0 1px #f59e0b; }
 
         .sim-btn-power { border: 2px solid #ec4899; color: #ec4899; box-shadow: 0 0 20px rgba(236,72,153,0.15); }
         .sim-btn-power:hover { box-shadow: 0 8px 30px rgba(236,72,153,0.5), 0 0 0 1px #ec4899; }
 
-        .sim-btn-stop  { border: 2px solid #475569; color: #94a3b8; }
+        .sim-btn-stop { border: 2px solid #475569; color: #94a3b8; }
         .sim-btn-stop:hover { border-color: #64748b; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
 
         .sim-btn.active {
@@ -843,7 +843,7 @@
 
         @keyframes simPulse {
             0%,100% { opacity: 1; transform: scale(1); }
-            50%      { opacity: 0.8; transform: scale(0.98); }
+            50% { opacity: 0.8; transform: scale(0.98); }
         }
 
         .sim-status-grid {
@@ -887,7 +887,7 @@
             padding: 8px 0;
         }
 
-        /* ── Cybersecurity Monitor Panel ─────────────────────────── */
+        
         .sec-score-ring {
             display: flex;
             align-items: center;
@@ -929,7 +929,7 @@
 
         @keyframes secPulse {
             0%,100% { box-shadow: 0 0 0 0 rgba(255,34,34,0.4); }
-            50%      { box-shadow: 0 0 0 10px rgba(255,34,34,0); }
+            50% { box-shadow: 0 0 0 10px rgba(255,34,34,0); }
         }
 
         .sec-score-info { flex: 1; }
@@ -957,9 +957,9 @@
         }
 
         .sec-threat-item.sev-critical { border-left-color: #ff2222; }
-        .sec-threat-item.sev-high     { border-left-color: #ff6600; }
-        .sec-threat-item.sev-medium   { border-left-color: #ffaa00; }
-        .sec-threat-item.sev-low      { border-left-color: #00d4ff; }
+        .sec-threat-item.sev-high { border-left-color: #ff6600; }
+        .sec-threat-item.sev-medium { border-left-color: #ffaa00; }
+        .sec-threat-item.sev-low { border-left-color: #00d4ff; }
 
         .sec-threat-icon { font-size: 1.1em; flex-shrink: 0; margin-top: 1px; }
 
@@ -992,7 +992,7 @@
             animation: pulse 2s infinite;
         }
 
-        /* ── Connected Devices Panel ──────────────────────────────── */
+        
         .devices-panel {
             background: rgba(255,255,255,0.05);
             border-radius: 10px;
@@ -1044,8 +1044,8 @@
         }
 
         .device-card.status-connected { border-left: 3px solid #00ff88; }
-        .device-card.status-stale     { border-left: 3px solid #ffaa00; }
-        .device-card.status-offline   { border-left: 3px solid #ff4444; opacity: 0.6; }
+        .device-card.status-stale { border-left: 3px solid #ffaa00; }
+        .device-card.status-offline { border-left: 3px solid #ff4444; opacity: 0.6; }
 
         .device-header {
             display: flex;
@@ -1062,8 +1062,8 @@
         }
 
         .device-dot.connected { background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: pulse 2s infinite; }
-        .device-dot.stale     { background: #ffaa00; }
-        .device-dot.offline   { background: #ff4444; }
+        .device-dot.stale { background: #ffaa00; }
+        .device-dot.offline { background: #ff4444; }
 
         .device-name {
             font-size: 0.95em;
@@ -1111,8 +1111,8 @@
             transition: width 0.5s ease;
         }
 
-        .device-bar-fill.cpu  { background: linear-gradient(90deg,#00d4ff,#00ff88); }
-        .device-bar-fill.mem  { background: linear-gradient(90deg,#aa44ff,#ff44aa); }
+        .device-bar-fill.cpu { background: linear-gradient(90deg,#00d4ff,#00ff88); }
+        .device-bar-fill.mem { background: linear-gradient(90deg,#aa44ff,#ff44aa); }
         .device-bar-fill.disk { background: linear-gradient(90deg,#ff8800,#ffcc00); }
         .device-bar-fill.warn { background: linear-gradient(90deg,#ffaa00,#ff6600); }
         .device-bar-fill.crit { background: linear-gradient(90deg,#ff4444,#cc0000); }
@@ -1139,8 +1139,8 @@
         }
 
         .device-status-text.connected { color: #00ff88; }
-        .device-status-text.stale     { color: #ffaa00; }
-        .device-status-text.offline   { color: #ff4444; }
+        .device-status-text.stale { color: #ffaa00; }
+        .device-status-text.offline { color: #ff4444; }
 
         .devices-empty {
             text-align: center;
@@ -1154,7 +1154,7 @@
             margin-bottom: 10px;
         }
 
-        /* ── Device Detail Modal ───────────────────────────────────── */
+        
         .modal-overlay {
             display: none;
             position: fixed;
@@ -1231,9 +1231,9 @@
         }
 
         .modal-metric-tile .m-label { font-size: 0.75em; color: #888; margin-bottom: 3px; }
-        .modal-metric-tile .m-val   { font-size: 1.2em; font-weight: 600; color: #00ff88; }
+        .modal-metric-tile .m-val { font-size: 1.2em; font-weight: 600; color: #00ff88; }
 
-        /* ── Tab Navigation ───────────────────────────────────────── */
+        
         .tab-bar {
             display: flex;
             justify-content: center;
@@ -1270,7 +1270,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        /* ── Distributed View ─────────────────────────────────────── */
+        
         .dist-layout {
             display: flex;
             gap: 18px;
@@ -1321,8 +1321,8 @@
         }
 
         .dp-dot.connected { background:#00ff88; box-shadow:0 0 6px #00ff88; animation:pulse 2s infinite; }
-        .dp-dot.stale     { background:#ffaa00; }
-        .dp-dot.offline   { background:#ff4444; }
+        .dp-dot.stale { background:#ffaa00; }
+        .dp-dot.offline { background:#ff4444; }
 
         .dist-device-pill .dp-name {
             font-size: 0.88em;
@@ -1378,8 +1378,8 @@
         }
 
         .dh-status.connected { background:rgba(0,255,136,0.15); color:#00ff88; border:1px solid rgba(0,255,136,0.3); }
-        .dh-status.stale     { background:rgba(255,170,0,0.15);  color:#ffaa00; border:1px solid rgba(255,170,0,0.3); }
-        .dh-status.offline   { background:rgba(255,68,68,0.15);  color:#ff4444; border:1px solid rgba(255,68,68,0.3); }
+        .dh-status.stale { background:rgba(255,170,0,0.15); color:#ffaa00; border:1px solid rgba(255,170,0,0.3); }
+        .dh-status.offline { background:rgba(255,68,68,0.15); color:#ff4444; border:1px solid rgba(255,68,68,0.3); }
 
         .dist-no-selection {
             text-align: center;
@@ -1399,9 +1399,7 @@
 
         .dist-no-devices .nd-icon { font-size: 2.5em; margin-bottom: 12px; }
 
-        /* ── Additional WOW overrides ─────────────────────────────────── */
-
-        /* Stat boxes — bigger, bolder */
+        
         .stat-number {
             font-size: 2.8em !important;
             font-weight: 900 !important;
@@ -1434,10 +1432,10 @@
             box-shadow: 0 0 20px rgba(0,255,136,0.2) !important;
         }
 
-        /* Simulation Lab section header */
+        
         .card h2:has(+ .sim-lab) { color: #f59e0b !important; }
 
-        /* Tab buttons — pill style */
+        
         .tab-btn {
             padding: 10px 36px !important;
             border-radius: 30px !important;
@@ -1466,7 +1464,7 @@
             box-shadow: 0 4px 20px rgba(0,212,255,0.4) !important;
         }
 
-        /* Incident cards */
+        
         .incident-card {
             background: rgba(10,14,28,0.8) !important;
             border-radius: 12px !important;
@@ -1474,13 +1472,13 @@
             padding: 16px 18px !important;
         }
 
-        /* Agent indicator glow */
+        
         .agent-indicator.running {
             background: #00ff88 !important;
             box-shadow: 0 0 12px #00ff88, 0 0 20px rgba(0,255,136,0.4) !important;
         }
 
-        /* Better threshold badge */
+        
         .threshold-badge {
             background: rgba(0,212,255,0.06) !important;
             border: 1px solid rgba(0,212,255,0.2) !important;
@@ -1490,7 +1488,7 @@
             padding: 3px 10px !important;
         }
 
-        /* Better card h2 for agent/stats/sim/incident/log sections */
+        
         .card > h2 {
             font-size: 0.78em;
             font-weight: 700;
@@ -1499,10 +1497,10 @@
             color: #94a3b8;
         }
 
-        /* Metric label inline value */
+        
         .metric-label span { color: #e2e8f0; font-weight: 600; }
 
-        /* Devices panel */
+        
         .devices-panel {
             background: rgba(10,14,28,0.85) !important;
             border: 1px solid rgba(0,212,255,0.12) !important;
@@ -1510,7 +1508,7 @@
             border-radius: 16px !important;
         }
 
-        /* Scrollbar styling */
+        
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 4px; }
@@ -1526,29 +1524,29 @@
         <h1>SENTINEL AI</h1>
         <p>Autonomous Self-Healing IoT Infrastructure</p>
         <div class="header-live-bar">
-            <span id="systemStatus" class="status-badge status-running">● INITIALIZING</span>
+            <span id="systemStatus" class="status-badge status-running"> INITIALIZING</span>
             <span class="header-mini-stat cpu">CPU <strong id="headerCpu">--</strong>%</span>
             <span class="header-mini-stat mem">MEM <strong id="headerMem">--</strong>%</span>
             <span class="header-mini-stat disk">DSK <strong id="headerDisk">--</strong>%</span>
         </div>
         <div class="tab-bar">
-            <button class="tab-btn active" id="tabBtnLocal"       onclick="switchTab('local')">Local Device</button>
-            <button class="tab-btn"        id="tabBtnDistributed" onclick="switchTab('distributed')">Distributed Devices</button>
+            <button class="tab-btn active" id="tabBtnLocal" onclick="switchTab('local')">Local Device</button>
+            <button class="tab-btn" id="tabBtnDistributed" onclick="switchTab('distributed')">Distributed Devices</button>
         </div>
     </div>
 
-    <!-- ══ LOCAL DEVICE TAB ══════════════════════════════════════════════ -->
+    
     <div id="tab-local" class="tab-content active">
     <div class="container">
-        <!-- Metrics Grid -->
+        
         <div class="grid">
-            <!-- CPU Card -->
+            
             <div class="card card-cpu">
                 <h2>CPU Usage</h2>
                 <div class="metric">
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="cpuValue">0%</div>
-                    <!-- Gauge Arc SVG -->
+                    
                     <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
                         <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
                         <path id="cpuGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#00d4ff" stroke-width="10" stroke-linecap="round"
@@ -1569,13 +1567,13 @@
                 </div>
             </div>
 
-            <!-- Memory Card -->
+            
             <div class="card card-mem">
                 <h2>Memory Usage</h2>
                 <div class="metric">
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="memoryValue">0%</div>
-                    <!-- Gauge Arc SVG -->
+                    
                     <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
                         <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
                         <path id="memoryGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#a855f7" stroke-width="10" stroke-linecap="round"
@@ -1596,13 +1594,13 @@
                 </div>
             </div>
 
-            <!-- Disk Card -->
+            
             <div class="card card-disk">
                 <h2>Disk Usage</h2>
                 <div class="metric">
                     <div class="metric-label">Current</div>
                     <div class="metric-value" id="diskValue">0%</div>
-                    <!-- Gauge Arc SVG -->
+                    
                     <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
                         <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
                         <path id="diskGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#f59e0b" stroke-width="10" stroke-linecap="round"
@@ -1623,13 +1621,13 @@
                 </div>
             </div>
 
-            <!-- Power Card -->
+            
             <div class="card card-power">
                 <h2>Power</h2>
                 <div class="metric">
                     <div class="metric-label">Input Voltage</div>
                     <div class="metric-value" id="powerVoltage">5.00 V</div>
-                    <!-- Power Quality Gauge Arc SVG -->
+                    
                     <svg class="gauge-arc-svg" viewBox="0 0 120 100" style="width:100%;max-width:200px;display:block;margin:4px auto 4px;">
                         <path d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
                         <path id="powerQualityGaugeArc" d="M11,93 A52,52 0 1,1 109,93" fill="none" stroke="#ec4899" stroke-width="10" stroke-linecap="round"
@@ -1661,7 +1659,7 @@
                 </div>
             </div>
 
-            <!-- Network Card -->
+            
             <div class="card card-net">
                 <h2>Network</h2>
                 <div class="metric">
@@ -1681,7 +1679,7 @@
                 </div>
             </div>
 
-            <!-- Cybersecurity Monitor Card (in-grid) -->
+            
             <div class="card card-sec">
                 <h2>Security <span style="font-size:0.55em;color:#ef4444;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span></h2>
 
@@ -1705,7 +1703,7 @@
             </div>
         </div>
 
-        <!-- Live Graph -->
+        
         <div class="chart-card">
             <h2>Live System Metrics</h2>
             <div class="chart-wrapper">
@@ -1713,7 +1711,7 @@
             </div>
         </div>
 
-        <!-- Agent Status -->
+        
         <div class="card">
             <h2>Agent Status</h2>
             <div class="agent-status">
@@ -1741,7 +1739,7 @@
                 <div>Security Agent <span style="font-size:0.75em;color:#cc44ff;margin-left:6px;">demo</span></div>
             </div>
 
-            <!-- ML Model Status -->
+            
             <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
                 <div style="font-size:0.82em;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">ML Models</div>
                 <div class="agent-status" style="flex-wrap:wrap;gap:4px;">
@@ -1769,7 +1767,7 @@
             </div>
         </div>
 
-        <!-- Statistics -->
+        
         <div class="card">
             <h2>Statistics</h2>
             <div class="stats-grid">
@@ -1795,7 +1793,7 @@
                 </div>
             </div>
 
-            <!-- Anomalies dropdown -->
+            
             <div class="stat-dropdown" id="statPanel-anomalies">
                 <div class="stat-dropdown-header">
                     <span class="stat-dropdown-title">Anomaly Detections</span>
@@ -1804,7 +1802,7 @@
                 <div id="statPanelContent-anomalies"><p class="stat-empty">Loading...</p></div>
             </div>
 
-            <!-- Diagnoses dropdown -->
+            
             <div class="stat-dropdown" id="statPanel-diagnoses">
                 <div class="stat-dropdown-header">
                     <span class="stat-dropdown-title">AI Diagnoses</span>
@@ -1813,7 +1811,7 @@
                 <div id="statPanelContent-diagnoses"><p class="stat-empty">Loading...</p></div>
             </div>
 
-            <!-- Recoveries dropdown -->
+            
             <div class="stat-dropdown" id="statPanel-recoveries">
                 <div class="stat-dropdown-header">
                     <span class="stat-dropdown-title">Recovery Actions</span>
@@ -1822,7 +1820,7 @@
                 <div id="statPanelContent-recoveries"><p class="stat-empty">Loading...</p></div>
             </div>
 
-            <!-- Logs dropdown -->
+            
             <div class="stat-dropdown" id="statPanel-logs">
                 <div class="stat-dropdown-header">
                     <span class="stat-dropdown-title">Recent Log Entries</span>
@@ -1832,7 +1830,7 @@
             </div>
         </div>
 
-        <!-- Simulation Lab -->
+        
         <div class="card">
             <h2>Simulation Lab — Test Self-Healing</h2>
             <p style="color:#888;font-size:0.85em;margin-bottom:14px;">
@@ -1861,7 +1859,7 @@
             </div>
         </div>
 
-        <!-- Incident Timeline -->
+        
         <div class="card">
             <h2>Incident Timeline — Detection — Diagnosis — Recovery</h2>
             <div class="timeline" id="incidentTimeline">
@@ -1869,7 +1867,7 @@
             </div>
         </div>
 
-        <!-- Logs -->
+        
         <div class="card">
             <h2>System Logs</h2>
             <div class="logs-container" id="logsContainer">
@@ -1881,17 +1879,17 @@
         </div>
     </div>
 
-    </div><!-- /container -->
-    </div><!-- /tab-local -->
+    </div>
+    </div>
 
-    <!-- ══ DISTRIBUTED DEVICES TAB ══════════════════════════════════════ -->
+    
     <div id="tab-distributed" class="tab-content">
     <div class="container">
 
-        <!-- Distributed layout: sidebar (device list) + main (metrics) -->
+        
         <div class="dist-layout">
 
-            <!-- Left sidebar: device list -->
+            
             <div class="dist-sidebar">
                 <div class="dist-sidebar-title">Connected Devices</div>
                 <div id="distDeviceList">
@@ -1905,20 +1903,20 @@
                 </div>
             </div>
 
-            <!-- Right main: metrics for selected device -->
+            
             <div class="dist-main">
 
-                <!-- No-selection placeholder -->
+                
                 <div id="distNoSelection" class="dist-no-selection">
                     <div class="ns-icon">&larr;</div>
                     <div class="ns-text">Select a device from the list</div>
                     <div class="ns-hint">Click any connected device to see its full metrics dashboard.</div>
                 </div>
 
-                <!-- Device metrics view (hidden until a device is selected) -->
+                
                 <div id="distDeviceView" style="display:none;">
 
-                    <!-- Device header bar -->
+                    
                     <div class="dist-device-header">
                         <div class="dh-dot" id="distDotIndicator"></div>
                         <div>
@@ -1928,7 +1926,7 @@
                         <div class="dh-status" id="distDeviceStatus">—</div>
                     </div>
 
-                    <!-- Metrics cards -->
+                    
                     <div class="grid">
                         <div class="card">
                             <h2>CPU Usage</h2>
@@ -1975,7 +1973,7 @@
                         </div>
                     </div>
 
-                    <!-- Live chart for selected device -->
+                    
                     <div class="chart-card" style="margin-top:0;">
                         <h2>Live Metrics — <span id="distChartLabel" style="color:#00ff88;font-size:0.85em;"></span></h2>
                         <div class="chart-wrapper">
@@ -1983,21 +1981,18 @@
                         </div>
                     </div>
 
-                </div><!-- /distDeviceView -->
+                </div>
 
-            </div><!-- /dist-main -->
-        </div><!-- /dist-layout -->
+            </div>
+        </div>
 
-    </div><!-- /container -->
-    </div><!-- /tab-distributed -->
+    </div>
+    </div>
 
-    <!-- Toast Notification Container (top-right, auto-dismiss) -->
+    
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
-        // ── Adaptive baselines (polled every 15s) ─────────────────────
-        // These are the LIVE learned bounds from AdaptiveMetricBaseline.
-        // They change continuously as the system observes more data.
         let thresholds = { cpu: 80, memory: 85, disk: 90, network: 5 };
 
         function loadThresholds() {
@@ -2007,11 +2002,10 @@
                     thresholds = t;
                     const bi = t.baselines || {};
 
-                    // CPU badge: show learned IQR fence or "learning…" during warmup
                     const cpuEl = document.getElementById('cpuThreshold');
                     if (bi.cpu && bi.cpu.warmup_done) {
                         cpuEl.textContent = t.cpu;
-                        cpuEl.title = `mean=${bi.cpu.mean}%  std=±${bi.cpu.std}  IQR fence=${bi.cpu.upper_mild}%`;
+                        cpuEl.title = `mean=${bi.cpu.mean}% std=±${bi.cpu.std} IQR fence=${bi.cpu.upper_mild}%`;
                     } else {
                         cpuEl.textContent = '…';
                         cpuEl.title = 'Adaptive baseline learning — wait ~2.5 min';
@@ -2020,7 +2014,7 @@
                     const memEl = document.getElementById('memThreshold');
                     if (bi.memory && bi.memory.warmup_done) {
                         memEl.textContent = t.memory;
-                        memEl.title = `mean=${bi.memory.mean}%  std=±${bi.memory.std}  IQR fence=${bi.memory.upper_mild}%`;
+                        memEl.title = `mean=${bi.memory.mean}% std=±${bi.memory.std} IQR fence=${bi.memory.upper_mild}%`;
                     } else {
                         memEl.textContent = '…';
                         memEl.title = 'Adaptive baseline learning…';
@@ -2029,7 +2023,7 @@
                     const diskEl = document.getElementById('diskThreshold');
                     if (bi.disk && bi.disk.warmup_done) {
                         diskEl.textContent = t.disk;
-                        diskEl.title = `mean=${bi.disk.mean}%  std=±${bi.disk.std}  IQR fence=${bi.disk.upper_mild}%`;
+                        diskEl.title = `mean=${bi.disk.mean}% std=±${bi.disk.std} IQR fence=${bi.disk.upper_mild}%`;
                     } else {
                         diskEl.textContent = '…';
                         diskEl.title = 'Adaptive baseline learning…';
@@ -2038,7 +2032,6 @@
                     const netEl = document.getElementById('netThreshold');
                     if (netEl) netEl.textContent = t.network || 5;
 
-                    // Update threshold reference lines on chart (datasets 5-7)
                     const len = metricsChart.data.labels.length || 60;
                     metricsChart.data.datasets[5].data = Array(len).fill(t.cpu);
                     metricsChart.data.datasets[6].data = Array(len).fill(t.memory);
@@ -2048,7 +2041,6 @@
                 .catch(() => {});
         }
 
-        // ── Live Chart Setup ──────────────────────────────────────────
         let _metricsChartIsolated = null;
         const chartCtx = document.getElementById('metricsChart').getContext('2d');
         const metricsChart = new Chart(chartCtx, {
@@ -2086,7 +2078,6 @@
                         tension: 0.4,
                         fill: true,
                     },
-                    // dataset[3] — Network ping latency (right y-axis)
                     {
                         label: 'Net Latency ms',
                         data: [],
@@ -2098,7 +2089,6 @@
                         fill: true,
                         yAxisID: 'y1',
                     },
-                    // dataset[4] — Power Quality % (left y-axis, 0-100)
                     {
                         label: 'Power Quality %',
                         data: [],
@@ -2109,7 +2099,6 @@
                         tension: 0.4,
                         fill: true,
                     },
-                    // Threshold reference lines (dashed) — datasets[5..8]
                     {
                         label: 'CPU Threshold',
                         data: [],
@@ -2250,7 +2239,6 @@
                 });
         }
 
-        // ── Incident Timeline ─────────────────────────────────────────
         function severityClass(s) {
             return { critical: 'sev-critical', high: 'sev-high', medium: 'sev-medium', low: 'sev-low' }[s] || 'sev-low';
         }
@@ -2269,7 +2257,7 @@
             const btn = document.getElementById('btn-' + id);
             if (!el) return;
             const open = el.classList.toggle('open');
-            btn.textContent = open ? '▲ Collapse' : '▼ Details';
+            btn.textContent = open ? ' Collapse' : ' Details';
         }
 
         function updateIncidents() {
@@ -2291,7 +2279,6 @@
                             ? `<span style="color:#888;font-size:0.8em;"> · resolved in ${inc.resolution_time.toFixed(1)}s</span>`
                             : '';
 
-                        // Build detailed action table
                         const actionRows = (inc.actions || []).map(a => {
                             const msg = a.message || a.reason || '';
                             return `<tr>
@@ -2323,7 +2310,7 @@
                                 <span class="incident-value">${actionChips}${resTime}</span>
                             </div>
                             <div>
-                                <button class="incident-expand-btn" id="btn-${uid}" onclick="toggleIncident('${uid}')">▼ Details</button>
+                                <button class="incident-expand-btn" id="btn-${uid}" onclick="toggleIncident('${uid}')"> Details</button>
                             </div>
                             <div class="incident-detail" id="detail-${uid}">
                                 <div class="detail-section">
@@ -2349,14 +2336,11 @@
                 });
         }
 
-        // ── End Incident Timeline ─────────────────────────────────────
 
-        // Update metrics
         function updateMetrics() {
             fetch('/api/metrics')
                 .then(response => response.json())
                 .then(metrics => {
-                    // CPU
                     const cpu = metrics.cpu || {};
                     const cpuPercent = cpu.cpu_percent || 0;
                     document.getElementById('cpuValue').textContent = cpuPercent.toFixed(1) + '%';
@@ -2364,7 +2348,6 @@
                     document.getElementById('topCpuProcess').textContent =
                         cpu.top_process_name || '-';
 
-                    // Memory
                     const memory = metrics.memory || {};
                     const memPercent = memory.memory_percent || 0;
                     document.getElementById('memoryValue').textContent = memPercent.toFixed(1) + '%';
@@ -2372,7 +2355,6 @@
                     document.getElementById('memoryAvailable').textContent =
                         (memory.memory_available_mb || 0).toFixed(0) + ' MB';
 
-                    // Disk
                     const disk = metrics.disk || {};
                     const diskPercent = disk.disk_percent || 0;
                     document.getElementById('diskValue').textContent = diskPercent.toFixed(1) + '%';
@@ -2380,23 +2362,19 @@
                         (disk.disk_free_gb || 0).toFixed(1) + ' GB';
                     updateProgressBar('diskBar', diskPercent, thresholds.disk);
 
-                    // Power
                     const pwr = metrics.power || {};
                     const pVoltage = pwr.power_voltage_v || 0;
                     const pCurrent = pwr.power_current_a || 0;
-                    const pWatts   = pwr.power_watts     || 0;
-                    const pQuality = pwr.power_quality   !== undefined ? pwr.power_quality : 100;
+                    const pWatts = pwr.power_watts || 0;
+                    const pQuality = pwr.power_quality !== undefined ? pwr.power_quality : 100;
                     document.getElementById('powerVoltage').textContent = pVoltage.toFixed(3) + ' V';
                     document.getElementById('powerCurrent').textContent = pCurrent.toFixed(2) + ' A';
-                    document.getElementById('powerWatts').textContent   = pWatts.toFixed(1)   + ' W';
+                    document.getElementById('powerWatts').textContent = pWatts.toFixed(1) + ' W';
                     document.getElementById('powerQualityVal').textContent = pQuality.toFixed(0) + '%';
-                    // Colour quality value
                     const pqEl = document.getElementById('powerQualityVal');
                     pqEl.style.color = pQuality >= 90 ? '#00ff88' : pQuality >= 70 ? '#ffaa00' : '#ff4444';
-                    // Progress bar shows quality (100 = good power)
                     updateProgressBar('powerQualityBar', pQuality, 90);
 
-                    // Network
                     const net = metrics.network || {};
                     const netLoss = net.packet_loss_percent || 0;
                     const netLatency = net.ping_latency_ms || 0;
@@ -2410,7 +2388,6 @@
                     document.getElementById('netBytesRecv').textContent =
                         (net.bytes_recv_mb || 0).toFixed(0) + ' MB';
 
-                    // ── Header mini-stats ──────────────────────────────
                     const hcpu = document.getElementById('headerCpu');
                     const hmem = document.getElementById('headerMem');
                     const hdsk = document.getElementById('headerDisk');
@@ -2420,19 +2397,17 @@
                 });
         }
 
-        // Gauge arc total arc length for 220° arc (radius 52): 220/360 * 2π*52 ≈ 199.6
         const GAUGE_ARC_LEN = 199.6;
-        // Map progress-bar elementId → gauge arc elementId
         const GAUGE_ARC_MAP = {
-            'cpuBar':          'cpuGaugeArc',
-            'memoryBar':       'memoryGaugeArc',
-            'diskBar':         'diskGaugeArc',
+            'cpuBar': 'cpuGaugeArc',
+            'memoryBar': 'memoryGaugeArc',
+            'diskBar': 'diskGaugeArc',
             'powerQualityBar': 'powerQualityGaugeArc'
         };
         const GAUGE_TEXT_MAP = {
-            'cpuBar':          'cpuGaugeText',
-            'memoryBar':       'memoryGaugeText',
-            'diskBar':         'diskGaugeText',
+            'cpuBar': 'cpuGaugeText',
+            'memoryBar': 'memoryGaugeText',
+            'diskBar': 'diskGaugeText',
             'powerQualityBar': 'powerQualityGaugeText'
         };
 
@@ -2442,7 +2417,6 @@
             bar.style.width = displayPct + '%';
             bar.textContent = percent.toFixed(1) + '%';
 
-            // Color based on adaptive threshold (or fallback 80/90)
             const warn = customThreshold !== undefined ? customThreshold * 0.85 : 80;
             const danger = customThreshold !== undefined ? customThreshold : 90;
             bar.className = 'progress-fill';
@@ -2455,25 +2429,20 @@
                 arcColor = '#ffd93d';
             }
 
-            // Update corresponding gauge arc SVG
             const arcId = GAUGE_ARC_MAP[elementId];
             if (arcId) {
                 const arc = document.getElementById(arcId);
                 if (arc) {
-                    // For power quality, high value = good (arc fills normally)
                     const fillPct = Math.min(Math.max(displayPct, 0), 100);
                     const offset = GAUGE_ARC_LEN * (1 - fillPct / 100);
                     arc.style.strokeDashoffset = offset;
-                    // Power quality arc keeps purple; others get color-coded
                     if (elementId !== 'powerQualityBar') {
                         arc.style.stroke = arcColor;
                     } else {
-                        // Power quality: green when good, red when poor
                         arc.style.stroke = percent >= 80 ? '#cc44ff' : (percent >= 50 ? '#ffd93d' : '#ff4444');
                     }
                 }
             }
-            // Update SVG text inside the gauge
             const textId = GAUGE_TEXT_MAP[elementId];
             if (textId) {
                 const textEl = document.getElementById(textId);
@@ -2484,18 +2453,15 @@
             }
         }
 
-        // Update agent status
         function updateAgentStatus() {
             fetch('/api/status')
                 .then(response => response.json())
                 .then(status => {
-                    // System status
                     const badge = document.getElementById('systemStatus');
-                    badge.textContent = '● ' + status.system_status.toUpperCase();
+                    badge.textContent = ' ' + status.system_status.toUpperCase();
                     badge.className = 'status-badge ' +
                         (status.system_status === 'running' ? 'status-running' : 'status-stopped');
 
-                    // Agent indicators
                     Object.keys(status.agents).forEach(agent => {
                         const indicator = document.getElementById('agent-' + agent);
                         if (indicator) {
@@ -2504,7 +2470,6 @@
                         }
                     });
 
-                    // AI provider badge
                     const provBadge = document.getElementById('aiProviderBadge');
                     if (provBadge && status.ai_provider) {
                         const pColors = {
@@ -2512,18 +2477,17 @@
                             openai: '#ffaa00', rule_based: '#888', unknown: '#555'
                         };
                         provBadge.textContent = status.ai_provider;
-                        provBadge.style.color  = pColors[status.ai_provider] || '#888';
+                        provBadge.style.color = pColors[status.ai_provider] || '#888';
                         provBadge.style.borderColor = pColors[status.ai_provider] || '#888';
-                        provBadge.style.background  = (pColors[status.ai_provider] || '#888') + '22';
+                        provBadge.style.background = (pColors[status.ai_provider] || '#888') + '22';
                     }
 
-                    // LSTM status widget
                     const lstm = status.lstm || {};
-                    const ind  = document.getElementById('lstmIndicator');
-                    const txt  = document.getElementById('lstmStatusText');
+                    const ind = document.getElementById('lstmIndicator');
+                    const txt = document.getElementById('lstmStatusText');
                     const wrap = document.getElementById('lstmProgressWrap');
                     const bufEl= document.getElementById('lstmBufLen');
-                    const bar  = document.getElementById('lstmProgressBar');
+                    const bar = document.getElementById('lstmProgressBar');
 
                     if (!lstm.available) {
                         if (ind) ind.className = 'agent-indicator stopped';
@@ -2532,12 +2496,12 @@
                     }
 
                     const NEED = 79; // WINDOW(20) + MIN_TRAIN_SEQS(60) - 1
-                    const buf  = lstm.buffer_len || 0;
-                    const pct  = Math.min(100, Math.round(buf / NEED * 100));
+                    const buf = lstm.buffer_len || 0;
+                    const pct = Math.min(100, Math.round(buf / NEED * 100));
 
                     if (wrap) wrap.style.display = buf < NEED ? 'block' : 'none';
                     if (bufEl) bufEl.textContent = buf;
-                    if (bar)   bar.style.width   = pct + '%';
+                    if (bar) bar.style.width = pct + '%';
 
                     if (lstm.trained) {
                         if (ind) ind.className = 'agent-indicator running';
@@ -2554,14 +2518,12 @@
                 });
         }
 
-        // Update logs
         function updateLogs() {
             fetch('/api/logs')
                 .then(response => response.json())
                 .then(logs => {
                     const container = document.getElementById('logsContainer');
 
-                    // Only show last 20 logs
                     const recentLogs = logs.slice(-20);
 
                     container.innerHTML = recentLogs.map(log => `
@@ -2571,12 +2533,10 @@
                         </div>
                     `).join('');
 
-                    // Auto-scroll to bottom
                     container.scrollTop = container.scrollHeight;
                 });
         }
 
-        // Update statistics
         function updateStats() {
             fetch('/api/stats')
                 .then(response => response.json())
@@ -2588,14 +2548,13 @@
                 });
         }
 
-        // ── Security Monitor Panel ────────────────────────────────────
         const SEC_ICONS = {
-            brute_force:       '[KEY]',
+            brute_force: '[KEY]',
             data_exfiltration: '[EXF]',
-            port_scan:         '[SCN]',
-            malware:           '[MAL]',
-            auth_anomaly:      '[AUTH]',
-            default:           '[!]'
+            port_scan: '[SCN]',
+            malware: '[MAL]',
+            auth_anomaly: '[AUTH]',
+            default: '[!]'
         };
 
         function updateSecurityPanel() {
@@ -2604,17 +2563,11 @@
                 .then(threats => {
                     if (!Array.isArray(threats)) threats = [];
 
-                    const circle  = document.getElementById('secScoreCircle');
-                    const status  = document.getElementById('secScoreStatus');
+                    const circle = document.getElementById('secScoreCircle');
+                    const status = document.getElementById('secScoreStatus');
                     const tcCount = document.getElementById('secThreatCount');
-                    const feed    = document.getElementById('secFeed');
+                    const feed = document.getElementById('secFeed');
 
-                    // Score: start at 100, only penalise MEDIUM/HIGH/CRITICAL threats.
-                    // LOW-severity findings (routine privileged-process observations, minor
-                    // port notices) are shown in the feed as intelligence but do NOT reduce
-                    // the score — they are expected on any production IoT device.
-                    // Use only the last 6 scan cycles (~3 minutes) so the score recovers
-                    // automatically once active threats clear.
                     const recent = threats.slice(-6);
                     let score = 100;
                     recent.forEach(t => {
@@ -2622,7 +2575,6 @@
                         if (sev === 'critical') score -= 30;
                         else if (sev === 'high') score -= 20;
                         else if (sev === 'medium') score -= 10;
-                        // 'low' / 'info' → informational only, no score penalty
                     });
                     score = Math.max(0, score);
 
@@ -2659,10 +2611,9 @@
                         return;
                     }
 
-                    // Show newest 10
                     const show = [...threats].reverse().slice(0, 10);
                     feed.innerHTML = show.map(item => {
-                        const t   = item.threat || {};
+                        const t = item.threat || {};
                         const sev = t.severity || 'low';
                         const icon = SEC_ICONS[t.category] || SEC_ICONS.default;
                         return `
@@ -2679,48 +2630,44 @@
                 .catch(() => {});
         }
 
-        // ── Warmup gate: suppress anomaly toasts for first 3 min ─────
-        // This prevents noisy false-positives while baselines are establishing.
         const WARMUP_MS = 3 * 60 * 1000;
         const _startTime = Date.now();
         function _warmedUp() { return (Date.now() - _startTime) >= WARMUP_MS; }
 
-        // ── Toast Notification System ─────────────────────────────────
-        const TOAST_DURATION = 7000;  // ms before auto-dismiss
+        const TOAST_DURATION = 7000; // ms before auto-dismiss
         const MAX_TOASTS = 5;
 
         const TOAST_ICONS = {
-            power:       '[PWR]',
-            cpu:         '[CPU]',
-            memory:      '[MEM]',
-            disk:        '[DSK]',
-            network:     '[NET]',
+            power: '[PWR]',
+            cpu: '[CPU]',
+            memory: '[MEM]',
+            disk: '[DSK]',
+            network: '[NET]',
             multivariate:'[ML]',
-            security:    '[SEC]',
-            default:     '[!]'
+            security: '[SEC]',
+            default: '[!]'
         };
 
         function _metricCategory(metricName) {
             if (!metricName) return 'default';
             const m = metricName.toLowerCase();
-            if (m.startsWith('power'))       return 'power';
-            if (m.startsWith('cpu'))         return 'cpu';
-            if (m.startsWith('memory'))      return 'memory';
-            if (m.startsWith('disk'))        return 'disk';
-            if (m.startsWith('network'))     return 'network';
+            if (m.startsWith('power')) return 'power';
+            if (m.startsWith('cpu')) return 'cpu';
+            if (m.startsWith('memory')) return 'memory';
+            if (m.startsWith('disk')) return 'disk';
+            if (m.startsWith('network')) return 'network';
             if (m.startsWith('multivariat')) return 'multivariate';
             return 'default';
         }
 
         function showToast({ severity, category, title, body }) {
             const container = document.getElementById('toastContainer');
-            // Trim oldest if too many stacked
             while (container.children.length >= MAX_TOASTS) {
                 dismissToast(container.firstElementChild, true);
             }
 
             const icon = TOAST_ICONS[category] || TOAST_ICONS.default;
-            const isPower    = (category === 'power');
+            const isPower = (category === 'power');
             const isSecurity = (category === 'security');
 
             const toast = document.createElement('div');
@@ -2736,7 +2683,6 @@
             `;
             container.appendChild(toast);
 
-            // Start shrinking timer bar
             const fill = toast.querySelector('.toast-timer-fill');
             requestAnimationFrame(() => {
                 fill.style.transition = `width ${TOAST_DURATION}ms linear`;
@@ -2759,7 +2705,6 @@
             }
         }
 
-        // ── Server-Sent Events for real-time updates ──────────────────
         const eventSource = new EventSource('/api/stream');
 
         eventSource.onmessage = function(event) {
@@ -2772,36 +2717,34 @@
                 showToast({
                     severity: threat.severity || 'medium',
                     category: 'security',
-                    title:    '[SEC] ' + (threat.title || 'Security Alert'),
-                    body:     threat.detail || ''
+                    title: '[SEC] ' + (threat.title || 'Security Alert'),
+                    body: threat.detail || ''
                 });
                 updateSecurityPanel();
             } else if (data.type === 'anomaly') {
-                // Suppress noisy startup alerts — wait until baselines are stable
                 if (_warmedUp()) {
                     const anomaly = (data.data || {}).anomaly || {};
-                    const cat   = _metricCategory(anomaly.metric_name || '');
-                    const sev   = anomaly.severity || 'medium';
-                    const val   = (anomaly.value !== undefined) ? parseFloat(anomaly.value).toFixed(2) : '?';
+                    const cat = _metricCategory(anomaly.metric_name || '');
+                    const sev = anomaly.severity || 'medium';
+                    const val = (anomaly.value !== undefined) ? parseFloat(anomaly.value).toFixed(2) : '?';
                     const mname = anomaly.metric_name || 'unknown metric';
                     const atype = (anomaly.type || 'anomaly').replace(/_/g, ' ');
 
                     showToast({
                         severity: sev,
                         category: cat,
-                        title:    `${mname} · ${sev.toUpperCase()}`,
-                        body:     `${atype} — value: ${val}`
+                        title: `${mname} · ${sev.toUpperCase()}`,
+                        body: `${atype} — value: ${val}`
                     });
                 }
                 updateStats();
             }
         };
 
-        // ── Simulation Lab ────────────────────────────────────────────
         const SIM_LABELS = {
-            cpu_spike:        'CPU Spike',
-            memory_pressure:  'Memory Pressure',
-            disk_fill:        'Disk Fill',
+            cpu_spike: 'CPU Spike',
+            memory_pressure: 'Memory Pressure',
+            disk_fill: 'Disk Fill',
         };
 
         const SIM_DURATIONS = { cpu_spike: 90, memory_pressure: 90, disk_fill: 90, power_sag: 60 };
@@ -2819,10 +2762,10 @@
                     showToast({
                         severity: 'high',
                         category: scenario.startsWith('power') ? 'power' :
-                                  scenario.startsWith('cpu')   ? 'cpu'   :
-                                  scenario.startsWith('mem')   ? 'memory': 'disk',
-                        title:    `Simulation started`,
-                        body:     res.message || scenario
+                                  scenario.startsWith('cpu') ? 'cpu' :
+                                  scenario.startsWith('mem') ? 'memory': 'disk',
+                        title: `Simulation started`,
+                        body: res.message || scenario
                     });
                 } else {
                     showToast({ severity: 'medium', category: 'default',
@@ -2854,11 +2797,10 @@
             fetch('/api/simulate/status')
                 .then(r => r.json())
                 .then(status => {
-                    const chips  = document.getElementById('simChips');
-                    const idle   = document.getElementById('simIdleMsg');
-                    const names  = Object.keys(status);
+                    const chips = document.getElementById('simChips');
+                    const idle = document.getElementById('simIdleMsg');
+                    const names = Object.keys(status);
 
-                    // Update button pulse states
                     ['cpu_spike', 'memory_pressure', 'disk_fill'].forEach(s => {
                         const btn = document.getElementById(
                             s === 'cpu_spike' ? 'btnCpu' :
@@ -2889,16 +2831,13 @@
                 .catch(() => {});
         }
 
-        // ── Statistics Dropdown Panels ────────────────────────────────
         let activeStatPanel = null;
         let cachedIncidents = [];
 
-        // Toggle a statistics panel open/closed
         function toggleStatPanel(panel) {
             const panelEl = document.getElementById('statPanel-' + panel);
-            const boxEl   = document.getElementById('statBox' + panel.charAt(0).toUpperCase() + panel.slice(1));
+            const boxEl = document.getElementById('statBox' + panel.charAt(0).toUpperCase() + panel.slice(1));
 
-            // Collapse any currently open panel
             if (activeStatPanel && activeStatPanel !== panel) {
                 document.getElementById('statPanel-' + activeStatPanel).classList.remove('open');
                 const prevBox = 'statBox' + activeStatPanel.charAt(0).toUpperCase() + activeStatPanel.slice(1);
@@ -2915,15 +2854,14 @@
         }
 
         function renderStatPanel(panel) {
-            // Logs: from /api/logs
             if (panel === 'logs') {
                 fetch('/api/logs')
                     .then(r => r.json())
                     .then(logs => {
                         if (!Array.isArray(logs)) logs = [];
                         const content = document.getElementById('statPanelContent-logs');
-                        const count   = document.getElementById('statPanelCount-logs');
-                        const recent  = logs.slice(-50).reverse();
+                        const count = document.getElementById('statPanelCount-logs');
+                        const recent = logs.slice(-50).reverse();
                         count.textContent = recent.length + ' entries shown';
                         if (!recent.length) {
                             content.innerHTML = '<p class="stat-empty">No logs yet.</p>';
@@ -2940,7 +2878,6 @@
                 return;
             }
 
-            // Anomalies / Diagnoses / Recoveries — use in-memory endpoints (always in sync with counters)
             const urlMap = { anomalies: '/api/anomalies', diagnoses: '/api/diagnoses', recoveries: '/api/recoveries' };
             fetch(urlMap[panel] || '/api/anomalies')
                 .then(r => r.json())
@@ -2953,7 +2890,7 @@
 
         function _populateStatPanel(panel, data) {
             const content = document.getElementById('statPanelContent-' + panel);
-            const count   = document.getElementById('statPanelCount-' + panel);
+            const count = document.getElementById('statPanelCount-' + panel);
 
             if (!data || !data.length) {
                 count.textContent = '0 records';
@@ -2961,15 +2898,13 @@
                 return;
             }
 
-            // Show newest first
             const items = [...data].reverse();
             let html = '';
 
             if (panel === 'anomalies') {
-                // data[i] = { timestamp, anomaly: { metric_name, type, severity, value, expected_value, deviation } }
                 count.textContent = items.length + ' detections';
                 html = items.map(item => {
-                    const a   = item.anomaly || {};
+                    const a = item.anomaly || {};
                     const sev = a.severity || 'low';
                     const val = a.value !== undefined ? parseFloat(a.value).toFixed(2) : '?';
                     const exp = a.expected_value !== undefined ? parseFloat(a.expected_value).toFixed(2) : '?';
@@ -2991,12 +2926,11 @@
             }
 
             else if (panel === 'diagnoses') {
-                // data[i] = { timestamp, diagnosis: { anomaly_type, severity, diagnosis, root_cause, recommended_actions, methods_used } }
                 count.textContent = items.length + ' diagnoses';
                 html = items.map(item => {
-                    const d    = item.diagnosis || {};
-                    const sev  = d.severity || 'low';
-                    const via  = (d.methods_used || []).join(', ') || 'rule-based';
+                    const d = item.diagnosis || {};
+                    const sev = d.severity || 'low';
+                    const via = (d.methods_used || []).join(', ') || 'rule-based';
                     const acts = (d.recommended_actions || []).join(', ') || '—';
                     return `
                     <div class="stat-item sev-${sev}">
@@ -3015,16 +2949,15 @@
             }
 
             else if (panel === 'recoveries') {
-                // data[i] = { timestamp, actions: [{ action_name, status, message }] }
                 count.textContent = items.length + ' recovery events';
                 html = items.map(item => {
-                    const acts       = item.actions || [];
+                    const acts = item.actions || [];
                     const hasSuccess = acts.some(a => a.status === 'success');
-                    const hasFailed  = acts.some(a => a.status === 'failed');
+                    const hasFailed = acts.some(a => a.status === 'failed');
                     const statusLabel = hasSuccess ? 'RESOLVED' : hasFailed ? 'FAILED' : 'ATTEMPTED';
-                    const pillCls    = hasSuccess ? 'status-resolved' : hasFailed ? 'status-failed' : 'status-attempted';
-                    const itemCls    = hasSuccess ? 'sev-success' : hasFailed ? 'sev-critical' : '';
-                    const chips      = acts.map(a =>
+                    const pillCls = hasSuccess ? 'status-resolved' : hasFailed ? 'status-failed' : 'status-attempted';
+                    const itemCls = hasSuccess ? 'sev-success' : hasFailed ? 'sev-critical' : '';
+                    const chips = acts.map(a =>
                         `<span class="action-chip ${chipClass(a.status)}">${a.action_name} (${a.status})</span>`
                     ).join('');
                     return `
@@ -3041,11 +2974,6 @@
             content.innerHTML = html;
         }
 
-        // ── End Statistics Dropdown Panels ────────────────────────────
-
-        // ══════════════════════════════════════════════════════════════
-        // CONNECTED DEVICES PANEL
-        // ══════════════════════════════════════════════════════════════
 
         let _deviceModalId = null;
 
@@ -3068,7 +2996,7 @@
         }
 
         function renderDevices(devices) {
-            const grid  = document.getElementById('devicesGrid');
+            const grid = document.getElementById('devicesGrid');
             const badge = document.getElementById('devicesCountBadge');
 
             const online = devices.filter(d => d.status === 'connected').length;
@@ -3087,10 +3015,10 @@
             }
 
             grid.innerHTML = devices.map(d => {
-                const m   = d.metrics || {};
-                const cpu = (m.cpu  && m.cpu.cpu_percent)       || 0;
+                const m = d.metrics || {};
+                const cpu = (m.cpu && m.cpu.cpu_percent) || 0;
                 const mem = (m.memory && m.memory.memory_percent)|| 0;
-                const dsk = (m.disk  && m.disk.disk_percent)     || 0;
+                const dsk = (m.disk && m.disk.disk_percent) || 0;
                 const age = d.age_seconds || 0;
                 const ageStr = age < 60 ? `${Math.round(age)}s ago`
                              : age < 3600 ? `${Math.round(age/60)}m ago`
@@ -3104,9 +3032,9 @@
                         <div class="device-platform">${d.platform || '?'}</div>
                     </div>
                     <div class="device-bars">
-                        ${deviceBar('CPU',  cpu,  'cpu')}
-                        ${deviceBar('MEM',  mem,  'mem')}
-                        ${deviceBar('DISK', dsk,  'disk')}
+                        ${deviceBar('CPU', cpu, 'cpu')}
+                        ${deviceBar('MEM', mem, 'mem')}
+                        ${deviceBar('DISK', dsk, 'disk')}
                     </div>
                     <div class="device-footer">
                         <span class="device-status-text ${d.status}">${d.status.toUpperCase()}</span>
@@ -3126,7 +3054,6 @@
                 if (!resp.ok) return;
                 const devices = await resp.json();
 
-                // Attach metrics snapshot to each device object for modal
                 const withMetrics = await Promise.all(devices.map(async d => {
                     try {
                         const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
@@ -3137,15 +3064,13 @@
 
                 renderDevices(withMetrics);
 
-                // Refresh modal if open
                 if (_deviceModalId) {
                     const cur = withMetrics.find(d => d.device_id === _deviceModalId);
                     if (cur) populateModal(cur);
                 }
-            } catch (e) { /* silently ignore */ }
+            } catch (e) { }
         }
 
-        // ── Device Detail Modal ────────────────────────────────────────
 
         function metricTile(label, value, unit='') {
             const v = (value !== null && value !== undefined) ? value : '—';
@@ -3162,40 +3087,40 @@
 
             const cpu = m.cpu || {};
             document.getElementById('modalCpuMetrics').innerHTML = [
-                metricTile('Usage',       cpu.cpu_percent,        '%'),
-                metricTile('Cores',       cpu.cpu_count,          ''),
-                metricTile('Load 1m',     cpu.load_avg_1min,      ''),
-                metricTile('Load 5m',     cpu.load_avg_5min,      ''),
-                metricTile('Top Process', cpu.top_process_name,   ''),
-                metricTile('Top CPU',     cpu.top_process_cpu,    '%'),
+                metricTile('Usage', cpu.cpu_percent, '%'),
+                metricTile('Cores', cpu.cpu_count, ''),
+                metricTile('Load 1m', cpu.load_avg_1min, ''),
+                metricTile('Load 5m', cpu.load_avg_5min, ''),
+                metricTile('Top Process', cpu.top_process_name, ''),
+                metricTile('Top CPU', cpu.top_process_cpu, '%'),
             ].join('');
 
             const mem = m.memory || {};
             document.getElementById('modalMemMetrics').innerHTML = [
-                metricTile('Usage',     mem.memory_percent,  '%'),
-                metricTile('Used',      mem.memory_used_mb   != null ? (mem.memory_used_mb/1024).toFixed(2) : null, ' GB'),
+                metricTile('Usage', mem.memory_percent, '%'),
+                metricTile('Used', mem.memory_used_mb != null ? (mem.memory_used_mb/1024).toFixed(2) : null, ' GB'),
                 metricTile('Available', mem.memory_available_mb != null ? (mem.memory_available_mb/1024).toFixed(2) : null, ' GB'),
-                metricTile('Total',     mem.memory_total_mb  != null ? (mem.memory_total_mb/1024).toFixed(1) : null,  ' GB'),
-                metricTile('Swap',      mem.swap_percent,    '%'),
-                metricTile('Top Proc',  mem.top_process_name,''),
+                metricTile('Total', mem.memory_total_mb != null ? (mem.memory_total_mb/1024).toFixed(1) : null, ' GB'),
+                metricTile('Swap', mem.swap_percent, '%'),
+                metricTile('Top Proc', mem.top_process_name,''),
             ].join('');
 
             const dsk = m.disk || {};
             document.getElementById('modalDiskMetrics').innerHTML = [
-                metricTile('Usage',  dsk.disk_percent, '%'),
-                metricTile('Used',   dsk.disk_used_gb, ' GB'),
-                metricTile('Free',   dsk.disk_free_gb, ' GB'),
-                metricTile('Total',  dsk.disk_total_gb,' GB'),
+                metricTile('Usage', dsk.disk_percent, '%'),
+                metricTile('Used', dsk.disk_used_gb, ' GB'),
+                metricTile('Free', dsk.disk_free_gb, ' GB'),
+                metricTile('Total', dsk.disk_total_gb,' GB'),
             ].join('');
 
             const net = m.network || {};
             document.getElementById('modalNetMetrics').innerHTML = [
-                metricTile('Ping',       net.ping_latency_ms,      ' ms'),
-                metricTile('Connected',  net.ping_success ? 'Yes' : 'No', ''),
-                metricTile('Sent',       net.bytes_sent_mb,        ' MB'),
-                metricTile('Received',   net.bytes_recv_mb,        ' MB'),
-                metricTile('Pkt Loss',   net.packet_loss_percent,  '%'),
-                metricTile('Errors In',  net.errors_in,            ''),
+                metricTile('Ping', net.ping_latency_ms, ' ms'),
+                metricTile('Connected', net.ping_success ? 'Yes' : 'No', ''),
+                metricTile('Sent', net.bytes_sent_mb, ' MB'),
+                metricTile('Received', net.bytes_recv_mb, ' MB'),
+                metricTile('Pkt Loss', net.packet_loss_percent, '%'),
+                metricTile('Errors In', net.errors_in, ''),
             ].join('');
         }
 
@@ -3221,9 +3146,7 @@
             document.getElementById('deviceModal').classList.remove('open');
         }
 
-        // ── End Connected Devices ──────────────────────────────────────
 
-        // ══ TAB SWITCHING ════════════════════════════════════════════════
         function switchTab(tab) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -3232,10 +3155,9 @@
             if (tab === 'distributed') updateDistributed();
         }
 
-        // ══ DISTRIBUTED DASHBOARD ════════════════════════════════════════
         let selectedDistDevice = null;
         let distChart = null;
-        const distChartHistory = {};   // deviceId → {labels:[], cpu:[], mem:[], disk:[]}
+        const distChartHistory = {}; // deviceId → {labels:[], cpu:[], mem:[], disk:[]}
         const DIST_CHART_MAX = 40;
 
         let _distChartIsolated = null; // index of isolated dataset, or null for all
@@ -3248,9 +3170,9 @@
                 data: {
                     labels: [],
                     datasets: [
-                        { label: 'CPU %',    data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
-                        { label: 'Mem %',    data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
-                        { label: 'Disk %',   data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)',  tension: 0.4, fill: false, pointRadius: 0 },
+                        { label: 'CPU %', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
+                        { label: 'Mem %', data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', tension: 0.4, fill: true, pointRadius: 0 },
+                        { label: 'Disk %', data: [], borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)', tension: 0.4, fill: false, pointRadius: 0 },
                     ]
                 },
                 options: {
@@ -3267,13 +3189,11 @@
                             onClick: function(e, legendItem) {
                                 const idx = legendItem.datasetIndex;
                                 if (_distChartIsolated === idx) {
-                                    // Second click on same: restore all
                                     _distChartIsolated = null;
                                     distChart.data.datasets.forEach((ds, i) => {
                                         distChart.setDatasetVisibility(i, true);
                                     });
                                 } else {
-                                    // Isolate this dataset, hide others
                                     _distChartIsolated = idx;
                                     distChart.data.datasets.forEach((ds, i) => {
                                         distChart.setDatasetVisibility(i, i === idx);
@@ -3363,14 +3283,11 @@
             selectedDistDevice = deviceId;
             _initDistChart();
 
-            // Re-render sidebar to show active pill
             renderDistSidebar(devices);
 
-            // Show device view
             document.getElementById('distNoSelection').style.display = 'none';
             document.getElementById('distDeviceView').style.display = 'block';
 
-            // Populate header
             const d = (devices || []).find(x => x.device_id === deviceId) || { device_id: deviceId };
             const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
             const dot = document.getElementById('distDotIndicator');
@@ -3380,11 +3297,9 @@
             _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
             document.getElementById('distChartLabel').textContent = deviceId;
 
-            // Populate metrics
             const m = d.metrics || {};
             _updateDistMetrics(m);
 
-            // Push chart point
             const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
             _pushDistChartPoint(deviceId, now,
                 m.cpu?.cpu_percent ?? 0,
@@ -3428,7 +3343,6 @@
                 if (!resp.ok) return;
                 const devices = await resp.json();
 
-                // Fetch latest metrics for each device
                 await Promise.all(devices.map(async d => {
                     try {
                         const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
@@ -3442,16 +3356,13 @@
                 if (selectedDistDevice) {
                     const d = devices.find(x => x.device_id === selectedDistDevice);
                     if (d) {
-                        // Update header status
                         const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
                         const dot = document.getElementById('distDotIndicator');
                         if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
                         _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
 
-                        // Update metrics cards
                         _updateDistMetrics(d.metrics || {});
 
-                        // Push chart history
                         const m = d.metrics || {};
                         const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
                         _pushDistChartPoint(selectedDistDevice, now,
@@ -3461,27 +3372,24 @@
                         _refreshDistChart(selectedDistDevice);
                     }
                 }
-            } catch (e) { /* silently ignore */ }
+            } catch (e) { }
         }
 
         window._distDevices = [];
 
-        // ── End Distributed Dashboard ──────────────────────────────────
 
-        // Regular updates
-        setInterval(updateMetrics, 2000);       // Every 2 seconds
-        setInterval(updateAgentStatus, 3000);   // Every 3 seconds
-        setInterval(updateLogs, 1000);          // Every 1 second
-        setInterval(updateStats, 5000);         // Every 5 seconds
-        setInterval(updateChart, 2000);         // Every 2 seconds
-        setInterval(updateIncidents, 5000);     // Every 5 seconds
-        setInterval(loadThresholds, 15000);     // Refresh learned IQR bounds every 15s
-        setInterval(updateSimStatus, 3000);     // Simulation status every 3 seconds
+        setInterval(updateMetrics, 2000); // Every 2 seconds
+        setInterval(updateAgentStatus, 3000); // Every 3 seconds
+        setInterval(updateLogs, 1000); // Every 1 second
+        setInterval(updateStats, 5000); // Every 5 seconds
+        setInterval(updateChart, 2000); // Every 2 seconds
+        setInterval(updateIncidents, 5000); // Every 5 seconds
+        setInterval(loadThresholds, 15000); // Refresh learned IQR bounds every 15s
+        setInterval(updateSimStatus, 3000); // Simulation status every 3 seconds
         setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
-        setInterval(updateDevices, 5000);       // Connected devices every 5 seconds
-        setInterval(updateDistributed, 3000);  // Distributed tab every 3 seconds
+        setInterval(updateDevices, 5000); // Connected devices every 5 seconds
+        setInterval(updateDistributed, 3000); // Distributed tab every 3 seconds
 
-        // Initial load
         loadThresholds();
         updateSimStatus();
         updateMetrics();

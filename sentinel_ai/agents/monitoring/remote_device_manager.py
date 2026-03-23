@@ -15,25 +15,24 @@ from typing import Dict, Optional
 class RemoteDevice:
     """State record for one connected remote machine."""
 
-    STALE_AFTER_S  = 30   # seconds without data → stale
-    OFFLINE_AFTER_S = 60  # seconds without data → offline
+    STALE_AFTER_S = 30
+    OFFLINE_AFTER_S = 60
 
     def __init__(self, device_id: str, info: dict):
-        self.device_id     = device_id
-        self.hostname      = info.get('hostname', device_id)
-        self.platform      = info.get('platform', 'unknown')
-        self.version       = info.get('version',  '')
-        self.python        = info.get('python',   '')
+        self.device_id = device_id
+        self.hostname = info.get('hostname', device_id)
+        self.platform = info.get('platform', 'unknown')
+        self.version = info.get('version', '')
+        self.python = info.get('python', '')
         self.registered_at = datetime.now(timezone.utc)
-        self.last_seen     = self.registered_at
+        self.last_seen = self.registered_at
         self.last_metrics: dict = {}
-        self.metric_count  = 0
-        self.status        = 'connected'
+        self.metric_count = 0
+        self.status = 'connected'
 
-    # ── Mutators ──────────────────────────────────────────────────────────
 
     def record_push(self, metrics: dict):
-        self.last_seen    = datetime.now(timezone.utc)
+        self.last_seen = datetime.now(timezone.utc)
         self.last_metrics = metrics
         self.metric_count += 1
         self.status = 'connected'
@@ -45,7 +44,6 @@ class RemoteDevice:
         elif age > self.STALE_AFTER_S:
             self.status = 'stale'
 
-    # ── Computed properties ───────────────────────────────────────────────
 
     @property
     def age_seconds(self) -> float:
@@ -53,14 +51,14 @@ class RemoteDevice:
 
     def to_dict(self) -> dict:
         return {
-            'device_id':    self.device_id,
-            'hostname':     self.hostname,
-            'platform':     self.platform,
+            'device_id': self.device_id,
+            'hostname': self.hostname,
+            'platform': self.platform,
             'registered_at': self.registered_at.isoformat(),
-            'last_seen':    self.last_seen.isoformat(),
+            'last_seen': self.last_seen.isoformat(),
             'metric_count': self.metric_count,
-            'status':       self.status,
-            'age_seconds':  round(self.age_seconds, 1),
+            'status': self.status,
+            'age_seconds': round(self.age_seconds, 1),
         }
 
 
@@ -74,14 +72,13 @@ class RemoteDeviceManager:
 
     def __init__(self, event_bus, logger):
         self.event_bus = event_bus
-        self.logger    = logger
+        self.logger = logger
         self._devices: Dict[str, RemoteDevice] = {}
-        self._lock     = threading.RLock()
-        self._running  = False
+        self._lock = threading.RLock()
+        self._running = False
         self._monitor_thread: Optional[threading.Thread] = None
-        self._command_queues: Dict[str, list] = {}  # device_id → pending commands
+        self._command_queues: Dict[str, list] = {}
 
-    # ── Lifecycle ─────────────────────────────────────────────────────────
 
     def start(self):
         self._running = True
@@ -98,7 +95,6 @@ class RemoteDeviceManager:
         if self._monitor_thread:
             self._monitor_thread.join(timeout=5)
 
-    # ── Public API (called from Flask routes) ─────────────────────────────
 
     def register(self, device_id: str, info: dict) -> bool:
         """Register or re-register a remote device."""
@@ -120,13 +116,10 @@ class RemoteDeviceManager:
         with self._lock:
             device = self._devices.get(device_id)
             if not device:
-                # Auto-register unknown devices (graceful first-contact)
                 self.register(device_id, {'hostname': device_id, 'platform': 'unknown'})
                 device = self._devices[device_id]
             device.record_push(metrics)
 
-        # Publish to the shared event bus — same event type as the local
-        # MonitoringAgent so downstream agents see no difference.
         try:
             from core.event_bus import EventPriority
             self.event_bus.create_event(
@@ -134,8 +127,8 @@ class RemoteDeviceManager:
                 data={
                     'device_id': device_id,
                     'timestamp': timestamp,
-                    'metrics':   metrics,
-                    'source':    'remote',
+                    'metrics': metrics,
+                    'source': 'remote',
                 },
                 source='RemoteDeviceManager',
                 priority=EventPriority.NORMAL,
@@ -182,7 +175,6 @@ class RemoteDeviceManager:
         with self._lock:
             return self._command_queues.pop(device_id, [])
 
-    # ── Background monitor ────────────────────────────────────────────────
 
     def _staleness_monitor(self):
         """Periodically refresh device status and log transitions."""

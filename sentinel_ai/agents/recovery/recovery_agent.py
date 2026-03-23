@@ -9,10 +9,10 @@ Implements a tiered, AI-guided recovery system with:
   • Cooldown tracking per action to prevent recovery loops
 
 Escalation levels (per metric category, within rolling 30-min window):
-  Level 1 — Gentle:     AI-recommended actions only
-  Level 2 — Moderate:   + throttle/compact (non-destructive)
+  Level 1 — Gentle: AI-recommended actions only
+  Level 2 — Moderate: + throttle/compact (non-destructive)
   Level 3 — Aggressive: + kill process / disk cleanup
-  Level 4 — Critical:   + network reset / service restart / log rotation
+  Level 4 — Critical: + network reset / service restart / log rotation
 """
 
 import glob
@@ -31,7 +31,6 @@ from typing import Dict, List, Optional, Any
 
 _IS_MACOS = platform.system() == 'Darwin'
 
-# Algorithmic engine (imported lazily so startup is not blocked)
 _algo_engine = None
 _algo_engine_lock = threading.Lock()
 
@@ -53,10 +52,6 @@ from agents.base_agent import BaseAgent
 from core.event_bus import EventPriority
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Graduated Escalation Tracker
-# ─────────────────────────────────────────────────────────────────────────────
-
 class GraduatedEscalationTracker:
     """
     Tracks how many times a metric category has fired within a rolling window.
@@ -65,16 +60,11 @@ class GraduatedEscalationTracker:
 
     Category → level mapping:
       1 incident in window → Level 1 (gentle, AI-recommended only)
-      2 incidents          → Level 2 (add throttle / compact)
-      3 incidents          → Level 3 (add kill / cleanup)
-      4+ incidents         → Level 4 (add network reset / restart)
+      2 incidents → Level 2 (add throttle / compact)
+      3 incidents → Level 3 (add kill / cleanup)
+      4+ incidents → Level 4 (add network reset / restart)
     """
 
-    # Additional actions added at each level, keyed by (category, level).
-    # Level 1: algorithmic deep fix (first response — no killing)
-    # Level 2: non-destructive OS-level interventions
-    # Level 3: aggressive — kill/cleanup
-    # Level 4: critical — restart services / reset interfaces
     _ESCALATION_ACTIONS: Dict[str, Dict[int, List[str]]] = {
         'cpu': {
             1: ['algorithmic_cpu_fix'],
@@ -133,7 +123,6 @@ class GraduatedEscalationTracker:
         now = datetime.utcnow()
         with self._lock:
             times = self._incidents.setdefault(cat, [])
-            # Purge old incidents outside the window
             self._incidents[cat] = [t for t in times if (now - t) <= self._window]
             self._incidents[cat].append(now)
             level = min(4, len(self._incidents[cat]))
@@ -158,14 +147,10 @@ class GraduatedEscalationTracker:
         cat = self._category(metric_name)
         cat_map = self._ESCALATION_ACTIONS.get(cat, self._ESCALATION_ACTIONS['general'])
         actions: List[str] = []
-        for lvl in range(1, level + 1):   # include level 1 (algorithmic)
+        for lvl in range(1, level + 1):
             actions.extend(cat_map.get(lvl, []))
-        return list(dict.fromkeys(actions))  # deduplicate, preserve order
+        return list(dict.fromkeys(actions))
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Recovery Agent
-# ─────────────────────────────────────────────────────────────────────────────
 
 class RecoveryAgent(BaseAgent):
     """
@@ -177,33 +162,30 @@ class RecoveryAgent(BaseAgent):
                  remote_device_manager=None):
         super().__init__(name, config, event_bus, logger)
 
-        self.database               = database
-        self.device_id              = config.device_id
-        self.remote_device_manager  = remote_device_manager
+        self.database = database
+        self.device_id = config.device_id
+        self.remote_device_manager = remote_device_manager
 
-        self.recovery_config  = config.get_section('recovery')
-        self.actions_config   = self.recovery_config.get('actions', {})
-        self.auto_recovery    = self.recovery_config.get('auto_recovery', True)
-        self.max_retries      = self.recovery_config.get('max_retries', 3)
-        self.retry_delay      = self.recovery_config.get('retry_delay_seconds', 5)
-        self.cooldown_period  = self.recovery_config.get('cooldown_period_seconds', 300)
+        self.recovery_config = config.get_section('recovery')
+        self.actions_config = self.recovery_config.get('actions', {})
+        self.auto_recovery = self.recovery_config.get('auto_recovery', True)
+        self.max_retries = self.recovery_config.get('max_retries', 3)
+        self.retry_delay = self.recovery_config.get('retry_delay_seconds', 5)
+        self.cooldown_period = self.recovery_config.get('cooldown_period_seconds', 300)
 
         self.action_cooldowns: Dict[str, datetime] = {}
-        self.recent_actions:   List[Dict]          = []
+        self.recent_actions: List[Dict] = []
 
         self.escalation = GraduatedEscalationTracker(
             window_minutes=self.recovery_config.get('escalation_window_minutes', 30)
         )
 
-        # Pending outcome verifications: {metric_name: (check_at, expected_max)}
         self._pending_verifications: Dict[str, tuple] = {}
         self._verification_lock = threading.RLock()
 
         self.event_bus.subscribe("diagnosis.complete", self.process_event)
-        # Also subscribe to health.metric for outcome verification
         self.event_bus.subscribe("health.metric", self._on_health_metric)
 
-    # ── Main loop (event-driven; loop just does cleanup) ─────────────────
 
     def _run(self):
         self.logger.info("Recovery Agent started — graduated escalation + outcome verification active")
@@ -215,7 +197,6 @@ class RecoveryAgent(BaseAgent):
             if not self.wait(60):
                 break
 
-    # ── Event handlers ────────────────────────────────────────────────────
 
     def process_event(self, event):
         if event.event_type != "diagnosis.complete":
@@ -225,20 +206,18 @@ class RecoveryAgent(BaseAgent):
             return
 
         try:
-            diagnosis  = event.data.get('diagnosis', {})
-            anomaly    = event.data.get('anomaly', {})
-            device_id  = event.data.get('device_id')
-            timestamp  = event.data.get('timestamp')
+            diagnosis = event.data.get('diagnosis', {})
+            anomaly = event.data.get('anomaly', {})
+            device_id = event.data.get('device_id')
+            timestamp = event.data.get('timestamp')
             metric_name = anomaly.get('metric_name', 'unknown')
 
             recommended = diagnosis.get('recommended_actions', [])
             if not recommended:
                 return
 
-            # Graduated escalation
             level = self.escalation.record(metric_name)
             extra = self.escalation.extra_actions(metric_name, level)
-            # Merge: recommended first, then escalation extras (no duplicates)
             all_actions = list(dict.fromkeys(recommended + extra))
 
             if level > 1:
@@ -255,16 +234,15 @@ class RecoveryAgent(BaseAgent):
             self.publish_event(
                 event_type="recovery.action",
                 data={
-                    'device_id':        device_id,
-                    'timestamp':        timestamp,
-                    'diagnosis_id':     diagnosis.get('diagnosis_id'),
-                    'actions':          results,
+                    'device_id': device_id,
+                    'timestamp': timestamp,
+                    'diagnosis_id': diagnosis.get('diagnosis_id'),
+                    'actions': results,
                     'escalation_level': level,
                 },
                 priority=EventPriority.HIGH,
             )
 
-            # Schedule outcome verification 30s from now
             self._schedule_verification(metric_name, anomaly, results)
 
         except Exception as e:
@@ -282,9 +260,8 @@ class RecoveryAgent(BaseAgent):
                 self._pending_verifications.items()
             ):
                 if now < check_at:
-                    continue  # not yet
+                    continue
                 expired.append(metric_name)
-                # Look up the metric value in the flattened metrics
                 current_value = self._lookup_metric(metrics, metric_name)
                 if current_value is not None:
                     recovered = current_value < anomaly_value * 0.80
@@ -303,7 +280,6 @@ class RecoveryAgent(BaseAgent):
             for k in expired:
                 del self._pending_verifications[k]
 
-    # ── Action execution ─────────────────────────────────────────────────
 
     def execute_recovery_actions(
         self,
@@ -314,7 +290,6 @@ class RecoveryAgent(BaseAgent):
         anomaly: Dict = None,
         escalation_level: int = 1,
     ) -> List[Dict]:
-        # Route to remote command queue if device is not local
         is_remote = (
             self.remote_device_manager is not None
             and device_id is not None
@@ -331,24 +306,23 @@ class RecoveryAgent(BaseAgent):
                 self.logger.info(f"Action '{action_name}' in cooldown — skipping")
                 results.append({
                     'action_name': action_name,
-                    'status':      'skipped',
-                    'reason':      'cooldown_active',
+                    'status': 'skipped',
+                    'reason': 'cooldown_active',
                 })
                 continue
 
             if is_remote:
-                # Queue command for the remote client to execute
                 cmd = {
-                    'action_id':  str(uuid.uuid4()),
-                    'action':     action_name,
-                    'issued_at':  datetime.utcnow().isoformat(),
+                    'action_id': str(uuid.uuid4()),
+                    'action': action_name,
+                    'issued_at': datetime.utcnow().isoformat(),
                 }
                 self.remote_device_manager.queue_command(device_id, cmd)
                 result = {
-                    'action_id':   cmd['action_id'],
+                    'action_id': cmd['action_id'],
                     'action_name': action_name,
-                    'status':      'queued_remote',
-                    'message':     f"Command queued for remote device {device_id}",
+                    'status': 'queued_remote',
+                    'message': f"Command queued for remote device {device_id}",
                 }
             else:
                 result = self._execute_with_retry(action_name, diagnosis, anomaly=anomaly)
@@ -356,13 +330,13 @@ class RecoveryAgent(BaseAgent):
 
             if self.database:
                 self.database.store_recovery_action({
-                    'action_id':             result.get('action_id'),
-                    'incident_id':           diagnosis.get('diagnosis_id'),
-                    'timestamp':             timestamp,
-                    'action_type':           action_name,
-                    'parameters':            result.get('parameters', {}),
-                    'status':                result.get('status'),
-                    'result':                result.get('message'),
+                    'action_id': result.get('action_id'),
+                    'incident_id': diagnosis.get('diagnosis_id'),
+                    'timestamp': timestamp,
+                    'action_type': action_name,
+                    'parameters': result.get('parameters', {}),
+                    'status': result.get('status'),
+                    'result': result.get('message'),
                     'execution_time_seconds': result.get('execution_time', 0),
                 })
 
@@ -375,7 +349,7 @@ class RecoveryAgent(BaseAgent):
         return results
 
     def _execute_with_retry(self, action_name: str, diagnosis: Dict, anomaly: Dict = None) -> Dict:
-        action_id  = str(uuid.uuid4())
+        action_id = str(uuid.uuid4())
         start_time = time.time()
         last_error = None
 
@@ -384,13 +358,13 @@ class RecoveryAgent(BaseAgent):
                 result = self._dispatch(action_name, diagnosis, anomaly=anomaly)
                 if result.get('success'):
                     return {
-                        'action_id':      action_id,
-                        'action_name':    action_name,
-                        'status':         'success',
-                        'message':        result.get('message', 'Completed'),
-                        'attempt':        attempt,
+                        'action_id': action_id,
+                        'action_name': action_name,
+                        'status': 'success',
+                        'message': result.get('message', 'Completed'),
+                        'attempt': attempt,
                         'execution_time': round(time.time() - start_time, 2),
-                        'parameters':     result.get('parameters', {}),
+                        'parameters': result.get('parameters', {}),
                     }
                 last_error = result.get('message', 'Unknown error')
                 if attempt < self.max_retries:
@@ -405,49 +379,43 @@ class RecoveryAgent(BaseAgent):
                     time.sleep(self.retry_delay)
 
         return {
-            'action_id':      action_id,
-            'action_name':    action_name,
-            'status':         'failed',
-            'message':        f"Failed after {self.max_retries} attempts: {last_error}",
-            'attempt':        self.max_retries,
+            'action_id': action_id,
+            'action_name': action_name,
+            'status': 'failed',
+            'message': f"Failed after {self.max_retries} attempts: {last_error}",
+            'attempt': self.max_retries,
             'execution_time': round(time.time() - start_time, 2),
         }
 
     def _dispatch(self, action_name: str, diagnosis: Dict, anomaly: Dict = None) -> Dict:
         handlers = {
-            # ── Algorithmic deep-fix actions (Level 1 — first response) ──
-            'algorithmic_cpu_fix':      lambda d: self._action_algorithmic_cpu(d, anomaly),
-            'algorithmic_memory_fix':   lambda d: self._action_algorithmic_memory(d, anomaly),
-            'algorithmic_disk_fix':     lambda d: self._action_algorithmic_disk(d, anomaly),
-            'algorithmic_network_fix':  lambda d: self._action_algorithmic_network(d, anomaly),
-            # ── Original actions ──────────────────────────────────────────
-            'restart_mqtt':             lambda d: self._action_restart_mqtt(d),
-            'kill_process':             lambda d: self._action_kill_process(d, anomaly=anomaly),
-            'reconnect_sensor':         lambda d: self._action_reconnect_sensor(d),
-            'failover':                 lambda d: self._action_failover(d),
-            'clear_cache':              lambda d: self._action_clear_cache(d),
-            'restart_service':          lambda d: self._action_restart_service(d),
-            'check_network':            lambda d: self._action_check_network(d),
-            'full_system_restart':      lambda d: self._action_full_system_restart(d),
-            # ── Escalation actions (Level 2-4) ────────────────────────────
-            'throttle_cpu_process':     lambda d: self._action_throttle_cpu_process(d),
-            'kill_top_cpu_process':     lambda d: self._action_kill_top_cpu_process(d),
-            'kill_top_memory_process':  lambda d: self._action_kill_top_memory_process(d),
-            'compact_memory':           lambda d: self._action_compact_memory(d),
-            'emergency_disk_cleanup':   lambda d: self._action_emergency_disk_cleanup(d),
-            'reset_network_interface':  lambda d: self._action_reset_network_interface(d),
-            'flush_dns':                lambda d: self._action_flush_dns(d),
-            'rotate_logs':              lambda d: self._action_rotate_logs(d),
-            'restart_process_by_name':  lambda d: self._action_restart_process_by_name(d),
+            'algorithmic_cpu_fix': lambda d: self._action_algorithmic_cpu(d, anomaly),
+            'algorithmic_memory_fix': lambda d: self._action_algorithmic_memory(d, anomaly),
+            'algorithmic_disk_fix': lambda d: self._action_algorithmic_disk(d, anomaly),
+            'algorithmic_network_fix': lambda d: self._action_algorithmic_network(d, anomaly),
+            'restart_mqtt': lambda d: self._action_restart_mqtt(d),
+            'kill_process': lambda d: self._action_kill_process(d, anomaly=anomaly),
+            'reconnect_sensor': lambda d: self._action_reconnect_sensor(d),
+            'failover': lambda d: self._action_failover(d),
+            'clear_cache': lambda d: self._action_clear_cache(d),
+            'restart_service': lambda d: self._action_restart_service(d),
+            'check_network': lambda d: self._action_check_network(d),
+            'full_system_restart': lambda d: self._action_full_system_restart(d),
+            'throttle_cpu_process': lambda d: self._action_throttle_cpu_process(d),
+            'kill_top_cpu_process': lambda d: self._action_kill_top_cpu_process(d),
+            'kill_top_memory_process': lambda d: self._action_kill_top_memory_process(d),
+            'compact_memory': lambda d: self._action_compact_memory(d),
+            'emergency_disk_cleanup': lambda d: self._action_emergency_disk_cleanup(d),
+            'reset_network_interface': lambda d: self._action_reset_network_interface(d),
+            'flush_dns': lambda d: self._action_flush_dns(d),
+            'rotate_logs': lambda d: self._action_rotate_logs(d),
+            'restart_process_by_name': lambda d: self._action_restart_process_by_name(d),
         }
         handler = handlers.get(action_name)
         if not handler:
             return {'success': False, 'message': f"Unknown action: {action_name}"}
         return handler(diagnosis)
 
-    # ══════════════════════════════════════════════════════════════════════
-    # ALGORITHMIC LEVEL-1 ACTIONS — deep root-cause analysis + targeted fix
-    # ══════════════════════════════════════════════════════════════════════
 
     def _run_algorithmic(self, heal_fn, metric_category: str, anomaly: Dict) -> Dict:
         """
@@ -456,14 +424,14 @@ class RecoveryAgent(BaseAgent):
         """
         anomaly = anomaly or {}
         anomaly_value = anomaly.get('value', 0.0)
-        metrics       = {}  # current metrics not available here; engine re-samples
+        metrics = {}
         diagnosis_ctx = {}
 
         engine = _get_algo_engine(logger=self.logger,
                                   ollama_model=self.config.get('ollama.model', 'llama3.2:3b'))
 
         result_holder = {}
-        exc_holder    = {}
+        exc_holder = {}
 
         def _run():
             try:
@@ -490,19 +458,18 @@ class RecoveryAgent(BaseAgent):
         if not heal:
             return {'success': False, 'message': f"Algorithmic {metric_category} fix: no result"}
 
-        # Log every action taken by the engine
         for act in heal.actions_taken:
             self.logger.info(f"[Algorithmic/{metric_category}] {act}")
 
         return {
-            'success':    heal.success,
-            'message':    heal.message,
+            'success': heal.success,
+            'message': heal.message,
             'parameters': {
-                'classification':  heal.classification,
-                'algorithm':       heal.algorithm,
+                'classification': heal.classification,
+                'algorithm': heal.algorithm,
                 'evidence_before': heal.evidence_before,
-                'evidence_after':  heal.evidence_after,
-                'actions_taken':   heal.actions_taken,
+                'evidence_after': heal.evidence_after,
+                'actions_taken': heal.actions_taken,
                 **heal.parameters,
             },
         }
@@ -565,9 +532,6 @@ class RecoveryAgent(BaseAgent):
             'network', anomaly,
         )
 
-    # ══════════════════════════════════════════════════════════════════════
-    # ORIGINAL ACTIONS (kept + lightly improved)
-    # ══════════════════════════════════════════════════════════════════════
 
     def _action_restart_mqtt(self, diagnosis: Dict) -> Dict:
         """Restart MQTT broker service."""
@@ -576,7 +540,7 @@ class RecoveryAgent(BaseAgent):
             if _IS_MACOS:
                 for cmd in [
                     ['brew', 'services', 'restart', 'mosquitto'],
-                    ['brew', 'services', 'start',   'mosquitto'],
+                    ['brew', 'services', 'start', 'mosquitto'],
                 ]:
                     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
                     if r.returncode == 0:
@@ -604,28 +568,27 @@ class RecoveryAgent(BaseAgent):
         anomaly = anomaly or {}
         metric_name = anomaly.get('metric_name', '')
 
-        # Strategy 1: simulation subprocess
         try:
             from simulation.instability_runner import InstabilityRunner
             runner = InstabilityRunner.get_instance()
             sim_pids = runner.get_all_pids()
             if sim_pids:
                 sim_to_kill = None
-                if 'cpu'    in metric_name and 'cpu_spike'         in sim_pids:
+                if 'cpu' in metric_name and 'cpu_spike' in sim_pids:
                     sim_to_kill = 'cpu_spike'
                 elif 'memory' in metric_name and 'memory_pressure' in sim_pids:
                     sim_to_kill = 'memory_pressure'
-                elif 'disk'   in metric_name and 'disk_fill'       in sim_pids:
+                elif 'disk' in metric_name and 'disk_fill' in sim_pids:
                     sim_to_kill = 'disk_fill'
                 elif sim_pids:
                     sim_to_kill = next(iter(sim_pids))
                 if sim_to_kill:
-                    pid    = sim_pids.get(sim_to_kill, 0)
+                    pid = sim_pids.get(sim_to_kill, 0)
                     result = runner.stop(sim_to_kill)
                     if result.get('success'):
                         time.sleep(2)
                         still = runner.get_all_pids().get(sim_to_kill)
-                        note  = '' if not still else ' (may need more time)'
+                        note = '' if not still else ' (may need more time)'
                         return {
                             'success': True,
                             'message': f"Killed simulation '{sim_to_kill}' (PID {pid}){note}",
@@ -636,7 +599,6 @@ class RecoveryAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"InstabilityRunner kill failed: {e}")
 
-        # Strategy 2: memory-threshold kill
         try:
             max_mem = self.actions_config.get('kill_process', {}).get('max_memory_mb', 500)
             candidates = []
@@ -730,9 +692,6 @@ class RecoveryAgent(BaseAgent):
         self.logger.critical("Full system restart triggered (safety guard active — simulated)")
         return {'success': True, 'message': 'Full system restart initiated (guarded — simulated for safety)'}
 
-    # ══════════════════════════════════════════════════════════════════════
-    # NEW FULL-SCALE RECOVERY ACTIONS
-    # ══════════════════════════════════════════════════════════════════════
 
     def _action_throttle_cpu_process(self, diagnosis: Dict) -> Dict:
         """
@@ -741,12 +700,12 @@ class RecoveryAgent(BaseAgent):
         """
         try:
             top_proc = None
-            max_cpu  = 0.0
+            max_cpu = 0.0
             for proc in psutil.process_iter(['pid', 'name', 'cpu_percent']):
                 try:
                     cpu = proc.info.get('cpu_percent') or 0
                     if cpu > max_cpu and proc.info['name'].lower() not in _CRITICAL_PROCESSES:
-                        max_cpu  = cpu
+                        max_cpu = cpu
                         top_proc = proc
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -754,7 +713,7 @@ class RecoveryAgent(BaseAgent):
             if not top_proc or max_cpu < 10:
                 return {'success': True, 'message': f'No high-CPU process to throttle (top: {max_cpu:.1f}%)'}
 
-            pid  = top_proc.info['pid']
+            pid = top_proc.info['pid']
             name = top_proc.info['name']
 
             r = subprocess.run(
@@ -768,7 +727,6 @@ class RecoveryAgent(BaseAgent):
                     'parameters': {'pid': pid, 'process_name': name, 'cpu_was': round(max_cpu, 1)},
                 }
 
-            # Try with sudo
             r2 = subprocess.run(
                 ['sudo', 'renice', '+10', '-p', str(pid)],
                 capture_output=True, text=True, timeout=5,
@@ -787,12 +745,12 @@ class RecoveryAgent(BaseAgent):
         """Kill the highest-CPU consuming non-critical process (> 20% threshold)."""
         try:
             top_proc = None
-            max_cpu  = 0.0
+            max_cpu = 0.0
             for proc in psutil.process_iter(['pid', 'name', 'cpu_percent']):
                 try:
                     cpu = proc.info.get('cpu_percent') or 0
                     if cpu > max_cpu and proc.info['name'].lower() not in _CRITICAL_PROCESSES:
-                        max_cpu  = cpu
+                        max_cpu = cpu
                         top_proc = proc
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -803,7 +761,7 @@ class RecoveryAgent(BaseAgent):
                     'message': f'No runaway CPU process found (top: {max_cpu:.1f}%)',
                 }
 
-            pid  = top_proc.info['pid']
+            pid = top_proc.info['pid']
             name = top_proc.info['name']
             proc = psutil.Process(pid)
             proc.terminate()
@@ -824,12 +782,12 @@ class RecoveryAgent(BaseAgent):
         """Kill the highest memory-consuming non-critical process (> 20% threshold)."""
         try:
             top_proc = None
-            max_mem  = 0.0
+            max_mem = 0.0
             for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
                 try:
                     mem = proc.info.get('memory_percent') or 0
                     if mem > max_mem and proc.info['name'].lower() not in _CRITICAL_PROCESSES:
-                        max_mem  = mem
+                        max_mem = mem
                         top_proc = proc
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -837,7 +795,7 @@ class RecoveryAgent(BaseAgent):
             if not top_proc or max_mem < 20:
                 return {'success': True, 'message': f'No high-memory process found (top: {max_mem:.1f}%)'}
 
-            pid  = top_proc.info['pid']
+            pid = top_proc.info['pid']
             name = top_proc.info['name']
             proc = psutil.Process(pid)
             proc.terminate()
@@ -857,7 +815,7 @@ class RecoveryAgent(BaseAgent):
     def _action_compact_memory(self, diagnosis: Dict) -> Dict:
         """
         Reclaim memory by dropping OS page cache.
-        macOS: sudo purge    Linux: sync + echo 3 > /proc/sys/vm/drop_caches
+        macOS: sudo purge Linux: sync + echo 3 > /proc/sys/vm/drop_caches
         """
         try:
             if _IS_MACOS:
@@ -888,10 +846,9 @@ class RecoveryAgent(BaseAgent):
           2. Compress uncompressed rotated log files
           3. Remove Python __pycache__ directories
         """
-        freed_mb     = 0.0
+        freed_mb = 0.0
         actions_done = []
 
-        # 1. Old temp files
         cutoff = time.time() - 86400
         for tmp_dir in ['/tmp', '/var/tmp']:
             if not os.path.exists(tmp_dir):
@@ -915,8 +872,7 @@ class RecoveryAgent(BaseAgent):
         if freed_mb > 0:
             actions_done.append(f"temp: {freed_mb:.1f} MB freed")
 
-        # 2. Compress rotated log files
-        log_dir    = 'logs'
+        log_dir = 'logs'
         comp_freed = 0.0
         if os.path.exists(log_dir):
             for log_file in glob.glob(f'{log_dir}/*.log.*'):
@@ -934,7 +890,6 @@ class RecoveryAgent(BaseAgent):
             freed_mb += comp_freed
             actions_done.append(f"log compression: ~{comp_freed:.1f} MB saved")
 
-        # 3. __pycache__ cleanup
         cache_freed = 0
         for root, dirs, _ in os.walk('.'):
             for d in list(dirs):
@@ -952,7 +907,7 @@ class RecoveryAgent(BaseAgent):
         if actions_done:
             return {
                 'success': True,
-                'message':    f"Disk cleanup: {'; '.join(actions_done)}",
+                'message': f"Disk cleanup: {'; '.join(actions_done)}",
                 'parameters': {'freed_mb': round(freed_mb, 1)},
             }
         return {'success': True, 'message': 'Disk cleanup: nothing cleanable found'}
@@ -961,7 +916,6 @@ class RecoveryAgent(BaseAgent):
         """Bring the primary network interface down then up to reset the connection."""
         try:
             if _IS_MACOS:
-                # Try networksetup (works without root for service toggle)
                 r = subprocess.run(
                     ['networksetup', '-listallnetworkservices'],
                     capture_output=True, text=True, timeout=5,
@@ -1006,7 +960,7 @@ class RecoveryAgent(BaseAgent):
                     return {'success': False, 'message': 'Could not determine primary network interface'}
                 subprocess.run(['ip', 'link', 'set', iface, 'down'], capture_output=True, timeout=5)
                 time.sleep(2)
-                subprocess.run(['ip', 'link', 'set', iface, 'up'],   capture_output=True, timeout=5)
+                subprocess.run(['ip', 'link', 'set', iface, 'up'], capture_output=True, timeout=5)
                 subprocess.run(['dhclient', iface], capture_output=True, timeout=15)
                 return {
                     'success': True,
@@ -1085,7 +1039,7 @@ class RecoveryAgent(BaseAgent):
     def _action_restart_process_by_name(self, diagnosis: Dict) -> Dict:
         """Kill and optionally restart a named process (configured in actions.restart_process)."""
         process_name = self.actions_config.get('restart_process_by_name', {}).get('process_name')
-        restart_cmd  = self.actions_config.get('restart_process_by_name', {}).get('restart_command')
+        restart_cmd = self.actions_config.get('restart_process_by_name', {}).get('restart_command')
         if not process_name:
             return {'success': False, 'message': 'No process_name configured for restart_process_by_name'}
 
@@ -1120,17 +1074,14 @@ class RecoveryAgent(BaseAgent):
             return {'success': True, 'message': f"Killed {killed} '{process_name}' instance(s)"}
         return {'success': True, 'message': f"No running '{process_name}' processes found"}
 
-    # ══════════════════════════════════════════════════════════════════════
-    # OUTCOME VERIFICATION
-    # ══════════════════════════════════════════════════════════════════════
 
     def _schedule_verification(self, metric_name: str, anomaly: Dict, results: List[Dict]):
         """Schedule a 30s outcome check if at least one action succeeded."""
         if not any(r.get('status') == 'success' for r in results):
             return
         anomaly_value = anomaly.get('value', 0)
-        anomaly_type  = anomaly.get('type', 'unknown')
-        check_at      = datetime.utcnow() + timedelta(seconds=30)
+        anomaly_type = anomaly.get('type', 'unknown')
+        check_at = datetime.utcnow() + timedelta(seconds=30)
         with self._verification_lock:
             self._pending_verifications[metric_name] = (check_at, anomaly_value, anomaly_type)
         self.logger.info(
@@ -1142,7 +1093,7 @@ class RecoveryAgent(BaseAgent):
     def _lookup_metric(metrics: dict, metric_name: str) -> Optional[float]:
         """Look up a dot-separated metric name in the nested metrics dict."""
         parts = metric_name.split('.')
-        node  = metrics
+        node = metrics
         for part in parts:
             if isinstance(node, dict):
                 node = node.get(part)
@@ -1150,9 +1101,6 @@ class RecoveryAgent(BaseAgent):
                 return None
         return float(node) if isinstance(node, (int, float)) else None
 
-    # ══════════════════════════════════════════════════════════════════════
-    # COOLDOWN MANAGEMENT
-    # ══════════════════════════════════════════════════════════════════════
 
     def _is_in_cooldown(self, action_name: str) -> bool:
         until = self.action_cooldowns.get(action_name)
@@ -1162,7 +1110,7 @@ class RecoveryAgent(BaseAgent):
         self.action_cooldowns[action_name] = datetime.utcnow() + timedelta(seconds=self.cooldown_period)
 
     def _cleanup_cooldowns(self):
-        now     = datetime.utcnow()
+        now = datetime.utcnow()
         expired = [k for k, v in self.action_cooldowns.items() if now >= v]
         for k in expired:
             del self.action_cooldowns[k]
