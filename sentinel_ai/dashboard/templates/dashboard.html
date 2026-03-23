@@ -2136,7 +2136,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 300 },
-                interaction: { mode: 'nearest', intersect: true },
+                interaction: { mode: 'nearest', intersect: false },
                 onClick: function(e, elements) {
                     if (elements.length > 0) {
                         const idx = elements[0].datasetIndex;
@@ -3061,8 +3061,8 @@
                              : `${Math.round(age/3600)}h ago`;
 
                 return `
-                <div class="device-card status-${d.status}" onclick="openDeviceModal('${d.device_id}')">
-                    <div class="device-header">
+                <div class="device-card status-${d.status}">
+                    <div class="device-header" onclick="openDeviceModal('${d.device_id}')" style="cursor:pointer">
                         <div class="device-dot ${d.status}"></div>
                         <div class="device-name" title="${d.device_id}">${d.device_id}</div>
                         <div class="device-platform">${d.platform || '?'}</div>
@@ -3075,6 +3075,9 @@
                     <div class="device-footer">
                         <span class="device-status-text ${d.status}">${d.status.toUpperCase()}</span>
                         <span>Updated ${ageStr}</span>
+                        <a href="/device/${encodeURIComponent(d.device_id)}" target="_blank"
+                           style="color:#00d4ff;font-size:11px;text-decoration:none;margin-left:auto"
+                           onclick="event.stopPropagation()">Full Dashboard ↗</a>
                     </div>
                 </div>`;
             }).join('');

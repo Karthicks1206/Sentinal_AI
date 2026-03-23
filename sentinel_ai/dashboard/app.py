@@ -64,6 +64,26 @@ class DashboardState:
         self.power_voltage_history = deque(maxlen=60)   # input voltage V
         self.power_quality_history = deque(maxlen=60)   # power quality 0-100
         self.timestamps = deque(maxlen=60)
+        # Per-device state (keyed by device_id)
+        self.device_anomalies: dict  = {}   # device_id → deque(maxlen=50)
+        self.device_diagnoses: dict  = {}   # device_id → deque(maxlen=50)
+        self.device_recoveries: dict = {}   # device_id → deque(maxlen=50)
+        self.device_logs: dict       = {}   # device_id → deque(maxlen=100)
+        self.device_history: dict    = {}   # device_id → {cpu,mem,disk,net,timestamps}
+
+    def _device_history(self, device_id: str) -> dict:
+        if device_id not in self.device_history:
+            self.device_history[device_id] = {
+                'cpu': deque(maxlen=60), 'memory': deque(maxlen=60),
+                'disk': deque(maxlen=60), 'net': deque(maxlen=60),
+                'timestamps': deque(maxlen=60),
+            }
+        return self.device_history[device_id]
+
+    def _device_deque(self, store: dict, device_id: str, maxlen: int) -> deque:
+        if device_id not in store:
+            store[device_id] = deque(maxlen=maxlen)
+        return store[device_id]
 
 
 # Global state
@@ -81,6 +101,7 @@ class SentinelDashboard:
         """Initialize dashboard"""
         # Configuration
         self.config = get_config()
+        self.local_device_id = self.config.device_id
         self.config.set('aws.enabled', False)  # Disable AWS for dashboard
 
         setup_logging(self.config)
@@ -110,92 +131,92 @@ class SentinelDashboard:
 
     def _on_metric(self, event):
         """Handle metric event"""
-        state.latest_metrics = event.data.get('metrics', {})
+        metrics    = event.data.get('metrics', {})
+        device_id  = event.data.get('device_id') or self.local_device_id
+        timestamp  = now_cst()
 
-        # Add to logs
-        timestamp = now_cst()
-        cpu  = state.latest_metrics.get('cpu',     {}).get('cpu_percent',        0)
-        mem  = state.latest_metrics.get('memory',  {}).get('memory_percent',     0)
-        disk = state.latest_metrics.get('disk',    {}).get('disk_percent',       0)
-        net_latency = state.latest_metrics.get('network', {}).get('ping_latency_ms', 0)
-        power       = state.latest_metrics.get('power', {})
-        pwr_voltage = power.get('power_voltage_v', 0)
-        pwr_quality = power.get('power_quality', 100)
+        cpu  = metrics.get('cpu',    {}).get('cpu_percent',    0)
+        mem  = metrics.get('memory', {}).get('memory_percent', 0)
+        disk = metrics.get('disk',   {}).get('disk_percent',   0)
+        net  = metrics.get('network',{}).get('ping_latency_ms',0)
 
-        # Append to rolling graph history
-        state.cpu_history.append(round(cpu, 1))
-        state.memory_history.append(round(mem, 1))
-        state.disk_history.append(round(disk, 1))
-        state.network_latency_history.append(round(net_latency, 1))
-        state.power_voltage_history.append(round(pwr_voltage, 3))
-        state.power_quality_history.append(round(pwr_quality, 1))
-        state.timestamps.append(timestamp)
+        # Always update per-device rolling history
+        dh = state._device_history(device_id)
+        dh['cpu'].append(round(cpu, 1))
+        dh['memory'].append(round(mem, 1))
+        dh['disk'].append(round(disk, 1))
+        dh['net'].append(round(net, 1))
+        dh['timestamps'].append(timestamp)
 
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'INFO',
-            'message': f'Metrics collected: CPU={cpu:.1f}%, Memory={mem:.1f}%'
-        })
+        dl = state._device_deque(state.device_logs, device_id, 100)
+        dl.append({'timestamp': timestamp, 'level': 'INFO',
+                   'message': f'Metrics: CPU={cpu:.1f}% MEM={mem:.1f}% DISK={disk:.1f}%'})
+
+        # Update local-only state (main dashboard cards/chart)
+        if device_id == self.local_device_id:
+            state.latest_metrics = metrics
+            power       = metrics.get('power', {})
+            pwr_voltage = power.get('power_voltage_v', 0)
+            pwr_quality = power.get('power_quality', 100)
+            state.cpu_history.append(round(cpu, 1))
+            state.memory_history.append(round(mem, 1))
+            state.disk_history.append(round(disk, 1))
+            state.network_latency_history.append(round(net, 1))
+            state.power_voltage_history.append(round(pwr_voltage, 3))
+            state.power_quality_history.append(round(pwr_quality, 1))
+            state.timestamps.append(timestamp)
+            state.logs.append({'timestamp': timestamp, 'level': 'INFO',
+                                'message': f'Metrics collected: CPU={cpu:.1f}%, Memory={mem:.1f}%'})
 
     def _on_anomaly(self, event):
         """Handle anomaly event"""
-        anomaly = event.data.get('anomaly', {})
-        state.anomalies.append({
-            'timestamp': datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S'),
-            'anomaly': anomaly
-        })
+        anomaly   = event.data.get('anomaly', {})
+        device_id = event.data.get('device_id') or self.local_device_id
+        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry     = {'timestamp': ts_str, 'anomaly': anomaly, 'device_id': device_id}
 
-        # Set alert
+        state.anomalies.append(entry)
+        state._device_deque(state.device_anomalies, device_id, 50).append(entry)
+
         state.alert_active = True
         state.current_alert = {
             'type': 'anomaly',
             'severity': anomaly.get('severity', 'unknown'),
-            'message': f"Anomaly detected: {anomaly.get('metric_name')} - {anomaly.get('type')}",
-            'details': anomaly
+            'message': f"[{device_id}] Anomaly: {anomaly.get('metric_name')} - {anomaly.get('type')}",
+            'details': anomaly,
         }
 
-        # Add to logs
         timestamp = now_cst()
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'WARNING',
-            'message': f"ANOMALY: {anomaly.get('metric_name')} = {anomaly.get('value', 0):.2f} (severity: {anomaly.get('severity')})"
-        })
-
+        msg = f"[{device_id}] ANOMALY: {anomaly.get('metric_name')} = {anomaly.get('value', 0):.2f} (severity: {anomaly.get('severity')})"
+        state.logs.append({'timestamp': timestamp, 'level': 'WARNING', 'message': msg})
+        state._device_deque(state.device_logs, device_id, 100).append(
+            {'timestamp': timestamp, 'level': 'WARNING', 'message': msg})
         self.logger.warning(f"Anomaly detected: {anomaly}")
 
     def _on_diagnosis(self, event):
         """Handle diagnosis event"""
         diagnosis = event.data.get('diagnosis', {})
-        state.diagnoses.append({
-            'timestamp': datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S'),
-            'diagnosis': diagnosis
-        })
+        device_id = event.data.get('device_id') or self.local_device_id
+        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry     = {'timestamp': ts_str, 'diagnosis': diagnosis, 'device_id': device_id}
 
-        # Update alert with diagnosis
+        state.diagnoses.append(entry)
+        state._device_deque(state.device_diagnoses, device_id, 50).append(entry)
+
         if state.alert_active:
             state.current_alert['diagnosis'] = diagnosis.get('diagnosis')
             state.current_alert['root_cause'] = diagnosis.get('root_cause')
             state.current_alert['actions'] = diagnosis.get('recommended_actions', [])
 
-        # Add to logs
         timestamp = now_cst()
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'WARNING',
-            'message': f"DIAGNOSIS: {diagnosis.get('diagnosis', 'N/A')}"
-        })
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'INFO',
-            'message': f"   Root Cause: {diagnosis.get('root_cause', 'Unknown')}"
-        })
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'INFO',
-            'message': f"   Actions: {', '.join(diagnosis.get('recommended_actions', []))}"
-        })
-
+        for msg in [
+            f"[{device_id}] DIAGNOSIS: {diagnosis.get('diagnosis', 'N/A')}",
+            f"[{device_id}]   Root Cause: {diagnosis.get('root_cause', 'Unknown')}",
+            f"[{device_id}]   Actions: {', '.join(diagnosis.get('recommended_actions', []))}",
+        ]:
+            state.logs.append({'timestamp': timestamp, 'level': 'WARNING', 'message': msg})
+            state._device_deque(state.device_logs, device_id, 100).append(
+                {'timestamp': timestamp, 'level': 'WARNING', 'message': msg})
         self.logger.info(f"Diagnosis complete: {diagnosis.get('diagnosis')}")
 
     def _on_security_threat(self, event):
@@ -220,32 +241,28 @@ class SentinelDashboard:
 
     def _on_recovery(self, event):
         """Handle recovery event"""
-        actions = event.data.get('actions', [])
-        state.recoveries.append({
-            'timestamp': datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S'),
-            'actions': actions
-        })
+        actions   = event.data.get('actions', [])
+        device_id = event.data.get('device_id') or self.local_device_id
+        ts_str    = datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')
+        entry     = {'timestamp': ts_str, 'actions': actions, 'device_id': device_id}
 
-        # Add to logs
+        state.recoveries.append(entry)
+        state._device_deque(state.device_recoveries, device_id, 50).append(entry)
+
         timestamp = now_cst()
-        state.logs.append({
-            'timestamp': timestamp,
-            'level': 'INFO',
-            'message': f"RECOVERY: Executing {len(actions)} action(s)"
-        })
-
+        msgs = [f"[{device_id}] RECOVERY: Executing {len(actions)} action(s)"]
         for action in actions:
-            status = 'OK' if action['status'] == 'success' else 'FAILED'
-            state.logs.append({
-                'timestamp': timestamp,
-                'level': 'INFO' if action['status'] == 'success' else 'ERROR',
-                'message': f"   [{status}] {action['action_name']}: {action.get('message', 'N/A')}"
-            })
+            status = 'OK' if action.get('status') == 'success' else action.get('status','?').upper()
+            msgs.append(f"[{device_id}]   [{status}] {action.get('action_name','?')}: {action.get('message','N/A')}")
 
-        # Clear alert after recovery
+        for msg in msgs:
+            lvl = 'INFO'
+            state.logs.append({'timestamp': timestamp, 'level': lvl, 'message': msg})
+            state._device_deque(state.device_logs, device_id, 100).append(
+                {'timestamp': timestamp, 'level': lvl, 'message': msg})
+
         state.alert_active = False
         state.current_alert = None
-
         self.logger.info(f"Recovery actions executed: {len(actions)}")
 
     def _init_agents(self):
@@ -738,6 +755,100 @@ def list_devices():
     try:
         mgr = _get_remote_manager()
         return jsonify(mgr.get_all_devices())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/device/<device_id>')
+def device_dashboard(device_id):
+    """Per-device full dashboard page."""
+    return render_template('device_dashboard.html', device_id=device_id)
+
+
+@app.route('/api/devices/<device_id>/history')
+def get_device_history(device_id):
+    """Return rolling chart history for a specific device."""
+    dh = state.device_history.get(device_id)
+    if not dh:
+        return jsonify({'cpu': [], 'memory': [], 'disk': [], 'net': [], 'timestamps': []})
+    return jsonify({k: list(v) for k, v in dh.items()})
+
+
+@app.route('/api/devices/<device_id>/anomalies')
+def get_device_anomalies(device_id):
+    return jsonify(list(state.device_anomalies.get(device_id, [])))
+
+
+@app.route('/api/devices/<device_id>/diagnoses')
+def get_device_diagnoses(device_id):
+    return jsonify(list(state.device_diagnoses.get(device_id, [])))
+
+
+@app.route('/api/devices/<device_id>/recoveries')
+def get_device_recoveries(device_id):
+    return jsonify(list(state.device_recoveries.get(device_id, [])))
+
+
+@app.route('/api/devices/<device_id>/logs')
+def get_device_logs(device_id):
+    return jsonify(list(state.device_logs.get(device_id, [])))
+
+
+@app.route('/api/devices/<device_id>/incidents')
+def get_device_incidents(device_id):
+    """Return incident timeline for a specific device from DB."""
+    if not dashboard and not external_agents:
+        return jsonify([])
+    try:
+        import json as _json
+        db = (dashboard.database if dashboard else
+              next(iter(external_agents.values())).database if external_agents else None)
+        if not db:
+            return jsonify([])
+        rows = db.get_recent_incidents(limit=20, device_id=device_id)
+        result = []
+        for row in rows:
+            try:
+                actions = _json.loads(row.get('recovery_actions') or '[]')
+            except Exception:
+                actions = []
+            if any(a.get('status') == 'success' for a in actions):
+                status = 'resolved'
+            elif any(a.get('status') == 'failed' for a in actions):
+                status = 'failed'
+            elif actions:
+                status = 'attempted'
+            else:
+                status = 'detected'
+            result.append({
+                'incident_id':  row['incident_id'][:8],
+                'timestamp':    row['timestamp'],
+                'anomaly_type': row['anomaly_type'],
+                'severity':     row['severity'],
+                'diagnosis':    row.get('diagnosis') or 'Pending',
+                'root_cause':   row.get('root_cause') or 'Unknown',
+                'actions':      actions,
+                'status':       status,
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify([])
+
+
+@app.route('/api/devices/<device_id>/queue_command', methods=['POST'])
+def queue_device_command(device_id):
+    """Queue a single recovery command for a remote device (from device dashboard UI)."""
+    import uuid as _uuid
+    try:
+        mgr    = _get_remote_manager()
+        data   = request.get_json(force=True) or {}
+        action = data.get('action')
+        if not action:
+            return jsonify({'error': 'action required'}), 400
+        cmd = {'action_id': str(_uuid.uuid4()), 'action': action,
+               'issued_at': datetime.now().isoformat()}
+        mgr.queue_command(device_id, cmd)
+        return jsonify({'status': 'queued', 'action': action})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
