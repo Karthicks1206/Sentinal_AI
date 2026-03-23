@@ -2028,6 +2028,7 @@
         }
 
         // ── Live Chart Setup ──────────────────────────────────────────
+        let _metricsChartIsolated = null;
         const chartCtx = document.getElementById('metricsChart').getContext('2d');
         const metricsChart = new Chart(chartCtx, {
             type: 'line',
@@ -2135,13 +2136,41 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 300 },
-                interaction: { mode: 'index', intersect: false },
+                interaction: { mode: 'nearest', intersect: true },
+                onClick: function(e, elements) {
+                    if (elements.length > 0) {
+                        const idx = elements[0].datasetIndex;
+                        if (_metricsChartIsolated === idx) {
+                            _metricsChartIsolated = null;
+                            metricsChart.data.datasets.forEach((_, i) =>
+                                metricsChart.setDatasetVisibility(i, true));
+                        } else {
+                            _metricsChartIsolated = idx;
+                            metricsChart.data.datasets.forEach((_, i) =>
+                                metricsChart.setDatasetVisibility(i, i === idx));
+                        }
+                        metricsChart.update('none');
+                    }
+                },
                 plugins: {
                     legend: {
                         labels: {
                             color: '#ccc',
                             font: { size: 12 },
                             filter: item => !item.text.includes('Threshold')
+                        },
+                        onClick: function(e, legendItem) {
+                            const idx = legendItem.datasetIndex;
+                            if (_metricsChartIsolated === idx) {
+                                _metricsChartIsolated = null;
+                                metricsChart.data.datasets.forEach((_, i) =>
+                                    metricsChart.setDatasetVisibility(i, true));
+                            } else {
+                                _metricsChartIsolated = idx;
+                                metricsChart.data.datasets.forEach((_, i) =>
+                                    metricsChart.setDatasetVisibility(i, i === idx));
+                            }
+                            metricsChart.update('none');
                         }
                     },
                     tooltip: {

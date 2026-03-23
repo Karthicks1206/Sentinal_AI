@@ -79,6 +79,7 @@ class RemoteDeviceManager:
         self._lock     = threading.RLock()
         self._running  = False
         self._monitor_thread: Optional[threading.Thread] = None
+        self._command_queues: Dict[str, list] = {}  # device_id → pending commands
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -161,6 +162,25 @@ class RemoteDeviceManager:
     def device_count(self) -> int:
         with self._lock:
             return len(self._devices)
+
+    def is_remote(self, device_id: str) -> bool:
+        """Return True if this device_id belongs to a registered remote device."""
+        with self._lock:
+            return device_id in self._devices
+
+    def queue_command(self, device_id: str, command: dict) -> bool:
+        """Queue a recovery command to be picked up by the remote client."""
+        with self._lock:
+            if device_id not in self._command_queues:
+                self._command_queues[device_id] = []
+            self._command_queues[device_id].append(command)
+            self.logger.info(f"Queued remote command '{command.get('action')}' for {device_id}")
+            return True
+
+    def pop_commands(self, device_id: str) -> list:
+        """Return and clear all pending commands for a device."""
+        with self._lock:
+            return self._command_queues.pop(device_id, [])
 
     # ── Background monitor ────────────────────────────────────────────────
 

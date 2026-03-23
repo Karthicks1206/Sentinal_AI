@@ -173,11 +173,13 @@ class RecoveryAgent(BaseAgent):
     Uses graduated escalation and outcome verification for intelligent healing.
     """
 
-    def __init__(self, name: str, config, event_bus, logger, database=None):
+    def __init__(self, name: str, config, event_bus, logger, database=None,
+                 remote_device_manager=None):
         super().__init__(name, config, event_bus, logger)
 
-        self.database    = database
-        self.device_id   = config.device_id
+        self.database               = database
+        self.device_id              = config.device_id
+        self.remote_device_manager  = remote_device_manager
 
         self.recovery_config  = config.get_section('recovery')
         self.actions_config   = self.recovery_config.get('actions', {})
@@ -312,6 +314,13 @@ class RecoveryAgent(BaseAgent):
         anomaly: Dict = None,
         escalation_level: int = 1,
     ) -> List[Dict]:
+        # Route to remote command queue if device is not local
+        is_remote = (
+            self.remote_device_manager is not None
+            and device_id is not None
+            and self.remote_device_manager.is_remote(device_id)
+        )
+
         results = []
         for action_name in actions:
             if not self.actions_config.get(action_name, {}).get('enabled', True):
@@ -327,7 +336,22 @@ class RecoveryAgent(BaseAgent):
                 })
                 continue
 
-            result = self._execute_with_retry(action_name, diagnosis, anomaly=anomaly)
+            if is_remote:
+                # Queue command for the remote client to execute
+                cmd = {
+                    'action_id':  str(uuid.uuid4()),
+                    'action':     action_name,
+                    'issued_at':  datetime.utcnow().isoformat(),
+                }
+                self.remote_device_manager.queue_command(device_id, cmd)
+                result = {
+                    'action_id':   cmd['action_id'],
+                    'action_name': action_name,
+                    'status':      'queued_remote',
+                    'message':     f"Command queued for remote device {device_id}",
+                }
+            else:
+                result = self._execute_with_retry(action_name, diagnosis, anomaly=anomaly)
             results.append(result)
 
             if self.database:

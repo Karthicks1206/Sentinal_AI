@@ -218,6 +218,135 @@ def _post(url: str, payload: dict, timeout: int = 8) -> int:
         return -1
 
 
+def _get_json(url, timeout=5):
+    """GET JSON from url; return parsed dict or None on error."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Remote recovery executor
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CRITICAL_PROCS = {
+    'system', 'svchost', 'lsass', 'csrss', 'wininit', 'services',
+    'winlogon', 'explorer', 'python', 'python3', 'sentinel_client',
+    'systemd', 'init', 'launchd',
+}
+
+
+def _exec_remote_command(action):
+    """Execute a recovery action locally on this machine. Returns a result dict."""
+    try:
+        import os as _os
+        import psutil
+
+        def _safe_kill(proc):
+            name = proc.name().lower().replace('.exe', '')
+            if name in _CRITICAL_PROCS:
+                return False, "protected process: {}".format(name)
+            try:
+                proc.kill()
+                return True, "killed {} (pid {})".format(proc.name(), proc.pid)
+            except Exception as e:
+                return False, str(e)
+
+        if action == 'kill_top_cpu_process':
+            for p in psutil.process_iter(['pid', 'name', 'cpu_percent']):
+                pass
+            time.sleep(0.5)
+            procs = sorted(
+                psutil.process_iter(['pid', 'name', 'cpu_percent']),
+                key=lambda p: p.info.get('cpu_percent') or 0, reverse=True
+            )
+            for proc in procs:
+                ok, msg = _safe_kill(proc)
+                if ok:
+                    return {'status': 'success', 'message': msg}
+            return {'status': 'skipped', 'message': 'no killable high-CPU process found'}
+
+        elif action == 'kill_top_memory_process':
+            procs = sorted(
+                psutil.process_iter(['pid', 'name', 'memory_percent']),
+                key=lambda p: p.info.get('memory_percent') or 0, reverse=True
+            )
+            for proc in procs:
+                ok, msg = _safe_kill(proc)
+                if ok:
+                    return {'status': 'success', 'message': msg}
+            return {'status': 'skipped', 'message': 'no killable high-memory process found'}
+
+        elif action in ('compact_memory', 'clear_cache'):
+            if platform.system() == 'Windows':
+                import ctypes
+                freed = 0
+                for proc in psutil.process_iter(['pid']):
+                    try:
+                        handle = ctypes.windll.kernel32.OpenProcess(0x1F0FFF, False, proc.pid)
+                        if handle:
+                            ctypes.windll.psapi.EmptyWorkingSet(handle)
+                            ctypes.windll.kernel32.CloseHandle(handle)
+                            freed += 1
+                    except Exception:
+                        pass
+                return {'status': 'success',
+                        'message': 'EmptyWorkingSet on {} processes'.format(freed)}
+            else:
+                _os.system('sync')
+                return {'status': 'success', 'message': 'sync called'}
+
+        elif action in ('emergency_disk_cleanup', 'rotate_logs'):
+            import tempfile, glob as _glob
+            removed = 0
+            tmp_dirs = [tempfile.gettempdir()]
+            if platform.system() == 'Windows':
+                tmp_dirs.append(_os.path.expandvars(r'%LOCALAPPDATA%\Temp'))
+            for tmp in tmp_dirs:
+                for f in (_glob.glob(_os.path.join(tmp, '*.tmp')) +
+                          _glob.glob(_os.path.join(tmp, '*.log'))):
+                    try:
+                        _os.remove(f)
+                        removed += 1
+                    except Exception:
+                        pass
+            return {'status': 'success',
+                    'message': 'removed {} temp/log files'.format(removed)}
+
+        else:
+            return {'status': 'skipped',
+                    'message': "action '{}' not supported on remote client".format(action)}
+
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+
+
+def poll_and_execute_commands(hub_url, device_id):
+    """Fetch pending recovery commands from hub and execute them."""
+    data = _get_json("{}/api/devices/{}/commands".format(hub_url, device_id))
+    if not data:
+        return
+    commands = data.get('commands', [])
+    if not commands:
+        return
+
+    results = []
+    for cmd in commands:
+        action    = cmd.get('action', '')
+        action_id = cmd.get('action_id', '')
+        print("  [RECOVERY] remote action: {}".format(action), flush=True)
+        result = _exec_remote_command(action)
+        result['action_id'] = action_id
+        result['action']    = action
+        print("  [RECOVERY] {} — {}".format(result['status'], result['message']), flush=True)
+        results.append(result)
+
+    _post("{}/api/devices/{}/command_results".format(hub_url, device_id),
+          {'device_id': device_id, 'results': results})
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Metric collection (psutil only — no extra dependencies)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -458,6 +587,7 @@ def main():
                 mem   = metrics['memory']['memory_percent']
                 dsk   = metrics['disk']['disk_percent']
                 print("  {:<10} {:<10.1f} {:<10.1f} {:<10.1f}".format(ts, cpu, mem, dsk), flush=True)
+                poll_and_execute_commands(hub_url, device_id)
             else:
                 errors += 1
                 reason = _last_error or "HTTP {}".format(status)

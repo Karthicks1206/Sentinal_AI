@@ -742,6 +742,29 @@ def list_devices():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/devices/<device_id>/commands')
+def get_device_commands(device_id):
+    """Remote client polls this to pick up queued recovery commands."""
+    try:
+        mgr   = _get_remote_manager()
+        cmds  = mgr.pop_commands(device_id)
+        return jsonify({'commands': cmds})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/devices/<device_id>/command_results', methods=['POST'])
+def post_command_results(device_id):
+    """Remote client posts execution results back to the hub."""
+    try:
+        data = request.get_json(force=True) or {}
+        results = data.get('results', [])
+        app.logger.info(f"Remote recovery results from {device_id}: {results}")
+        return jsonify({'status': 'ok', 'received': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/devices/<device_id>/metrics')
 def get_device_metrics(device_id):
     """Return the latest metrics snapshot for a specific remote device."""

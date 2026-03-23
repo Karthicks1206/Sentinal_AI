@@ -138,7 +138,8 @@ class SentinelAI:
                     config=self.config,
                     event_bus=self.event_bus,
                     logger=get_logger('RecoveryAgent'),
-                    database=self.database
+                    database=self.database,
+                    remote_device_manager=self.remote_device_manager,
                 )
                 self.logger.info("✓ Recovery Agent initialized")
 
