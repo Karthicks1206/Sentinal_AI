@@ -1,5 +1,5 @@
 ================================================================================
-  SENTINEL AI — MULTI-DEVICE MONITORING  (Zero-Config)
+  SENTINEL AI — MULTI-DEVICE MONITORING  (v1.2 — Zero-Config)
 ================================================================================
 
 OVERVIEW
@@ -62,9 +62,10 @@ ON EACH REMOTE MACHINE:
   1. Copy sentinel_client.py to the remote machine (USB, AirDrop, scp, etc.)
 
        macOS/Linux easy copy:
-         scp /Users/karthi/Desktop/Sentinal_AI/sentinel_ai/sentinel_client.py  user@remote:~/
+         scp sentinel_ai/sentinel_client.py  user@remote:~/
 
-       Or just copy the file manually — it's a single standalone Python file.
+       Windows: copy the file via USB, shared folder, or email attachment.
+       It's a single standalone Python file — no installer needed.
 
   2. Install the one dependency:
        pip install psutil
@@ -74,10 +75,11 @@ ON EACH REMOTE MACHINE:
 
   You'll see:
     ========================================================
-      Sentinel AI Remote Client
+      Sentinel AI Remote Client  v1.2
     ========================================================
       Device   : macbook-pro
       Platform : Darwin 23.4.0
+      Python   : 3.11.2
       Interval : 5s
     ========================================================
 
@@ -89,8 +91,10 @@ ON EACH REMOTE MACHINE:
 
     Streaming metrics to hub.  Press Ctrl+C to stop.
 
-    [14:32:01] CPU=12.5%  MEM=68.3%  DISK=45.1%
-    [14:32:06] CPU=14.1%  MEM=68.4%  DISK=45.1%
+      TIME       CPU %    MEM %   DISK %
+    ──────────────────────────────────────
+    [14:32:01]   12.5     68.3    45.1
+    [14:32:06]   14.1     68.4    45.1
 
 --------------------------------------------------------------------------------
 OPTIONAL ARGUMENTS
@@ -105,8 +109,31 @@ OPTIONAL ARGUMENTS
   Override hub URL manually (if auto-discovery fails on different subnet):
     python sentinel_client.py --hub http://192.168.1.100:5001
 
+  Run connection diagnostics before streaming:
+    python sentinel_client.py --hub http://192.168.1.100:5001 --test
+
   All together:
     python sentinel_client.py --device raspberry-pi-1 --interval 5
+
+--------------------------------------------------------------------------------
+DIAGNOSING CONNECTION PROBLEMS  (--test flag — new in v1.2)
+--------------------------------------------------------------------------------
+
+  If the client fails to connect, run with --test to get a specific diagnosis:
+
+    python sentinel_client.py --hub http://192.168.1.100:5001 --test
+
+  This performs 3 checks and tells you exactly where it fails:
+
+    Step 1 — DNS/IP resolve .............. PASS  (192.168.1.100 resolves)
+    Step 2 — TCP connect port 5001 ....... FAIL  ← problem is HERE
+
+    Possible causes:
+      • Sentinel AI (main.py) is not running on that machine
+      • A firewall is blocking port 5001
+      • Router AP isolation is blocking device-to-device traffic (see below)
+
+  Printed error messages show the real reason, not just "HTTP -1".
 
 --------------------------------------------------------------------------------
 VIEW CONNECTED DEVICES (dashboard API)
@@ -148,5 +175,77 @@ IF AUTO-DISCOVERY DOESN'T WORK
   To open UDP port 47474 on the hub (if blocked by firewall):
     macOS:  usually open by default
     Linux:  sudo ufw allow 47474/udp
+
+--------------------------------------------------------------------------------
+WINDOWS TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM: Client starts but cannot reach the hub ("hub not ready" / HTTP -1)
+  ──────────────────────────────────────────────────────────────────────────────
+
+  1. Run the --test flag first to identify the exact failure:
+       python sentinel_client.py --hub http://<HUB_IP>:5001 --test
+
+  2. AP Isolation (most common cause on WiFi)
+     Many home and office routers block direct device-to-device traffic.
+     This is called "AP Isolation" or "Client Isolation."
+
+     Fix: Log into your router admin page and disable AP Isolation / Client
+     Isolation.  It is usually under Wireless → Advanced Settings.
+
+     Alternative: Connect the Windows machine via Ethernet instead of WiFi.
+
+  3. Windows Firewall blocking outbound port 5001
+     Windows Firewall usually allows outbound — but check:
+       Control Panel → Windows Defender Firewall → Allow an app through
+     Or temporarily disable it to test:
+       netsh advfirewall set allprofiles state off
+
+  4. Hub machine firewall blocking port 5001
+     macOS: System Settings → Network → Firewall → Options
+            Make sure Python is set to "Allow incoming connections."
+     Linux: sudo ufw allow 5001/tcp
+
+  5. Wrong hub IP
+     Confirm the hub IP on the Mac:   ipconfig getifaddr en0
+     Confirm the Windows machine can ping it:   ping 192.168.1.x
+     If ping fails, it's a network/AP Isolation issue — not a Sentinel issue.
+
+  6. Python version
+     Sentinel client requires Python 3.7+.  Check: python --version
+     On Windows, "python" may point to Python 2.  Try: python3 --version
+
+  PROBLEM: No output at all / script exits immediately on Windows
+  ──────────────────────────────────────────────────────────────────────────────
+  This was a bug in v1.1 (Python < 3.10 can't parse str | None type hints).
+  Fixed in v1.2 with `from __future__ import annotations`.
+  Make sure you have the latest sentinel_client.py (v1.2+).
+
+--------------------------------------------------------------------------------
+RASPBERRY PI / LINUX SETUP
+--------------------------------------------------------------------------------
+
+  Same as macOS.  Use python3 instead of python if needed:
+
+    pip3 install psutil
+    python3 sentinel_client.py
+
+  To run as a background service (systemd):
+
+    [Unit]
+    Description=Sentinel AI Client
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/python3 /home/pi/sentinel_client.py --device raspberry-pi-1
+    Restart=always
+    RestartSec=10
+
+    [Install]
+    WantedBy=multi-user.target
+
+  Save to /etc/systemd/system/sentinel-client.service, then:
+    sudo systemctl enable sentinel-client
+    sudo systemctl start sentinel-client
 
 ================================================================================
