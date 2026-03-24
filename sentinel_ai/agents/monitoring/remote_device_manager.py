@@ -29,6 +29,8 @@ class RemoteDevice:
         self.last_metrics: dict = {}
         self.metric_count = 0
         self.status = 'connected'
+        self.cmd_port = info.get('cmd_port', 5002)
+        self.remote_addr = info.get('_remote_addr', '')
 
 
     def record_push(self, metrics: dict):
@@ -59,6 +61,8 @@ class RemoteDevice:
             'metric_count': self.metric_count,
             'status': self.status,
             'age_seconds': round(self.age_seconds, 1),
+            'cmd_port': self.cmd_port,
+            '_remote_addr': self.remote_addr,
         }
 
 

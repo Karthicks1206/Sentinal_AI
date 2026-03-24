@@ -27,9 +27,63 @@ import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _stress_stop = threading.Event()
 _stress_threads: list = []
+
+_hub_url_ref: list = ['']
+_device_id_ref: list = ['']
+
+
+def _make_command_handler():
+    class CommandHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != '/command':
+                self.send_response(404)
+                self.end_headers()
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body)
+                action = data.get('action', '')
+                action_id = data.get('action_id', '')
+                print(' [CMD] direct: {}'.format(action), flush=True)
+                result = _exec_remote_command(action)
+                result['action_id'] = action_id
+                result['action'] = action
+                hub = _hub_url_ref[0]
+                dev = _device_id_ref[0]
+                if hub and dev:
+                    _post('{}/api/devices/{}/command_results'.format(hub, dev),
+                          {'device_id': dev, 'results': [result]})
+                resp = json.dumps(result).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(resp)))
+                self.end_headers()
+                self.wfile.write(resp)
+            except Exception as exc:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(str(exc).encode())
+
+        def log_message(self, *args):
+            pass
+
+    return CommandHandler
+
+
+def _start_command_server(port: int):
+    try:
+        server = HTTPServer(('0.0.0.0', port), _make_command_handler())
+        t = threading.Thread(target=server.serve_forever, daemon=True, name='sentinel_cmd_server')
+        t.start()
+        return True
+    except Exception as exc:
+        print(' [WARN] Could not start command server on port {}: {}'.format(port, exc), flush=True)
+        return False
 
 try:
     import psutil
@@ -518,10 +572,15 @@ def main():
         '--test', action='store_true',
         help='Run connectivity diagnostics and exit',
     )
+    parser.add_argument(
+        '--cmd-port', type=int, default=5002,
+        help='Port for the direct command server on this device (default: 5002)',
+    )
     args = parser.parse_args()
 
     device_id = args.device or socket.gethostname()
     interval = max(1, args.interval)
+    cmd_port = args.cmd_port
 
     print("=" * 60)
     print(" Sentinel AI Remote Client v{}".format(VERSION))
@@ -576,6 +635,7 @@ def main():
         'platform': platform.system(),
         'version': platform.version(),
         'python': platform.python_version(),
+        'cmd_port': cmd_port,
     }
 
     attempts = 0
@@ -599,6 +659,12 @@ def main():
             print(" Continuing to retry every 5s. Press Ctrl+C to stop.")
 
         time.sleep(5)
+
+    _hub_url_ref[0] = hub_url
+    _device_id_ref[0] = device_id
+
+    _start_command_server(cmd_port)
+    print(' Command server : port {}'.format(cmd_port), flush=True)
 
     cmd_thread = threading.Thread(
         target=_command_poll_loop, args=(hub_url, device_id),

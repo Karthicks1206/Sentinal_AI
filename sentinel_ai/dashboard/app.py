@@ -683,6 +683,7 @@ def register_device():
         if not device_id:
             return jsonify({'error': 'device_id required'}), 400
         mgr = _get_remote_manager()
+        data['_remote_addr'] = request.remote_addr
         mgr.register(device_id, data)
         ts = now_cst()
         state.logs.append({
@@ -801,8 +802,10 @@ def get_device_incidents(device_id):
 
 @app.route('/api/devices/<device_id>/queue_command', methods=['POST'])
 def queue_device_command(device_id):
-    """Queue a single recovery command for a remote device (from device dashboard UI)."""
+    """Send a command to a remote device — direct push first, queue fallback."""
     import uuid as _uuid
+    import urllib.request as _ur
+    import urllib.error as _ue
     try:
         mgr = _get_remote_manager()
         data = request.get_json(force=True) or {}
@@ -811,8 +814,27 @@ def queue_device_command(device_id):
             return jsonify({'error': 'action required'}), 400
         cmd = {'action_id': str(_uuid.uuid4()), 'action': action,
                'issued_at': datetime.now().isoformat()}
+
+        device = mgr.get_device(device_id)
+        cmd_port = (device or {}).get('cmd_port', 5002)
+        client_ip = (device or {}).get('_remote_addr')
+
+        if client_ip and cmd_port:
+            try:
+                payload = json.dumps(cmd).encode()
+                req = _ur.Request(
+                    'http://{}:{}/command'.format(client_ip, cmd_port),
+                    data=payload,
+                    headers={'Content-Type': 'application/json'},
+                )
+                with _ur.urlopen(req, timeout=1) as resp:
+                    resp.read()
+                return jsonify({'status': 'sent', 'action': action, 'method': 'direct'})
+            except Exception:
+                pass
+
         mgr.queue_command(device_id, cmd)
-        return jsonify({'status': 'queued', 'action': action})
+        return jsonify({'status': 'queued', 'action': action, 'method': 'queue'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
