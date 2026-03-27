@@ -3306,7 +3306,7 @@
             }
             list.innerHTML = devices.map(d => {
                 const active = d.device_id === selectedDistDevice;
-                const statusDot = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+                const statusDot = (d.status === 'connected' || d.status === 'online') ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
                 const cpu = d.metrics?.cpu?.cpu_percent ?? 0;
                 const mem = d.metrics?.memory?.memory_percent ?? 0;
                 const disk = d.metrics?.disk?.disk_percent ?? 0;
@@ -3327,15 +3327,16 @@
 
         function selectDistDevice(deviceId, devices) {
             selectedDistDevice = deviceId;
-            _initDistChart();
-
-            renderDistSidebar(devices);
 
             document.getElementById('distNoSelection').style.display = 'none';
             document.getElementById('distDeviceView').style.display = 'block';
 
+            _initDistChart();
+
+            renderDistSidebar(devices);
+
             const d = (devices || []).find(x => x.device_id === deviceId) || { device_id: deviceId };
-            const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+            const statusColor = (d.status === 'connected' || d.status === 'online') ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
             const dot = document.getElementById('distDotIndicator');
             if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
             _setText('distDeviceName', d.device_id);
@@ -3402,7 +3403,7 @@
                 if (selectedDistDevice) {
                     const d = devices.find(x => x.device_id === selectedDistDevice);
                     if (d) {
-                        const statusColor = d.status === 'online' ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+                        const statusColor = (d.status === 'connected' || d.status === 'online') ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
                         const dot = document.getElementById('distDotIndicator');
                         if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
                         _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
