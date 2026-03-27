@@ -351,28 +351,37 @@ def _exec_remote_command(action):
                     'message': 'removed {} temp/log files'.format(removed)}
 
         elif action == 'stress_cpu':
+            import os as _os
             _stress_stop.clear()
+            cores = max(1, (_os.cpu_count() or 1) - 1)
             def _cpu_stress():
                 end = time.time() + 60
                 while time.time() < end and not _stress_stop.is_set():
-                    _ = sum(i * i for i in range(50000))
-            t = threading.Thread(target=_cpu_stress, daemon=True, name='sentinel_stress_cpu')
-            _stress_threads.append(t)
-            t.start()
-            return {'status': 'success', 'message': 'CPU stress running for 60s'}
+                    _ = sum(i * i for i in range(10000))
+            for i in range(cores):
+                t = threading.Thread(target=_cpu_stress, daemon=True,
+                                     name='sentinel_stress_cpu_{}'.format(i))
+                _stress_threads.append(t)
+                t.start()
+            return {'status': 'success', 'message': 'CPU stress running on {} threads for 60s'.format(cores)}
 
         elif action == 'stress_memory':
             _stress_stop.clear()
+            total_mb = psutil.virtual_memory().total // (1024 * 1024)
+            alloc_mb = max(512, int(total_mb * 0.30))
             def _mem_stress():
-                data = bytearray(250 * 1024 * 1024)
-                end = time.time() + 60
-                while time.time() < end and not _stress_stop.is_set():
-                    time.sleep(0.5)
-                del data
+                try:
+                    data = bytearray(alloc_mb * 1024 * 1024)
+                    end = time.time() + 60
+                    while time.time() < end and not _stress_stop.is_set():
+                        time.sleep(0.5)
+                    del data
+                except MemoryError:
+                    pass
             t = threading.Thread(target=_mem_stress, daemon=True, name='sentinel_stress_mem')
             _stress_threads.append(t)
             t.start()
-            return {'status': 'success', 'message': 'Memory stress running for 60s (250 MB held)'}
+            return {'status': 'success', 'message': 'Memory stress running for 60s ({} MB = 30% of RAM)'.format(alloc_mb)}
 
         elif action == 'stress_disk':
             import os as _os, tempfile
@@ -380,15 +389,19 @@ def _exec_remote_command(action):
             def _disk_stress():
                 fpath = _os.path.join(tempfile.gettempdir(), 'sentinel_disk_stress.tmp')
                 try:
-                    with open(fpath, 'wb') as fp:
-                        for _ in range(100):
-                            if _stress_stop.is_set():
-                                break
-                            fp.write(b'S' * 1024 * 1024)
-                            fp.flush()
-                    end = time.time() + 30
+                    end = time.time() + 60
                     while time.time() < end and not _stress_stop.is_set():
-                        time.sleep(0.5)
+                        with open(fpath, 'wb') as fp:
+                            for _ in range(200):
+                                if _stress_stop.is_set():
+                                    break
+                                fp.write(b'S' * 1024 * 1024)
+                                fp.flush()
+                        try:
+                            _os.remove(fpath)
+                        except Exception:
+                            pass
+                        time.sleep(1)
                 finally:
                     try:
                         _os.remove(fpath)
@@ -397,12 +410,77 @@ def _exec_remote_command(action):
             t = threading.Thread(target=_disk_stress, daemon=True, name='sentinel_stress_disk')
             _stress_threads.append(t)
             t.start()
-            return {'status': 'success', 'message': 'Disk stress running (100 MB write)'}
+            return {'status': 'success', 'message': 'Disk stress running (sustained 200 MB cycling writes)'}
 
         elif action == 'stop_stress':
             _stress_stop.set()
             alive = [t for t in _stress_threads if t.is_alive()]
             return {'status': 'success', 'message': 'Stress stop signal sent ({} threads)'.format(len(alive))}
+
+        elif action == 'demo_cpu':
+            _stress_stop.clear()
+            import os as _os
+            cores = max(2, (_os.cpu_count() or 2))
+            def _demo_cpu_worker():
+                end = time.time() + 90
+                while time.time() < end and not _stress_stop.is_set():
+                    _ = sum(i * i for i in range(10000))
+            for i in range(cores):
+                t = threading.Thread(target=_demo_cpu_worker, daemon=True,
+                                     name='sentinel_demo_cpu_{}'.format(i))
+                _stress_threads.append(t)
+                t.start()
+            return {'status': 'success',
+                    'message': 'Demo CPU pipeline: {} cores x 90s — watch Anomaly→Diagnosis→Recovery'.format(cores)}
+
+        elif action == 'demo_memory':
+            _stress_stop.clear()
+            total_mb = psutil.virtual_memory().total // (1024 * 1024)
+            alloc_mb = max(1024, int(total_mb * 0.40))
+            def _demo_mem_worker():
+                try:
+                    data = bytearray(alloc_mb * 1024 * 1024)
+                    end = time.time() + 90
+                    while time.time() < end and not _stress_stop.is_set():
+                        time.sleep(0.5)
+                    del data
+                except MemoryError:
+                    pass
+            t = threading.Thread(target=_demo_mem_worker, daemon=True, name='sentinel_demo_mem')
+            _stress_threads.append(t)
+            t.start()
+            return {'status': 'success',
+                    'message': 'Demo Memory pipeline: {} MB (40% RAM) x 90s — watch Anomaly→Diagnosis→Recovery'.format(alloc_mb)}
+
+        elif action == 'demo_full':
+            _stress_stop.clear()
+            import os as _os
+            cores = max(2, (_os.cpu_count() or 2))
+            total_mb = psutil.virtual_memory().total // (1024 * 1024)
+            alloc_mb = max(512, int(total_mb * 0.30))
+            def _demo_full_cpu():
+                end = time.time() + 90
+                while time.time() < end and not _stress_stop.is_set():
+                    _ = sum(i * i for i in range(10000))
+            def _demo_full_mem():
+                try:
+                    data = bytearray(alloc_mb * 1024 * 1024)
+                    end = time.time() + 90
+                    while time.time() < end and not _stress_stop.is_set():
+                        time.sleep(0.5)
+                    del data
+                except MemoryError:
+                    pass
+            for i in range(cores):
+                t = threading.Thread(target=_demo_full_cpu, daemon=True,
+                                     name='sentinel_demo_full_cpu_{}'.format(i))
+                _stress_threads.append(t)
+                t.start()
+            tm = threading.Thread(target=_demo_full_mem, daemon=True, name='sentinel_demo_full_mem')
+            _stress_threads.append(tm)
+            tm.start()
+            return {'status': 'success',
+                    'message': 'Demo Full pipeline: {} CPU cores + {} MB RAM x 90s — watch all 3 agents'.format(cores, alloc_mb)}
 
         else:
             return {'status': 'skipped',

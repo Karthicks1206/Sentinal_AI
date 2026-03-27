@@ -553,7 +553,16 @@ class TestRemoteStressCommands(unittest.TestCase):
     def test_stress_cpu_spawns_thread(self):
         self.sc._exec_remote_command('stress_cpu')
         alive_names = [t.name for t in self.sc._stress_threads if t.is_alive()]
-        self.assertIn('sentinel_stress_cpu', alive_names)
+        self.assertTrue(any('sentinel_stress_cpu' in n for n in alive_names))
+        self.sc._stress_stop.set()
+
+    def test_stress_cpu_spawns_multiple_threads(self):
+        import os
+        self.sc._exec_remote_command('stress_cpu')
+        cpu_threads = [t for t in self.sc._stress_threads
+                       if 'sentinel_stress_cpu' in t.name and t.is_alive()]
+        expected = max(1, (os.cpu_count() or 1) - 1)
+        self.assertEqual(len(cpu_threads), expected)
         self.sc._stress_stop.set()
 
     def test_stop_stress_sets_event(self):
@@ -564,7 +573,7 @@ class TestRemoteStressCommands(unittest.TestCase):
     def test_stress_cpu_thread_exits_after_stop(self):
         self.sc._exec_remote_command('stress_cpu')
         threads_before = [t for t in self.sc._stress_threads
-                          if t.name == 'sentinel_stress_cpu' and t.is_alive()]
+                          if 'sentinel_stress_cpu' in t.name and t.is_alive()]
         self.assertGreater(len(threads_before), 0)
         self.sc._exec_remote_command('stop_stress')
         for t in threads_before:
@@ -580,6 +589,14 @@ class TestRemoteStressCommands(unittest.TestCase):
         for t in mem_threads:
             t.join(timeout=2.0)
             self.assertFalse(t.is_alive())
+
+    def test_stress_memory_allocates_30_pct_of_ram(self):
+        import psutil
+        total_mb = psutil.virtual_memory().total // (1024 * 1024)
+        expected_mb = max(512, int(total_mb * 0.30))
+        result = self.sc._exec_remote_command('stress_memory')
+        self.assertIn(str(expected_mb), result['message'])
+        self.sc._stress_stop.set()
 
     def test_stress_disk_cleans_temp_file(self):
         import tempfile
@@ -600,6 +617,60 @@ class TestRemoteStressCommands(unittest.TestCase):
         self.assertEqual(r1['status'], 'success')
         self.assertEqual(r2['status'], 'success')
         self.sc._exec_remote_command('stop_stress')
+
+    def test_demo_cpu_returns_success(self):
+        result = self.sc._exec_remote_command('demo_cpu')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Demo CPU', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_demo_cpu_spawns_all_core_threads(self):
+        import os
+        self.sc._exec_remote_command('demo_cpu')
+        demo_threads = [t for t in self.sc._stress_threads
+                        if 'sentinel_demo_cpu' in t.name and t.is_alive()]
+        expected = max(2, os.cpu_count() or 2)
+        self.assertEqual(len(demo_threads), expected)
+        self.sc._stress_stop.set()
+
+    def test_demo_memory_returns_success(self):
+        result = self.sc._exec_remote_command('demo_memory')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Demo Memory', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_demo_memory_allocates_40_pct_of_ram(self):
+        import psutil
+        total_mb = psutil.virtual_memory().total // (1024 * 1024)
+        expected_mb = max(1024, int(total_mb * 0.40))
+        result = self.sc._exec_remote_command('demo_memory')
+        self.assertIn(str(expected_mb), result['message'])
+        self.sc._stress_stop.set()
+
+    def test_demo_full_returns_success(self):
+        result = self.sc._exec_remote_command('demo_full')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Demo Full', result['message'])
+        self.sc._stress_stop.set()
+
+    def test_demo_full_spawns_cpu_and_mem_threads(self):
+        self.sc._exec_remote_command('demo_full')
+        cpu_threads = [t for t in self.sc._stress_threads
+                       if 'sentinel_demo_full_cpu' in t.name and t.is_alive()]
+        mem_threads = [t for t in self.sc._stress_threads
+                       if t.name == 'sentinel_demo_full_mem' and t.is_alive()]
+        self.assertGreater(len(cpu_threads), 0)
+        self.assertEqual(len(mem_threads), 1)
+        self.sc._stress_stop.set()
+
+    def test_stop_stress_stops_demo_threads(self):
+        self.sc._exec_remote_command('demo_full')
+        demo_threads = [t for t in self.sc._stress_threads if t.is_alive()]
+        self.assertGreater(len(demo_threads), 0)
+        self.sc._exec_remote_command('stop_stress')
+        for t in demo_threads:
+            t.join(timeout=2.0)
+            self.assertFalse(t.is_alive())
 
 
 if __name__ == '__main__':

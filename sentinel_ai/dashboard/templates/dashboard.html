@@ -1933,7 +1933,10 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distCpuVal">0%</div>
-                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div><div id="distCpuThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
+                                <div style="position:relative;margin-top:8px;">
+                                    <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div></div>
+                                    <div id="distCpuThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
+                                </div>
                             </div>
                             <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
                                 <span>Top Process: <span id="distCpuProc">—</span></span>
@@ -1947,7 +1950,10 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distMemVal">0%</div>
-                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div><div id="distMemThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
+                                <div style="position:relative;margin-top:8px;">
+                                    <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div></div>
+                                    <div id="distMemThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
+                                </div>
                             </div>
                             <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
                                 <span>Available: <span id="distMemAvail">—</span></span>
@@ -1961,7 +1967,10 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distDiskVal">0%</div>
-                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div><div id="distDiskThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
+                                <div style="position:relative;margin-top:8px;">
+                                    <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div></div>
+                                    <div id="distDiskThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
+                                </div>
                             </div>
                             <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
                                 <span>Free: <span id="distDiskFree">—</span> &nbsp;|&nbsp; Total: <span id="distDiskTotal">—</span></span>
@@ -1997,11 +2006,20 @@
                         </div>
                         <div class="card">
                             <h2>Controlled Instability</h2>
-                            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                            <div style="font-size:0.7em;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Individual Stress</div>
+                            <div style="display:flex;flex-direction:column;gap:7px;">
                                 <button class="btn btn-warning" id="distBtnCpu" onclick="distStress(this,'stress_cpu')">CPU Spike</button>
                                 <button class="btn btn-warning" id="distBtnMem" onclick="distStress(this,'stress_memory')">Memory Pressure</button>
                                 <button class="btn btn-warning" id="distBtnDisk" onclick="distStress(this,'stress_disk')">Disk Fill</button>
-                                <button class="btn btn-danger" id="distBtnStop" onclick="distStress(this,'stop_stress')">Stop All</button>
+                            </div>
+                            <div style="font-size:0.7em;color:#888;margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.06em;">Agent Demo — triggers all 3 agents</div>
+                            <div style="display:flex;flex-direction:column;gap:7px;">
+                                <button class="btn" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;" id="distBtnDemoCpu" onclick="distStress(this,'demo_cpu')">Demo: CPU Pipeline</button>
+                                <button class="btn" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;" id="distBtnDemoMem" onclick="distStress(this,'demo_memory')">Demo: Memory Pipeline</button>
+                                <button class="btn" style="background:rgba(170,0,255,0.15);border:1px solid rgba(170,0,255,0.4);color:#aa00ff;" id="distBtnDemoFull" onclick="distStress(this,'demo_full')">Demo: Full Pipeline (CPU+Mem)</button>
+                            </div>
+                            <div style="display:flex;gap:7px;margin-top:7px;">
+                                <button class="btn btn-danger" id="distBtnStop" onclick="distStress(this,'stop_stress')" style="flex:1;">Stop All</button>
                             </div>
                             <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;min-height:16px;"></div>
                         </div>
