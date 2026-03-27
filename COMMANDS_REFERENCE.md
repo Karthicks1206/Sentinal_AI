@@ -1,586 +1,304 @@
-# 🎯 Sentinel AI - Command Reference
+# Sentinel AI — Commands Reference
 
-## 🚀 Quick Commands (Copy & Paste)
+## Hub: Start / Stop
 
-### **DEMO: See It Working (Recommended First)**
 ```bash
-# Terminal 1: Start dashboard
+# Full start (kills any existing instance first)
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+source venv/bin/activate
+brew services start ollama
+python main.py
+
+# One-liner (from project root)
+./run.sh
+
+# Background mode
+nohup python main.py > logs/nohup.out 2>&1 &
+
+# Stop hub
+pkill -f "python.*main.py"
+kill $(lsof -ti :5001)
+```
+
+---
+
+## Remote Client
+
+```bash
+# Auto-connect script (recommended — saves hub IP, installs deps, auto-reconnects)
+bash connect.sh
+
+# Manual connection
+pip install psutil requests
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device <name>
+
+# Custom interval (default 5s)
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device <name> --interval 3
+
+# Custom command port (default 5002)
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device <name> --cmd-port 5003
+
+# Connectivity diagnostics
+python sentinel_client.py --hub http://<HUB_IP>:5001 --test
+
+# Find hub IP (on hub machine, macOS)
+ipconfig getifaddr en0
+```
+
+---
+
+## API Endpoints
+
+```bash
+BASE=http://localhost:5001
+
+# System status + agent states
+curl $BASE/api/status | python3 -m json.tool
+
+# Current local metrics
+curl $BASE/api/metrics | python3 -m json.tool
+
+# Adaptive thresholds (learned IQR bounds)
+curl $BASE/api/thresholds | python3 -m json.tool
+
+# Recent incidents
+curl $BASE/api/incidents | python3 -m json.tool
+
+# Recent logs
+curl $BASE/api/logs | python3 -m json.tool
+
+# Connected remote devices
+curl $BASE/api/devices | python3 -m json.tool
+
+# Specific device info
+curl $BASE/api/devices/<device_id> | python3 -m json.tool
+
+# Specific device metrics
+curl $BASE/api/devices/<device_id>/metrics | python3 -m json.tool
+
+# Device anomaly feed (filtered)
+curl "$BASE/api/anomalies?device_id=<device_id>" | python3 -m json.tool
+```
+
+---
+
+## Simulation (API)
+
+```bash
+BASE=http://localhost:5001
+
+# Trigger CPU spike (95%, 60s)
+curl -X POST $BASE/api/simulate/start/cpu_overload
+
+# Trigger memory pressure (~250 MB, 60s)
+curl -X POST $BASE/api/simulate/start/memory_spike
+
+# Trigger disk fill (writes 200 MB temp file)
+curl -X POST $BASE/api/simulate/start/disk_fill
+
+# Trigger power sag (-0.75V for 60s)
+curl -X POST $BASE/api/simulate/start/power_sag
+
+# Stop all simulations
+curl -X POST $BASE/api/simulate/stop
+
+# Check simulation status
+curl $BASE/api/simulate/status | python3 -m json.tool
+```
+
+---
+
+## Remote Commands (API)
+
+Send a command directly to a connected remote device:
+
+```bash
+# Stress CPU on remote device
+curl -X POST http://localhost:5001/api/devices/<device_id>/queue_command \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "stress_cpu"}'
+
+# Stress memory
+curl -X POST http://localhost:5001/api/devices/<device_id>/queue_command \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "stress_memory"}'
+
+# Stress disk
+curl -X POST http://localhost:5001/api/devices/<device_id>/queue_command \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "stress_disk"}'
+
+# Stop all stress on remote device
+curl -X POST http://localhost:5001/api/devices/<device_id>/queue_command \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "stop_stress"}'
+```
+
+---
+
+## Unit Tests
+
+```bash
 cd sentinel_ai
-./start_dashboard.sh
+source venv/bin/activate
 
-# Terminal 2: Open browser → http://localhost:5000
+# Run all 52 tests
+python -m pytest tests/test_unit.py -v
 
-# Terminal 3: Run demo
-cd sentinel_ai
-./run_demo.sh
+# Run specific test class
+python -m pytest tests/test_unit.py::TestRemoteDeviceManager -v
+python -m pytest tests/test_unit.py::TestEscalationTracker -v
+python -m pytest tests/test_unit.py::TestRemoteStressCommands -v
+
+# Run with output (no capture)
+python -m pytest tests/test_unit.py -v -s
 ```
 
 ---
 
-## 📺 Dashboard Commands
+## Database
 
-### Start Dashboard
 ```bash
-./start_dashboard.sh
-# Opens at: http://localhost:5000
-```
+DB=sentinel_ai/data/sentinel.db
 
-### Custom Port
-```bash
-python3 dashboard/app.py --port 8080
-```
+# View recent incidents
+sqlite3 $DB "SELECT id, device_id, metric_name, severity, timestamp FROM incidents ORDER BY timestamp DESC LIMIT 10;"
 
-### Remote Access (from other devices)
-```bash
-python3 -c "from dashboard.app import run_dashboard; run_dashboard(host='0.0.0.0', port=5000)"
-# Access from: http://[YOUR_IP]:5000
-```
+# Anomaly counts by metric
+sqlite3 $DB "SELECT metric_name, COUNT(*) as count FROM anomalies GROUP BY metric_name ORDER BY count DESC;"
 
----
+# Recovery action outcomes
+sqlite3 $DB "SELECT action_type, status, COUNT(*) as count FROM recovery_actions GROUP BY action_type, status;"
 
-## 🧪 Testing Commands
+# Summary stats
+sqlite3 $DB "SELECT (SELECT COUNT(*) FROM incidents) incidents, (SELECT COUNT(*) FROM anomalies) anomalies, (SELECT COUNT(*) FROM recovery_actions) recoveries;"
 
-### Automated Test Suite
-```bash
-python3 test_workflow.py
-# Runs 6 comprehensive tests (~3 minutes)
-```
+# Export incidents to CSV
+sqlite3 $DB -header -csv "SELECT * FROM incidents;" > incidents.csv
 
-### Real-Time Monitor (CLI)
-```bash
-python3 monitor_realtime.py
-# Terminal-based live monitoring
-```
+# Clean old records (keep 30 days)
+sqlite3 $DB "DELETE FROM anomalies WHERE timestamp < datetime('now', '-30 days'); VACUUM;"
 
-### Complete Workflow Demo
-```bash
-python3 demo_complete_workflow.py
-# Shows detect → diagnose → auto-fix
+# Backup
+cp $DB data/sentinel_backup_$(date +%Y%m%d).db
 ```
 
 ---
 
-## 🔥 Trigger Anomalies
+## Logs
 
-### CPU Overload
 ```bash
-# Default: 60 seconds
-python3 trigger_anomaly.py cpu
+# View recent logs
+tail -50 sentinel_ai/logs/sentinel.log
 
-# Custom duration: 30 seconds
-python3 trigger_anomaly.py cpu --duration 30
+# Follow live
+tail -f sentinel_ai/logs/sentinel.log
 
-# Custom intensity: 8 threads
-python3 trigger_anomaly.py cpu --intensity 8
-```
+# Parse JSON logs (requires jq)
+tail -50 sentinel_ai/logs/sentinel.log | jq '.'
 
-### Memory Spike
-```bash
-# Default: 30% of available memory for 60s
-python3 trigger_anomaly.py memory
-
-# Custom: 50% for 45 seconds
-python3 trigger_anomaly.py memory --percent 50 --duration 45
-```
-
-### Combo (CPU + Memory)
-```bash
-# Both at once
-python3 trigger_anomaly.py combo
-
-# Custom duration: 30s
-python3 trigger_anomaly.py combo --duration 30
-```
-
----
-
-## 💾 Database Commands
-
-### View Incidents
-```bash
-sqlite3 data/sentinel.db "SELECT * FROM incidents ORDER BY timestamp DESC LIMIT 5;"
-```
-
-### View Anomalies
-```bash
-sqlite3 data/sentinel.db "SELECT metric_name, anomaly_type, severity, COUNT(*) as count FROM anomalies GROUP BY metric_name, anomaly_type, severity;"
-```
-
-### View Recovery Actions
-```bash
-sqlite3 data/sentinel.db "SELECT action_type, status, COUNT(*) as count FROM recovery_actions GROUP BY action_type, status;"
-```
-
-### Count Statistics
-```bash
-sqlite3 data/sentinel.db "
-SELECT
-  (SELECT COUNT(*) FROM incidents) as total_incidents,
-  (SELECT COUNT(*) FROM anomalies) as total_anomalies,
-  (SELECT COUNT(*) FROM recovery_actions) as total_recoveries;
-"
-```
-
-### Export to CSV
-```bash
-sqlite3 data/sentinel.db -header -csv "SELECT * FROM incidents;" > incidents.csv
-```
-
-### Interactive Mode
-```bash
-sqlite3 data/sentinel.db
-# Then run SQL queries interactively
-# Exit with: .quit
-```
-
----
-
-## 📋 Log Commands
-
-### View Recent Logs
-```bash
-tail -50 logs/sentinel.log
-```
-
-### Follow Logs (Real-Time)
-```bash
-tail -f logs/sentinel.log
-```
-
-### Parse JSON Logs
-```bash
-tail -50 logs/sentinel.log | jq '.'
-```
-
-### Filter by Level
-```bash
 # Errors only
-tail -100 logs/sentinel.log | jq 'select(.level=="ERROR")'
+tail -200 sentinel_ai/logs/sentinel.log | jq 'select(.level=="ERROR")'
 
-# Warnings and errors
-tail -100 logs/sentinel.log | jq 'select(.level=="WARNING" or .level=="ERROR")'
-```
-
-### Search Logs
-```bash
-# Search for "anomaly"
-grep -i "anomaly" logs/sentinel.log | jq '.'
-
-# Search for specific metric
-grep "cpu_percent" logs/sentinel.log | jq '.'
-```
-
-### View Last N Lines with Timestamps
-```bash
-tail -20 logs/sentinel.log | jq '{timestamp: .timestamp, level: .level, message: .message}'
+# Filter by keyword
+grep "anomaly" sentinel_ai/logs/sentinel.log | tail -20
 ```
 
 ---
 
-## 🎛️ Configuration Commands
+## Configuration
 
-### View Current Config
 ```bash
-cat config/config.yaml
-```
+# View config
+cat sentinel_ai/config/config.yaml
 
-### Edit Config
-```bash
-nano config/config.yaml
-# or
-vim config/config.yaml
-```
+# Validate config loads correctly
+cd sentinel_ai && source venv/bin/activate
+python3 -c "from core.config import get_config; c=get_config(); print('OK —', c.get('device_id'))"
 
-### Validate Config (Python)
-```bash
-python3 -c "from core.config import get_config; c=get_config(); print('Config valid!'); print(f'Device: {c.device_id}')"
-```
-
-### Show Specific Setting
-```bash
+# Read a specific value
 python3 -c "from core.config import get_config; print(get_config().get('monitoring.collection_interval'))"
 ```
 
 ---
 
-## 🏭 Production Commands
+## Port Management
 
-### Run Main System
 ```bash
-python3 main.py
-```
+# Check what is on port 5001 (hub dashboard)
+lsof -i :5001
 
-### Run with Custom Config
-```bash
-python3 main.py --config config/config_demo.yaml
-```
+# Check what is on port 5002 (remote command server)
+lsof -i :5002
 
-### Run with Simulation
-```bash
-python3 main.py --simulate
-```
+# Kill process on port 5001
+kill $(lsof -ti :5001)
 
-### Background Mode (nohup)
-```bash
-nohup python3 main.py > logs/nohup.out 2>&1 &
-```
-
-### Check if Running
-```bash
-ps aux | grep "python3 main.py"
-```
-
-### Stop Background Process
-```bash
-pkill -f "python3 main.py"
+# Check if hub is running
+ps aux | grep "python.*main.py"
 ```
 
 ---
 
-## 🐳 Docker Commands
+## systemd (Linux Production)
 
-### Build Image
-```bash
-docker build -t sentinel-ai .
-```
-
-### Run Container
-```bash
-docker run -d --name sentinel \
-  -e DEVICE_ID=rpi-001 \
-  -e AWS_REGION=us-east-1 \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  -p 5000:5000 \
-  sentinel-ai
-```
-
-### Using Docker Compose
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-
-# Restart specific service
-docker-compose restart sentinel-ai
-```
-
-### Check Container Status
-```bash
-docker ps | grep sentinel
-```
-
-### View Container Logs
-```bash
-docker logs -f sentinel
-```
-
-### Execute Command in Container
-```bash
-docker exec -it sentinel bash
-```
-
----
-
-## 🔧 systemd Commands (Linux Service)
-
-### Install Service
 ```bash
 sudo cp deployment/systemd/sentinel-ai.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable sentinel-ai
-```
-
-### Start Service
-```bash
 sudo systemctl start sentinel-ai
-```
+sudo systemctl status sentinel-ai
 
-### Stop Service
-```bash
-sudo systemctl stop sentinel-ai
-```
+# View service logs
+sudo journalctl -u sentinel-ai -n 50
+sudo journalctl -u sentinel-ai -f
 
-### Restart Service
-```bash
+# Restart
 sudo systemctl restart sentinel-ai
 ```
 
-### Check Status
+---
+
+## Emergency
+
 ```bash
-sudo systemctl status sentinel-ai
-```
+# Kill everything sentinel-related
+pkill -9 -f "python.*main.py"
+pkill -9 -f "sentinel_client"
+kill $(lsof -ti :5001) 2>/dev/null
+kill $(lsof -ti :5002) 2>/dev/null
 
-### View Logs
-```bash
-# Recent logs
-sudo journalctl -u sentinel-ai -n 50
+# Remove stale DB journal (if DB locked)
+rm sentinel_ai/data/sentinel.db-journal 2>/dev/null
 
-# Follow logs
-sudo journalctl -u sentinel-ai -f
+# Clear all data and logs (destructive)
+rm -rf sentinel_ai/data/* sentinel_ai/logs/*
 
-# Logs since boot
-sudo journalctl -u sentinel-ai -b
-```
-
-### Disable Service
-```bash
-sudo systemctl disable sentinel-ai
+# Fresh restart
+./run.sh
 ```
 
 ---
 
-## 📊 Monitoring Commands
-
-### Check System Resources
-```bash
-# CPU and Memory
-htop
-
-# Or using top
-top
-
-# Disk usage
-df -h
-
-# Directory sizes
-du -sh data/ logs/
-```
-
-### Check Agent Status (via API)
-```bash
-curl http://localhost:5000/api/status | jq '.'
-```
-
-### Check Current Metrics (via API)
-```bash
-curl http://localhost:5000/api/metrics | jq '.'
-```
-
-### Check Recent Logs (via API)
-```bash
-curl http://localhost:5000/api/logs | jq '.'
-```
-
-### Check Statistics (via API)
-```bash
-curl http://localhost:5000/api/stats | jq '.'
-```
-
----
-
-## 🔄 Maintenance Commands
-
-### Clear Old Logs
-```bash
-# Keep last 7 days
-find logs/ -name "*.log" -mtime +7 -delete
-```
-
-### Backup Database
-```bash
-# Create backup
-cp data/sentinel.db data/sentinel_backup_$(date +%Y%m%d).db
-
-# Or use SQLite backup
-sqlite3 data/sentinel.db ".backup data/sentinel_backup.db"
-```
-
-### Cleanup Old Data
-```bash
-sqlite3 data/sentinel.db "
-DELETE FROM metrics_history WHERE timestamp < datetime('now', '-30 days');
-DELETE FROM anomalies WHERE timestamp < datetime('now', '-30 days');
-VACUUM;
-"
-```
-
-### Reset Database (CAUTION!)
-```bash
-rm data/sentinel.db
-# Will be recreated on next run
-```
-
-### Update Dependencies
-```bash
-pip install -r requirements.txt --upgrade
-```
-
----
-
-## 🧹 Cleanup Commands
-
-### Stop All Processes
-```bash
-pkill -f sentinel
-pkill -f dashboard
-```
-
-### Clear All Data (CAUTION!)
-```bash
-rm -rf data/*
-rm -rf logs/*
-```
-
-### Fresh Start
-```bash
-# Stop everything
-pkill -f sentinel
-
-# Clear data
-rm -rf data/* logs/*
-
-# Restart
-./start_dashboard.sh
-```
-
----
-
-## 🔍 Debugging Commands
-
-### Enable Debug Logging
-```bash
-export LOG_LEVEL=DEBUG
-python3 main.py
-```
-
-### Check Dependencies
-```bash
-pip list | grep -E "flask|psutil|pyyaml|boto3|scikit-learn"
-```
-
-### Test Individual Agent
-```bash
-python3 -c "
-from core.config import get_config
-from core.logging import setup_logging
-from core.event_bus import get_event_bus
-from agents.monitoring import MonitoringAgent
-
-config = get_config()
-setup_logging(config)
-event_bus = get_event_bus(config)
-
-agent = MonitoringAgent('Test', config, event_bus, None, None)
-agent.start()
-
-import time
-time.sleep(10)
-agent.stop()
-print('Test complete!')
-"
-```
-
-### Check Port Availability
-```bash
-# Check if port 5000 is in use
-lsof -i :5000
-
-# Or
-netstat -an | grep 5000
-```
-
----
-
-## 🎓 Quick Scenarios
-
-### Scenario: Fresh Installation
-```bash
-cd sentinel_ai
-pip install -r requirements.txt
-./quickstart.sh
-./start_dashboard.sh
-```
-
-### Scenario: Quick Test
-```bash
-python3 test_workflow.py
-```
-
-### Scenario: Demo for Stakeholders
-```bash
-# Terminal 1
-./start_dashboard.sh
-
-# Share screen showing browser at localhost:5000
-
-# Terminal 2
-./run_demo.sh
-```
-
-### Scenario: Production Deployment
-```bash
-sudo cp deployment/systemd/sentinel-ai.service /etc/systemd/system/
-sudo systemctl start sentinel-ai
-sudo journalctl -u sentinel-ai -f
-```
-
-### Scenario: Debugging Issue
-```bash
-export LOG_LEVEL=DEBUG
-python3 main.py 2>&1 | tee debug.log
-```
-
----
-
-## 📞 Emergency Commands
-
-### System Overloaded (Kill Everything)
-```bash
-pkill -9 -f python3
-pkill -9 -f sentinel
-```
-
-### Dashboard Won't Start
-```bash
-# Check port
-lsof -i :5000
-# Kill existing
-kill $(lsof -t -i:5000)
-# Restart
-./start_dashboard.sh
-```
-
-### Database Locked
-```bash
-# Close all connections
-pkill -f sentinel
-# Remove lock
-rm data/sentinel.db-journal 2>/dev/null
-# Restart
-python3 main.py
-```
-
----
-
-## 🎯 Most Used Commands (Quick Copy)
+## Most Used — Copy & Paste
 
 ```bash
-# Start dashboard
-./start_dashboard.sh
+# Start hub
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null; source venv/bin/activate && brew services start ollama && python main.py
 
-# Run demo
-./run_demo.sh
+# Run tests
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && source venv/bin/activate && python -m pytest tests/test_unit.py -v
 
-# Trigger CPU test
-python3 trigger_anomaly.py cpu
+# Check hub status
+curl http://localhost:5001/api/status | python3 -m json.tool
+
+# Trigger CPU spike
+curl -X POST http://localhost:5001/api/simulate/start/cpu_overload
+
+# Stop simulation
+curl -X POST http://localhost:5001/api/simulate/stop
 
 # View incidents
-sqlite3 data/sentinel.db "SELECT * FROM incidents LIMIT 5;"
-
-# Watch logs
-tail -f logs/sentinel.log | jq '.'
-
-# Check status (API)
-curl localhost:5000/api/status | jq '.'
+sqlite3 sentinel_ai/data/sentinel.db "SELECT device_id, metric_name, severity, timestamp FROM incidents ORDER BY timestamp DESC LIMIT 5;"
 ```
-
----
-
-**Save this file for quick reference!** 📌

@@ -1,77 +1,139 @@
-# ⚡ Sentinel AI - 2-Minute Quick Start
+# Sentinel AI — Quick Start
 
-## 🎯 See It Working in 2 Minutes!
+## Start the Hub (2 minutes)
 
-### **Terminal 1: Start Dashboard**
+### Step 1 — Start the system
+
 ```bash
-cd sentinel_ai
-./start_dashboard.sh
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+source venv/bin/activate
+brew services start ollama
+python main.py
 ```
 
-### **Terminal 2: Open Browser**
-```
-http://localhost:5000
-```
+Or from the project root:
 
-### **Terminal 3: Run Demo**
 ```bash
-cd sentinel_ai
-./run_demo.sh
+./run.sh
 ```
 
-## 📺 What You'll See
+### Step 2 — Open the dashboard
 
 ```
-[00s] ▸ Dashboard shows normal CPU (30-40%)
-
-[05s] ▸ CPU bar turns RED (95%+)
-
-[15s] ▸ 🚨 FULL-SCREEN ALERT appears
-       "ANOMALY DETECTED!"
-
-[20s] ▸ Alert shows diagnosis:
-       "High CPU caused by python3"
-       "Actions: kill_process"
-
-[27s] ▸ Logs show:
-       "🔧 RECOVERY: Executing..."
-       "✅ kill_process: success"
-
-[30s] ▸ CPU bar turns GREEN (back to normal)
-       ✅ System healed itself!
+http://localhost:5001
 ```
 
-## ✅ That's It!
-
-You just saw **autonomous self-healing** in action:
-- ✅ Detected problem automatically
-- ✅ Diagnosed root cause
-- ✅ Fixed itself without human help
-- ✅ All shown in real-time
+Wait ~3 minutes for the anomaly baseline to settle (warmup gate).
 
 ---
 
-## 📚 Want More?
+## Trigger a Test Anomaly
 
-**Complete Demo Guide:** `COMPLETE_DEMO.md`
-**Dashboard Guide:** `DASHBOARD_QUICKSTART.md`
-**Full Documentation:** `docs/README.md`
+Use the **Simulation Lab** tab in the dashboard:
+
+- Click **CPU Spike** to drive CPU to 95% for 60 seconds
+- Click **Memory Pressure** to hold 250 MB for 60 seconds
+- Click **Disk Fill** to write 100 MB temporarily
+- Click **Power Sag** to simulate a -0.75V voltage drop
+- Click **Stop All** to cancel any running simulation
+
+After ~10-15 seconds you will see:
+1. Metric card turns red (anomaly threshold breached)
+2. Toast notification appears top-right with severity color
+3. Diagnosis fires (rule-based + Groq AI)
+4. Recovery action executes automatically
+5. Incident appears in the Incidents tab
 
 ---
 
-## 🔄 Run Again
+## Connect a Remote Device
+
+### On the remote machine (macOS / Linux)
 
 ```bash
-# CPU stress
-python3 trigger_anomaly.py cpu
+# Copy sentinel_client.py and connect.sh to the remote machine, then:
+bash connect.sh
+```
 
-# Memory stress
-python3 trigger_anomaly.py memory
+The script will:
+1. Ask for (or remember) the hub IP
+2. Install `psutil` and `requests` automatically
+3. Test connectivity before connecting
+4. Auto-reconnect if disconnected
 
-# Both at once
-python3 trigger_anomaly.py combo
+### Manual connection
+
+```bash
+pip install psutil requests
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device <device-name>
+```
+
+### Find your hub IP (on the hub machine)
+
+```bash
+ipconfig getifaddr en0
+```
+
+### Test connectivity before connecting
+
+```bash
+python sentinel_client.py --hub http://<HUB_IP>:5001 --test
 ```
 
 ---
 
-**Built with ❤️ for autonomous systems**
+## View Remote Devices
+
+1. Open the dashboard at http://localhost:5001
+2. Click the **Distributed Devices** tab
+3. Click any device name in the left sidebar
+4. The full per-device panel opens: metrics, live chart, anomaly/diagnosis/recovery feeds, incident timeline
+5. Use **Controlled Instability** buttons to stress-test the remote device directly
+
+---
+
+## API Quick Reference
+
+```bash
+# Hub status
+curl http://localhost:5001/api/status | python3 -m json.tool
+
+# Current metrics (local device)
+curl http://localhost:5001/api/metrics | python3 -m json.tool
+
+# Connected remote devices
+curl http://localhost:5001/api/devices | python3 -m json.tool
+
+# Recent incidents
+curl http://localhost:5001/api/incidents | python3 -m json.tool
+
+# Adaptive thresholds (learned from live data)
+curl http://localhost:5001/api/thresholds | python3 -m json.tool
+```
+
+---
+
+## Troubleshooting
+
+**Port already in use:**
+```bash
+kill $(lsof -ti :5001)
+```
+
+**Remote client cannot connect:**
+- Check hub IP: `ipconfig getifaddr en0`
+- Use `--test` flag to diagnose
+- Disable AP/Client Isolation on your router if on WiFi
+
+**No anomalies firing:**
+- Wait 3 minutes for baseline warmup
+- CPU and memory need 2 consecutive high readings to trigger
+- Run a simulation from the Simulation Lab tab
+
+**Ollama not found:**
+```bash
+brew install ollama
+brew services start ollama
+ollama pull llama3.2:3b
+```

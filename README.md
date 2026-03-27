@@ -10,27 +10,47 @@
 
 ## What is Sentinel AI?
 
-Sentinel AI is an intelligent, distributed system that monitors IoT infrastructure in real-time, detects anomalies using adaptive statistical methods and machine learning, diagnoses root causes with AI assistance (Groq / Ollama), and autonomously executes recovery actions — all while learning and adapting from every incident.
-
-**Think of it as:** Your IoT infrastructure's immune system that detects problems, diagnoses causes, heals itself, and gets smarter over time.
+Sentinel AI is an intelligent distributed system that monitors IoT infrastructure in real-time, detects anomalies using adaptive statistical methods and machine learning, diagnoses root causes with AI assistance (Groq / Ollama), and autonomously executes recovery actions — all while learning and adapting from every incident.
 
 ---
 
-## Quick Start
+## Quick Start (Hub Machine)
 
 ```bash
-cd sentinel_ai
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
 source venv/bin/activate
-brew services start ollama          # start local AI (macOS)
+brew services start ollama
 python main.py
 ```
 
 Dashboard: **http://localhost:5001**
 
-Or use the one-liner:
+Or use the single script at the project root:
+
 ```bash
-cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null; source venv/bin/activate && brew services start ollama && python main.py
+./run.sh
 ```
+
+---
+
+## Connect a Remote Device
+
+On any machine on the same network:
+
+```bash
+# Auto-connect script (recommended)
+bash connect.sh
+
+# Or manually
+pip install psutil requests
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device <name>
+
+# Run connectivity diagnostics
+python sentinel_client.py --hub http://<HUB_IP>:5001 --test
+```
+
+Find your hub IP on macOS: `ipconfig getifaddr en0`
 
 ---
 
@@ -38,18 +58,18 @@ cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && kill $(lsof -ti :5001) 2>/de
 
 ### Monitoring
 - Real-time health metrics: CPU, memory, disk, network, power
-- 5-second collection intervals (configurable)
+- 5-second collection intervals
 - Power monitoring: voltage, current, watts, quality score
 - Security threat scanning every 30 seconds
 - Lightweight — runs on Raspberry Pi
 
 ### Anomaly Detection (Adaptive — No Hardcoded Thresholds)
-- **Adaptive IQR + Z-score**: All detection bounds learned from live data
+- **Adaptive IQR + Z-score**: All detection bounds learned from live data stream
 - **Isolation Forest**: Multivariate point-in-time anomaly detection
-- **LSTM Autoencoder**: Time-series sequence anomaly detection (Keras)
+- **LSTM Autoencoder**: Time-series sequence anomaly detection (Keras + PyTorch)
 - Baseline freeze during anomalies + hysteresis reset
 - 5-minute cooldown per metric, 2+ consecutive readings required
-- Warmup gate: suppresses alerts for first 3 minutes (baseline settling)
+- Warmup gate: anomaly alerts suppressed for first 3 minutes (baseline settling)
 
 ### Intelligent Diagnosis
 - Rule-based engine (fast, deterministic)
@@ -65,88 +85,69 @@ cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai && kill $(lsof -ti :5001) 2>/de
 - Outcome verification 30 seconds after each action
 - Escalation resets per metric when issue resolves
 
+### Distributed Device Monitoring
+- Connect any number of remote machines via `sentinel_client.py`
+- Per-device full panel: metrics, chart, anomaly/diagnosis/recovery feeds, incident timeline
+- Direct HTTP command push to remote devices (port 5002, <50ms) with queue fallback
+- Controlled instability (CPU spike, memory pressure, disk fill, stop) on any remote device
+- Live adaptive threshold indicators on remote device metric cards
+
 ### Adaptive Learning
-- Incident persistence (SQLite locally, optional AWS DynamoDB/S3 sync)
+- Incident persistence (SQLite)
 - Threshold optimization based on false positive rates
 - Strategy refinement based on recovery action success rates
 
 ### Security Monitoring
 - Open port scanning, connection flood detection, privileged process checks
 - Demo mode: synthetic threats for visibility
-- Integrated into dashboard with purple security alerts
+- Purple security alerts bypass warmup gate (always shown immediately)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  Sentinel AI Hub (main.py)               │
-│                                                          │
-│  MonitoringAgent ──► AnomalyAgent ──► DiagnosisAgent    │
-│        │                                    │            │
-│  SecurityAgent              Groq AI / Ollama AI          │
-│        │                                    │            │
-│  RemoteDeviceManager            RecoveryAgent (L1-L4)   │
-│        │                                    │            │
-│  Event Bus (in-memory)          LearningAgent            │
-│        │                                    │            │
-│  Flask Dashboard (port 5001)    SQLite / AWS sync        │
-└─────────────────────────────────────────────────────────┘
-          ▲ HTTP POST metrics every 5s
-          │
-┌─────────┴──────────────────┐
-│  Remote Machines            │
-│  (sentinel_client.py v1.2) │
-│  macOS / Linux / Windows   │
-└────────────────────────────┘
++----------------------------------------------------------+
+|                  Sentinel AI Hub (main.py)               |
+|                                                          |
+|  MonitoringAgent --> AnomalyAgent --> DiagnosisAgent     |
+|        |                                   |             |
+|  SecurityAgent             Groq AI / Ollama AI           |
+|        |                                   |             |
+|  RemoteDeviceManager           RecoveryAgent (L1-L4)     |
+|        |                                   |             |
+|  Event Bus (in-memory)         LearningAgent             |
+|        |                                   |             |
+|  Flask Dashboard (port 5001)   SQLite                    |
++----------------------------------------------------------+
+          ^ HTTP POST metrics every 5s
+          | HTTP command push (port 5002) v
++--------------------------+
+|  Remote Machines         |
+|  (sentinel_client.py)    |
+|  macOS / Linux / Windows |
++--------------------------+
 ```
 
 ---
 
-## Multi-Device Monitoring
+## Dashboard Tabs
 
-Connect any machine on your network in 2 steps:
-
-```bash
-# On the remote machine
-pip install psutil
-python sentinel_client.py
-```
-
-The client auto-discovers the hub via UDP broadcast (port 47474).
-
-**Manual hub URL** (if auto-discovery fails):
-```bash
-python sentinel_client.py --hub http://192.168.1.x:5001
-```
-
-**Connection diagnostics** (--test flag, new in v1.2):
-```bash
-python sentinel_client.py --hub http://192.168.1.x:5001 --test
-```
-
-Full guide: [`MULTI_DEVICE_SETUP.txt`](MULTI_DEVICE_SETUP.txt)
-
----
-
-## Dashboard
-
-Glassmorphism dark UI with animated background:
-- Live SVG arc gauges for CPU / Memory / Disk / Power
-- Per-agent status cards with activity indicators
-- Toast notifications (top-right, auto-dismiss 7s, severity-colored)
-- Simulation Lab: trigger CPU spike, memory pressure, disk fill, power sag
-- Incident timeline with full diagnosis + recovery details
-- Real-time chart: CPU / Memory / Disk / Power Quality (live line chart)
+| Tab | Description |
+|-----|-------------|
+| Overview | Live gauges, agent status, real-time chart, toast notifications |
+| Incidents | Full incident timeline with diagnosis + recovery detail |
+| Simulation Lab | Trigger CPU spike, memory pressure, disk fill, power sag |
+| Distributed Devices | Per-device panels for all connected remote machines |
+| Security | Threat feed, open ports, connection stats |
 
 ---
 
 ## Simulation Lab
 
-Trigger scenarios from the dashboard or API:
+Trigger scenarios from the dashboard UI or directly via API:
 
-| Scenario | API endpoint |
+| Scenario | API |
 |---|---|
 | CPU Spike (95%) | `POST /api/simulate/start/cpu_overload` |
 | Memory Pressure (90%) | `POST /api/simulate/start/memory_spike` |
@@ -192,28 +193,42 @@ recovery:
 
 ```
 sentinel_ai/
-├── main.py                          # Master orchestrator
-├── sentinel_client.py               # Remote device client (v1.2)
-├── config/
-│   ├── config.yaml                  # Main configuration
-│   └── diagnosis_rules.yaml         # Rule-based diagnosis rules
-├── agents/
-│   ├── monitoring/                  # CPU/memory/disk/network/power
-│   ├── anomaly/                     # Adaptive IQR + z-score + ML
-│   │   └── keras_lstm_detector.py   # LSTM Autoencoder
-│   ├── diagnosis/                   # Groq AI + Ollama + rules
-│   ├── recovery/                    # 15+ actions, graduated escalation
-│   ├── learning/                    # SQLite persistence + AWS sync
-│   └── security/                    # Threat scanning (demo mode)
-├── dashboard/
-│   ├── app.py                       # Flask API + SSE (port 5001)
-│   └── templates/dashboard.html     # Glassmorphism UI
-├── simulation/                      # Failure simulation (InstabilityRunner)
-├── core/
-│   └── event_bus.py                 # In-memory event bus
-├── tests/
-│   └── two_week_test_suite.py       # 14-day compressed test suite
-└── docs/                            # Additional documentation
++-- main.py                          # Master orchestrator
++-- sentinel_client.py               # Remote device client
++-- run.sh                           # One-command startup (project root)
++-- connect.sh                       # Remote device auto-connect script
++-- config/
+|   +-- config.yaml                  # Main configuration
+|   +-- diagnosis_rules.yaml         # Rule-based diagnosis rules
++-- agents/
+|   +-- monitoring/                  # CPU/memory/disk/network/power collection
+|   |   +-- remote_device_manager.py # Manages connected remote devices
+|   +-- anomaly/                     # Adaptive IQR + z-score + ML detection
+|   |   +-- keras_lstm_detector.py   # LSTM Autoencoder
+|   +-- diagnosis/                   # Groq AI + Ollama + rule-based
+|   +-- recovery/                    # 15+ actions, graduated escalation L1-L4
+|   +-- learning/                    # SQLite persistence + threshold adaptation
+|   +-- security/                    # Threat scanning (demo mode)
++-- dashboard/
+|   +-- app.py                       # Flask API (port 5001)
+|   +-- templates/dashboard.html     # Glassmorphism dark UI
++-- simulation/                      # InstabilityRunner (cpu/memory/disk/power)
++-- core/
+|   +-- event_bus.py                 # In-memory event bus connecting all agents
++-- tests/
+|   +-- test_unit.py                 # 52-test unit suite
++-- docs/                            # Architecture, deployment, testing guides
+```
+
+---
+
+## Unit Tests
+
+```bash
+cd sentinel_ai
+source venv/bin/activate
+python -m pytest tests/test_unit.py -v
+# 52 tests covering all core components
 ```
 
 ---
@@ -233,31 +248,24 @@ sudo systemctl enable sentinel-ai
 sudo systemctl start sentinel-ai
 ```
 
-### Docker
-```bash
-cd sentinel_ai
-docker-compose up -d
-```
-
 ---
 
 ## Security Notes
 
 - No hardcoded credentials — all secrets via environment variables (`.env`)
 - `.env` is in `.gitignore` and never committed
-- TLS/SSL for all AWS communication
-- AP Isolation: if remote clients can't connect on WiFi, disable "AP Isolation" / "Client Isolation" in router settings
+- AP Isolation: if remote clients cannot connect on WiFi, disable "AP Isolation" / "Client Isolation" in router settings
 
 ---
 
 ## Performance (Raspberry Pi 3B+)
 
 - CPU overhead: 5-10%
-- Memory: 100-200MB
+- Memory: 100-200 MB
 - Metric collection latency: <100ms
 - Anomaly detection latency: <500ms
 - Recovery action: 1-30s
-- Storage: ~100MB/day (90-day retention)
+- Remote command push latency: <50ms (direct) / ~1s (queue fallback)
 
 ---
 

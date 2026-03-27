@@ -1,347 +1,221 @@
-# 🚀 Getting Started with Sentinel AI
+# Getting Started with Sentinel AI
 
-## Welcome!
+## What You Have
 
-You now have a **complete production-ready autonomous self-healing IoT infrastructure** with a beautiful real-time web dashboard!
+A complete autonomous IoT monitoring system:
 
-## 🎯 Choose Your Path
+- **7 agents** running concurrently (Monitoring, Anomaly, Diagnosis, Recovery, Learning, Security, RemoteDeviceManager)
+- **LLM-powered diagnosis** via Groq (free, fast) or Ollama (local, offline)
+- **Multi-device support** — any machine on your network can send metrics to the hub
+- **Self-healing recovery** — 15+ actions, 4 escalation levels, outcome verification
+- **Real-time dashboard** — dark glassmorphism UI at http://localhost:5001
 
-### 🌟 Path 1: Visual Dashboard (Best for First-Time Users)
+---
 
-**Perfect if you want to:**
-- See the system working visually
-- Watch anomalies detected in real-time
-- Test with beautiful full-screen alerts
-- Demo to stakeholders
+## First Run
 
-**Start here:** [`DASHBOARD_QUICKSTART.md`](sentinel_ai/DASHBOARD_QUICKSTART.md)
+### Prerequisites (hub machine — macOS)
 
-**Quick start:**
+- Python 3.9+
+- Ollama installed: `brew install ollama`
+- Dependencies installed in venv (already done if you received this project)
+
+### Start everything
+
+```bash
+cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+source venv/bin/activate
+brew services start ollama
+python main.py
+```
+
+Open the dashboard: http://localhost:5001
+
+---
+
+## Dashboard Walkthrough
+
+### Overview tab
+- Four SVG arc gauges: CPU / Memory / Disk / Power
+- Agent status cards (green = running)
+- Toast notifications appear top-right when anomalies fire
+- Real-time line chart: CPU, Memory, Disk, Power Quality
+- "Learned fence" badges show the adaptive anomaly thresholds
+
+### Simulation Lab tab
+Trigger controlled failures to watch the full pipeline:
+1. Click **CPU Spike** — CPU goes to 95% for 60 seconds
+2. Wait ~15 seconds — anomaly fires, toast appears
+3. Watch the Diagnosis and Recovery cards populate
+4. Check the Incidents tab for the full event record
+
+### Distributed Devices tab
+Monitor remote machines:
+1. Connect a remote device (see below)
+2. It appears in the left sidebar with a green dot
+3. Click the device name to open its full panel
+4. Run stress tests on the remote device directly from the dashboard
+
+### Incidents tab
+Full timeline of every detected anomaly with diagnosis, recovery actions, and outcome.
+
+---
+
+## Connect a Remote Device
+
+### Method 1 — Auto-connect script (easiest)
+
+Copy `sentinel_client_package/` to the remote machine, then:
+
+```bash
+bash connect.sh
+# Follow the prompts — it installs dependencies, tests connectivity, and connects
+```
+
+### Method 2 — Manual
+
+```bash
+pip install psutil requests
+python sentinel_client.py --hub http://<HUB_IP>:5001 --device MyLaptop
+```
+
+### Find hub IP (on the hub machine)
+```bash
+ipconfig getifaddr en0
+```
+
+### Diagnose connection issues
+```bash
+python sentinel_client.py --hub http://<HUB_IP>:5001 --test
+```
+
+---
+
+## Agent Pipeline
+
+```
+Remote Device / Local Sensors
+        |
+        v
+  MonitoringAgent  ------>  EventBus  ------>  AnomalyDetectionAgent
+                                                      |
+                                              (IQR + Z-score + Isolation Forest + LSTM)
+                                                      |
+                                                      v
+                                              DiagnosisAgent
+                                              (Rules + Groq AI + Ollama)
+                                                      |
+                                                      v
+                                              RecoveryAgent
+                                              (Level 1-4 graduated actions)
+                                                      |
+                                                      v
+                                              LearningAgent
+                                              (SQLite persistence, threshold adaptation)
+```
+
+SecurityAgent runs independently, publishing `security.threat` events directly to the bus.
+
+---
+
+## AI Integration
+
+| Provider | When Used | Config |
+|---|---|---|
+| Groq llama-3.3-70b | Primary diagnosis AI | `groq.enabled: true` in config.yaml |
+| Ollama llama3.2:3b | Fallback when Groq unavailable | Runs locally via `brew services start ollama` |
+| Isolation Forest | Multivariate anomaly detection | Always active, no config needed |
+| LSTM Autoencoder | Time-series anomaly (trains after ~6.5 min) | Keras + PyTorch backend |
+
+---
+
+## Key Configuration
+
+Edit `sentinel_ai/config/config.yaml`:
+
+```yaml
+anomaly_detection:
+  min_consecutive_readings: 2   # readings before alert fires
+  cooldown_minutes: 5           # cooldown per metric after alert
+
+groq:
+  enabled: true
+  model: "llama-3.3-70b-versatile"
+  api_key: ""                   # or set GROQ_API_KEY in .env
+
+recovery:
+  escalation_window_minutes: 30
+
+monitoring:
+  collection_interval: 5        # seconds between metric collection
+```
+
+---
+
+## Running Tests
+
 ```bash
 cd sentinel_ai
-./start_dashboard.sh
-# Open browser: http://localhost:5000
+source venv/bin/activate
+python -m pytest tests/test_unit.py -v
+# 52 unit tests covering all core components
 ```
 
 ---
 
-### 🧪 Path 2: Automated Testing (Best for Validation)
-
-**Perfect if you want to:**
-- Validate the multi-agent system
-- Run comprehensive tests
-- Verify anomaly detection works
-- Check database persistence
-
-**Start here:** [`TESTING_README.md`](sentinel_ai/TESTING_README.md)
-
-**Quick start:**
-```bash
-cd sentinel_ai
-python3 test_workflow.py
-```
-
----
-
-### 🏭 Path 3: Production Deployment (Best for Real Use)
-
-**Perfect if you want to:**
-- Deploy to Raspberry Pi
-- Run in production
-- Enable AWS cloud integration
-- Scale to 100+ devices
-
-**Start here:** [`docs/RASPBERRY_PI_DEPLOYMENT.md`](sentinel_ai/docs/RASPBERRY_PI_DEPLOYMENT.md)
-
-**Quick start:**
-```bash
-# See deployment guide
-cat sentinel_ai/docs/RASPBERRY_PI_DEPLOYMENT.md
-```
-
----
-
-### 📚 Path 4: Deep Dive (Best for Developers)
-
-**Perfect if you want to:**
-- Understand the architecture
-- Customize agents
-- Add new features
-- Integrate with your systems
-
-**Start here:** [`docs/ARCHITECTURE.md`](sentinel_ai/docs/ARCHITECTURE.md)
-
-**Also read:**
-- [`docs/README.md`](sentinel_ai/docs/README.md) - Complete documentation
-- [`docs/TESTING_GUIDE.md`](sentinel_ai/docs/TESTING_GUIDE.md) - Detailed testing
-
----
-
-## 🎬 Recommended First Experience
-
-### Step 1: Install (1 minute)
-```bash
-cd sentinel_ai
-pip install -r requirements.txt
-```
-
-### Step 2: Start Dashboard (30 seconds)
-```bash
-./start_dashboard.sh
-```
-
-Open browser: `http://localhost:5000`
-
-### Step 3: Watch Normal Operation (1 minute)
-Just watch the dashboard for 60 seconds. You'll see:
-- ✅ Metrics updating every 2 seconds
-- ✅ All 5 agents running (green indicators)
-- ✅ Logs scrolling with "Metrics collected..."
-
-### Step 4: Trigger Anomaly (2 minutes)
-**New terminal:**
-```bash
-cd sentinel_ai
-python3 trigger_anomaly.py cpu --duration 60
-```
-
-**Watch the dashboard:**
-1. ⏱️ After ~10s: CPU bar turns red (95%+)
-2. 🚨 After ~15s: **Full-screen alert appears!**
-   - Shows anomaly details
-   - Displays diagnosis
-   - Lists recommended actions
-3. 📋 Logs auto-scroll to show anomaly
-
-Click **"Acknowledge"** to dismiss alert.
-
-### Step 5: Check Results (1 minute)
-```bash
-# View database
-sqlite3 data/sentinel.db "SELECT * FROM incidents LIMIT 5;"
-
-# View logs
-tail -20 logs/sentinel.log | jq '.'
-```
-
-**Congratulations! You've seen the complete workflow:**
-```
-Monitor → Detect Anomaly → Diagnose → Recommend Recovery
-```
-
----
-
-## 📁 Project Structure Quick Reference
+## Project Structure at a Glance
 
 ```
 sentinel_ai/
-├── main.py                      # Production entry point
-├── start_dashboard.sh           # Dashboard launcher
-├── test_workflow.py             # Automated tests
-├── trigger_anomaly.py           # Test anomaly triggers
-│
-├── config/
-│   ├── config.yaml              # Main configuration
-│   └── diagnosis_rules.yaml     # Diagnosis rules
-│
-├── agents/                      # 5 specialized agents
-│   ├── monitoring/              # MonitoringAgent
-│   ├── anomaly/                 # AnomalyDetectionAgent
-│   ├── diagnosis/               # DiagnosisAgent
-│   ├── recovery/                # RecoveryAgent
-│   └── learning/                # LearningAgent
-│
-├── dashboard/                   # Web dashboard
-│   ├── app.py                   # Flask server
-│   └── templates/               # HTML templates
-│
-├── docs/                        # Documentation
-│   ├── README.md                # Complete guide
-│   ├── ARCHITECTURE.md          # System design
-│   ├── TESTING_GUIDE.md         # Testing procedures
-│   └── RASPBERRY_PI_DEPLOYMENT.md
-│
-└── deployment/                  # Deployment configs
-    ├── systemd/                 # systemd service
-    └── docker/                  # Docker configs
++-- main.py                    # Start here — starts all 7 agents + dashboard
++-- sentinel_client.py         # Copy this to remote machines
++-- agents/
+|   +-- monitoring/            # Collects metrics every 5s
+|   +-- anomaly/               # 4 detection methods
+|   +-- diagnosis/             # Groq + Ollama + rules
+|   +-- recovery/              # 15+ recovery actions
+|   +-- learning/              # Incident DB + adaptation
+|   +-- security/              # Threat scanning
++-- dashboard/app.py           # Flask server (port 5001)
++-- dashboard/templates/       # Single-page UI
++-- config/config.yaml         # All settings
++-- tests/test_unit.py         # 52 tests
 ```
 
 ---
 
-## 🎓 What You've Built
+## Common Workflows
 
-### Multi-Agent System (5 Agents)
-1. **MonitoringAgent** - Collects CPU, memory, disk, network metrics
-2. **AnomalyDetectionAgent** - Detects anomalies (Z-score, ML, thresholds)
-3. **DiagnosisAgent** - Diagnoses root causes (rules + LLM)
-4. **RecoveryAgent** - Executes autonomous recovery actions
-5. **LearningAgent** - Learns from incidents, adapts thresholds
+### Watch an anomaly from start to finish
+1. Start hub: `python main.py`
+2. Wait 3 minutes (baseline warmup)
+3. Open Simulation Lab tab
+4. Click CPU Spike
+5. Watch: toast notification -> Incidents tab populates -> Recovery executes
 
-### Core Infrastructure
-- ✅ **Event Bus** - Loose coupling between agents
-- ✅ **Configuration Manager** - YAML with env vars
-- ✅ **Logging System** - Structured JSON logs
-- ✅ **Database** - SQLite with cloud sync
-- ✅ **AWS Integration** - IoT Core, Bedrock, DynamoDB, S3
+### Test remote device monitoring
+1. Get hub IP: `ipconfig getifaddr en0`
+2. On remote machine: `bash connect.sh`
+3. Open Distributed Devices tab
+4. Click the remote device name
+5. Click CPU Spike in the Controlled Instability card
 
-### Testing & Monitoring
-- ✅ **Web Dashboard** - Real-time visual monitoring
-- ✅ **Automated Tests** - 6 comprehensive test scenarios
-- ✅ **Simulation** - Trigger CPU/memory/network failures
-- ✅ **Real-time Alerts** - Full-screen anomaly notifications
-
-### Production Ready
-- ✅ **Docker** - Containerized deployment
-- ✅ **systemd** - Service management
-- ✅ **Raspberry Pi** - Edge deployment guides
-- ✅ **Scalable** - Designed for 100+ devices
+### Check what the anomaly detector learned
+```bash
+curl http://localhost:5001/api/thresholds | python3 -m json.tool
+```
+Returns the live IQR upper bounds learned from the last N data points.
 
 ---
 
-## 🔥 Quick Commands Reference
+## Troubleshooting
 
-### Dashboard
-```bash
-# Start dashboard
-./start_dashboard.sh
-
-# Custom port
-python3 dashboard/app.py --port 8080
-```
-
-### Testing
-```bash
-# Full automated test
-python3 test_workflow.py
-
-# Real-time monitor (CLI)
-python3 monitor_realtime.py
-```
-
-### Trigger Anomalies
-```bash
-# CPU overload (60s)
-python3 trigger_anomaly.py cpu
-
-# Memory spike (40% for 60s)
-python3 trigger_anomaly.py memory --percent 40
-
-# Both CPU + Memory
-python3 trigger_anomaly.py combo
-```
-
-### Database Queries
-```bash
-# View incidents
-sqlite3 data/sentinel.db "SELECT * FROM incidents;"
-
-# View anomalies
-sqlite3 data/sentinel.db "SELECT * FROM anomalies;"
-
-# Statistics
-sqlite3 data/sentinel.db "
-SELECT anomaly_type, COUNT(*) as count
-FROM anomalies
-GROUP BY anomaly_type;
-"
-```
-
-### Production
-```bash
-# Run main system
-python3 main.py
-
-# Run with simulation
-python3 main.py --simulate
-
-# systemd service
-sudo systemctl start sentinel-ai
-sudo systemctl status sentinel-ai
-```
-
----
-
-## 📊 Expected Performance
-
-**On Raspberry Pi 3B+ (1GB RAM):**
-- CPU Usage: 5-10%
-- Memory: 100-200MB
-- Detection Latency: <500ms
-- Recovery Time: 1-30s
-
-**On Desktop/Server:**
-- CPU Usage: 1-5%
-- Memory: 50-100MB
-- Detection Latency: <100ms
-- Recovery Time: <5s
-
----
-
-## 🆘 Need Help?
-
-### Quick Fixes
-
-**Dashboard not loading?**
-```bash
-pip install -r requirements.txt
-./start_dashboard.sh
-```
-
-**No anomalies detected?**
-Lower thresholds in `config/config.yaml`:
-```yaml
-monitoring:
-  metrics:
-    cpu:
-      threshold_percent: 50
-```
-
-**Agents not starting?**
-```bash
-tail -50 logs/sentinel.log
-```
-
-### Documentation
-
-- **Dashboard Help:** [`dashboard/README.md`](sentinel_ai/dashboard/README.md)
-- **Testing Help:** [`docs/TESTING_GUIDE.md`](sentinel_ai/docs/TESTING_GUIDE.md)
-- **General Help:** [`docs/README.md`](sentinel_ai/docs/README.md)
-
----
-
-## 🎯 Next Steps
-
-After getting familiar with the dashboard:
-
-1. ✅ **Test thoroughly** - Run `test_workflow.py`
-2. ✅ **Customize rules** - Edit `config/diagnosis_rules.yaml`
-3. ✅ **Add sensors** - Integrate your IoT devices
-4. ✅ **Enable AWS** - Connect to cloud (optional)
-5. ✅ **Deploy to Pi** - Production deployment
-6. ✅ **Scale up** - Deploy to multiple devices
-
----
-
-## 🌟 You're Ready!
-
-Your autonomous self-healing IoT infrastructure is **production-ready** and **fully documented**.
-
-**Start exploring:**
-```bash
-cd sentinel_ai
-./start_dashboard.sh
-# Open: http://localhost:5000
-```
-
-**Then trigger a test:**
-```bash
-python3 trigger_anomaly.py cpu
-```
-
-Watch your system **detect, diagnose, and respond automatically!** 🚀
-
----
-
-**Built with ❤️ for autonomous systems**
-
-Questions? Check the documentation in `docs/` or open an issue on GitHub.
+| Problem | Fix |
+|---|---|
+| Port 5001 in use | `kill $(lsof -ti :5001)` |
+| No anomalies firing | Wait 3 min warmup; run a simulation |
+| Remote client SSL error | Use `http://` not `https://` |
+| Remote client connection refused | Check hub IP; hub must be running `main.py` |
+| Ollama not responding | `brew services restart ollama` |
+| Duplicate incidents flooding | Always `pkill -f "python.*main.py"` before restarting |

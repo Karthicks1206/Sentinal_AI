@@ -1933,9 +1933,12 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distCpuVal">0%</div>
-                                <div class="progress-bar"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div></div>
+                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div><div id="distCpuThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
                             </div>
-                            <div class="metric-label" style="margin-top:10px;">Top Process: <span id="distCpuProc">—</span></div>
+                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
+                                <span>Top Process: <span id="distCpuProc">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distCpuFence">—</span>%</span>
+                            </div>
                             <div class="metric-label" style="margin-top:4px;">Cores: <span id="distCpuCores">—</span> &nbsp;|&nbsp; Load 1m: <span id="distCpuLoad">—</span></div>
                         </div>
 
@@ -1944,9 +1947,12 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distMemVal">0%</div>
-                                <div class="progress-bar"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div></div>
+                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div><div id="distMemThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
                             </div>
-                            <div class="metric-label" style="margin-top:10px;">Available: <span id="distMemAvail">—</span></div>
+                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
+                                <span>Available: <span id="distMemAvail">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distMemFence">—</span>%</span>
+                            </div>
                             <div class="metric-label" style="margin-top:4px;">Swap: <span id="distMemSwap">—</span> &nbsp;|&nbsp; Top: <span id="distMemProc">—</span></div>
                         </div>
 
@@ -1955,9 +1961,12 @@
                             <div class="metric">
                                 <div class="metric-label">Current</div>
                                 <div class="metric-value" id="distDiskVal">0%</div>
-                                <div class="progress-bar"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div></div>
+                                <div class="progress-bar" style="position:relative;"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div><div id="distDiskThreshLine" style="position:absolute;top:0;bottom:0;width:2px;background:#ffaa00;opacity:0.8;display:none;"></div></div>
                             </div>
-                            <div class="metric-label" style="margin-top:10px;">Free: <span id="distDiskFree">—</span> &nbsp;|&nbsp; Total: <span id="distDiskTotal">—</span></div>
+                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
+                                <span>Free: <span id="distDiskFree">—</span> &nbsp;|&nbsp; Total: <span id="distDiskTotal">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distDiskFence">—</span>%</span>
+                            </div>
                         </div>
 
                         <div class="card">
@@ -1989,12 +1998,12 @@
                         <div class="card">
                             <h2>Controlled Instability</h2>
                             <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_cpu')">CPU Spike</button>
-                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_memory')">Memory Pressure</button>
-                                <button class="btn btn-warning" onclick="sendRemoteCmd('stress_disk')">Disk Fill</button>
-                                <button class="btn btn-danger" onclick="sendRemoteCmd('stop_stress')">Stop All</button>
+                                <button class="btn btn-warning" id="distBtnCpu" onclick="distStress(this,'stress_cpu')">CPU Spike</button>
+                                <button class="btn btn-warning" id="distBtnMem" onclick="distStress(this,'stress_memory')">Memory Pressure</button>
+                                <button class="btn btn-warning" id="distBtnDisk" onclick="distStress(this,'stress_disk')">Disk Fill</button>
+                                <button class="btn btn-danger" id="distBtnStop" onclick="distStress(this,'stop_stress')">Stop All</button>
                             </div>
-                            <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;"></div>
+                            <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;min-height:16px;"></div>
                         </div>
                     </div>
 
@@ -3349,7 +3358,7 @@
                 if (lbl) lbl.textContent = deviceId;
 
                 const m = d.metrics || {};
-                try { _updateDistMetrics(m); } catch(e) { console.error('metrics:', e); }
+                try { _updateDistMetrics(m, window._distThresholds || {}); } catch(e) { console.error('metrics:', e); }
 
                 const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
                 try {
@@ -3365,28 +3374,47 @@
             }
         }
 
-        function _updateDistMetrics(m) {
+        function _applyDistThreshLine(lineId, value, fence) {
+            const line = document.getElementById(lineId);
+            if (!line) return;
+            if (fence != null && fence > 0) {
+                line.style.left = Math.min(fence, 100) + '%';
+                line.style.display = 'block';
+                line.style.background = (value != null && value >= fence) ? '#ff4444' : '#ffaa00';
+            } else {
+                line.style.display = 'none';
+            }
+        }
+
+        function _updateDistMetrics(m, t) {
             const cpu = m.cpu || {};
             const mem = m.memory || {};
             const dsk = m.disk || {};
             const net = m.network || {};
+            const thr = t || {};
 
             _setText('distCpuVal', (cpu.cpu_percent != null ? cpu.cpu_percent.toFixed(1) : '—') + '%');
             _setBar('distCpuBar', cpu.cpu_percent);
             _setText('distCpuProc', cpu.top_process_name);
             _setText('distCpuCores', cpu.cpu_count);
             _setText('distCpuLoad', cpu.load_avg_1min != null ? cpu.load_avg_1min.toFixed(2) : '—');
+            _setText('distCpuFence', thr.cpu != null ? thr.cpu : '—');
+            _applyDistThreshLine('distCpuThreshLine', cpu.cpu_percent, thr.cpu);
 
             _setText('distMemVal', (mem.memory_percent != null ? mem.memory_percent.toFixed(1) : '—') + '%');
             _setBar('distMemBar', mem.memory_percent);
             _setText('distMemAvail', mem.memory_available_mb != null ? (mem.memory_available_mb / 1024).toFixed(1) + ' GB' : '—');
             _setText('distMemSwap', mem.swap_percent != null ? mem.swap_percent.toFixed(1) + '%' : '—');
             _setText('distMemProc', mem.top_process_name);
+            _setText('distMemFence', thr.memory != null ? thr.memory : '—');
+            _applyDistThreshLine('distMemThreshLine', mem.memory_percent, thr.memory);
 
             _setText('distDiskVal', (dsk.disk_percent != null ? dsk.disk_percent.toFixed(1) : '—') + '%');
             _setBar('distDiskBar', dsk.disk_percent);
             _setText('distDiskFree', dsk.disk_free_gb != null ? dsk.disk_free_gb.toFixed(1) + ' GB' : '—');
             _setText('distDiskTotal', dsk.disk_total_gb != null ? dsk.disk_total_gb.toFixed(1) + ' GB' : '—');
+            _setText('distDiskFence', thr.disk != null ? thr.disk : '—');
+            _applyDistThreshLine('distDiskThreshLine', dsk.disk_percent, thr.disk);
 
             _setText('distNetLatency', net.ping_latency_ms != null ? net.ping_latency_ms.toFixed(1) + ' ms' : '— ms');
             _setText('distNetStatus', net.ping_success ? 'Connected' : 'Unreachable');
@@ -3400,12 +3428,16 @@
                 if (!resp.ok) return;
                 const devices = await resp.json();
 
-                await Promise.all(devices.map(async d => {
-                    try {
-                        const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
-                        d.metrics = mr.ok ? await mr.json() : {};
-                    } catch { d.metrics = {}; }
-                }));
+                const [, thrResp] = await Promise.all([
+                    Promise.all(devices.map(async d => {
+                        try {
+                            const mr = await fetch(`/api/devices/${encodeURIComponent(d.device_id)}/metrics`);
+                            d.metrics = mr.ok ? await mr.json() : {};
+                        } catch { d.metrics = {}; }
+                    })),
+                    fetch('/api/thresholds').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+                ]);
+                window._distThresholds = thrResp;
 
                 window._distDevices = devices;
                 renderDistSidebar(devices);
@@ -3418,7 +3450,7 @@
                         if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
                         _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
 
-                        _updateDistMetrics(d.metrics || {});
+                        _updateDistMetrics(d.metrics || {}, window._distThresholds || {});
 
                         const m = d.metrics || {};
                         const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -3451,6 +3483,14 @@
         setInterval(updateSimStatus, 3000); // Simulation status every 3 seconds
         setInterval(updateSecurityPanel, 10000);// Security panel every 10 seconds
         setInterval(updateDevices, 5000); // Connected devices every 5 seconds
+        async function distStress(btn, action) {
+            const origText = btn.textContent;
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            await sendRemoteCmd(action);
+            setTimeout(() => { btn.disabled = false; btn.style.opacity = ''; }, 1500);
+        }
+
         async function sendRemoteCmd(action) {
             if (!selectedDistDevice) return;
             const enc = encodeURIComponent(selectedDistDevice);
@@ -3463,7 +3503,12 @@
                     body: JSON.stringify({action})
                 });
                 const j = await r.json();
-                if (res) res.textContent = j.status === 'queued' ? action + ' queued' : (j.error || 'error');
+                const ok = j.status === 'sent' || j.status === 'queued';
+                if (res) {
+                    res.textContent = ok ? action.replace(/_/g,' ') + ' — ' + (j.method === 'direct' ? 'sent directly' : 'queued') : (j.error || 'error');
+                    res.style.color = ok ? '#00ff88' : '#ff4444';
+                    if (ok) setTimeout(() => { res.textContent = ''; res.style.color = '#aaa'; }, 4000);
+                }
             } catch (e) {
                 if (res) res.textContent = 'request failed';
             }
