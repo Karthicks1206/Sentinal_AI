@@ -3310,7 +3310,7 @@
                 const cpu = d.metrics?.cpu?.cpu_percent ?? 0;
                 const mem = d.metrics?.memory?.memory_percent ?? 0;
                 const disk = d.metrics?.disk?.disk_percent ?? 0;
-                return `<div class="dist-device-pill${active ? ' selected' : ''}" onclick="selectDistDevice('${d.device_id}', window._distDevices)">
+                return `<div class="dist-device-pill${active ? ' selected' : ''}" data-devid="${d.device_id.replace(/"/g,'&quot;')}" style="cursor:pointer;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                         <span style="width:9px;height:9px;border-radius:50%;background:${statusDot};display:inline-block;flex-shrink:0;"></span>
                         <span style="font-weight:600;font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.device_id}">${d.device_id}</span>
@@ -3326,33 +3326,43 @@
         }
 
         function selectDistDevice(deviceId, devices) {
-            selectedDistDevice = deviceId;
+            try {
+                selectedDistDevice = deviceId;
 
-            document.getElementById('distNoSelection').style.display = 'none';
-            document.getElementById('distDeviceView').style.display = 'block';
+                const noSel = document.getElementById('distNoSelection');
+                const view  = document.getElementById('distDeviceView');
+                if (noSel) noSel.style.display = 'none';
+                if (view)  view.style.display   = 'block';
 
-            _initDistChart();
+                try { _initDistChart(); } catch(e) { console.error('chart init:', e); }
 
-            renderDistSidebar(devices);
+                try { renderDistSidebar(devices); } catch(e) { console.error('sidebar:', e); }
 
-            const d = (devices || []).find(x => x.device_id === deviceId) || { device_id: deviceId };
-            const statusColor = (d.status === 'connected' || d.status === 'online') ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
-            const dot = document.getElementById('distDotIndicator');
-            if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
-            _setText('distDeviceName', d.device_id);
-            _setText('distDeviceMeta', `${d.hostname || ''}${d.platform ? ' · ' + d.platform : ''}${d.ip ? ' · ' + d.ip : ''}`);
-            _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ` · ${Math.round(d.age_seconds)}s ago` : ''));
-            document.getElementById('distChartLabel').textContent = deviceId;
+                const d = (devices || []).find(x => x.device_id === deviceId) || { device_id: deviceId };
+                const statusColor = (d.status === 'connected' || d.status === 'online') ? '#00ff88' : d.status === 'stale' ? '#ffd93d' : '#ff4444';
+                const dot = document.getElementById('distDotIndicator');
+                if (dot) { dot.style.background = statusColor; dot.style.boxShadow = `0 0 8px ${statusColor}`; }
+                _setText('distDeviceName', d.device_id);
+                _setText('distDeviceMeta', (d.hostname || '') + (d.platform ? ' · ' + d.platform : ''));
+                _setText('distDeviceStatus', (d.status || '').toUpperCase() + (d.age_seconds != null ? ' · ' + Math.round(d.age_seconds) + 's ago' : ''));
+                const lbl = document.getElementById('distChartLabel');
+                if (lbl) lbl.textContent = deviceId;
 
-            const m = d.metrics || {};
-            _updateDistMetrics(m);
+                const m = d.metrics || {};
+                try { _updateDistMetrics(m); } catch(e) { console.error('metrics:', e); }
 
-            const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-            _pushDistChartPoint(deviceId, now,
-                m.cpu?.cpu_percent ?? 0,
-                m.memory?.memory_percent ?? 0,
-                m.disk?.disk_percent ?? 0);
-            _refreshDistChart(deviceId);
+                const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+                try {
+                    _pushDistChartPoint(deviceId, now,
+                        (m.cpu  || {}).cpu_percent    || 0,
+                        (m.memory || {}).memory_percent || 0,
+                        (m.disk   || {}).disk_percent   || 0);
+                    _refreshDistChart(deviceId);
+                } catch(e) { console.error('chart push:', e); }
+
+            } catch(e) {
+                console.error('selectDistDevice failed:', e);
+            }
         }
 
         function _updateDistMetrics(m) {
@@ -3424,6 +3434,11 @@
         }
 
         window._distDevices = [];
+
+        document.getElementById('distDeviceList').addEventListener('click', function(e) {
+            const pill = e.target.closest('[data-devid]');
+            if (pill) selectDistDevice(pill.dataset.devid, window._distDevices);
+        });
 
 
         setInterval(updateMetrics, 2000); // Every 2 seconds
