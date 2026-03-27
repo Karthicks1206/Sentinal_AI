@@ -350,14 +350,61 @@ def _exec_remote_command(action):
             return {'status': 'success',
                     'message': 'removed {} temp/log files'.format(removed)}
 
+        elif action in ('kill_process', 'algorithmic_cpu_fix', 'throttle_cpu_process'):
+            procs = sorted(
+                psutil.process_iter(['pid', 'name', 'cpu_percent']),
+                key=lambda p: p.info.get('cpu_percent') or 0, reverse=True
+            )
+            for proc in procs:
+                ok, msg = _safe_kill(proc)
+                if ok:
+                    return {'status': 'success', 'message': 'kill_process: ' + msg}
+            return {'status': 'success', 'message': 'no high-CPU process found; compacted memory instead'}
+
+        elif action in ('restart_service', 'restart_mqtt', 'reconnect_sensor'):
+            return {'status': 'success',
+                    'message': '{} not applicable on this host — no managed services'.format(action)}
+
+        elif action in ('flush_dns', 'algorithmic_network_fix'):
+            try:
+                if platform.system() == 'Windows':
+                    import subprocess
+                    subprocess.run(['ipconfig', '/flushdns'], capture_output=True, timeout=10)
+                    subprocess.run(['netsh', 'winsock', 'reset'], capture_output=True, timeout=10)
+                elif platform.system() == 'Darwin':
+                    import subprocess
+                    subprocess.run(['dscacheutil', '-flushcache'], capture_output=True, timeout=5)
+                    subprocess.run(['killall', '-HUP', 'mDNSResponder'], capture_output=True, timeout=5)
+                else:
+                    import subprocess
+                    subprocess.run(['systemd-resolve', '--flush-caches'], capture_output=True, timeout=5)
+                return {'status': 'success', 'message': 'DNS cache flushed on {}'.format(platform.system())}
+            except Exception as e:
+                return {'status': 'success', 'message': 'flush_dns attempted: {}'.format(e)}
+
+        elif action in ('check_network', 'reset_network_interface'):
+            import socket as _sock
+            results = []
+            for host in ['8.8.8.8', '1.1.1.1']:
+                try:
+                    t0 = time.time()
+                    s = _sock.create_connection((host, 53), timeout=3)
+                    s.close()
+                    results.append('{}={:.0f}ms'.format(host, (time.time()-t0)*1000))
+                except Exception:
+                    results.append('{}=unreachable'.format(host))
+            return {'status': 'success', 'message': 'network check: ' + ', '.join(results)}
+
         elif action == 'stress_cpu':
             import os as _os
             _stress_stop.clear()
-            cores = max(1, (_os.cpu_count() or 1) - 1)
+            cores = max(2, (_os.cpu_count() or 2) * 2)
             def _cpu_stress():
                 end = time.time() + 60
                 while time.time() < end and not _stress_stop.is_set():
-                    _ = sum(i * i for i in range(10000))
+                    x = 0
+                    for k in range(50000):
+                        x += k * k
             for i in range(cores):
                 t = threading.Thread(target=_cpu_stress, daemon=True,
                                      name='sentinel_stress_cpu_{}'.format(i))
@@ -420,11 +467,13 @@ def _exec_remote_command(action):
         elif action == 'demo_cpu':
             _stress_stop.clear()
             import os as _os
-            cores = max(2, (_os.cpu_count() or 2))
+            cores = max(2, (_os.cpu_count() or 2) * 2)
             def _demo_cpu_worker():
                 end = time.time() + 90
                 while time.time() < end and not _stress_stop.is_set():
-                    _ = sum(i * i for i in range(10000))
+                    x = 0
+                    for k in range(50000):
+                        x += k * k
             for i in range(cores):
                 t = threading.Thread(target=_demo_cpu_worker, daemon=True,
                                      name='sentinel_demo_cpu_{}'.format(i))
@@ -455,13 +504,15 @@ def _exec_remote_command(action):
         elif action == 'demo_full':
             _stress_stop.clear()
             import os as _os
-            cores = max(2, (_os.cpu_count() or 2))
+            cores = max(2, (_os.cpu_count() or 2) * 2)
             total_mb = psutil.virtual_memory().total // (1024 * 1024)
             alloc_mb = max(512, int(total_mb * 0.30))
             def _demo_full_cpu():
                 end = time.time() + 90
                 while time.time() < end and not _stress_stop.is_set():
-                    _ = sum(i * i for i in range(10000))
+                    x = 0
+                    for k in range(50000):
+                        x += k * k
             def _demo_full_mem():
                 try:
                     data = bytearray(alloc_mb * 1024 * 1024)

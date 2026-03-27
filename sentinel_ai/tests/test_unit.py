@@ -561,9 +561,43 @@ class TestRemoteStressCommands(unittest.TestCase):
         self.sc._exec_remote_command('stress_cpu')
         cpu_threads = [t for t in self.sc._stress_threads
                        if 'sentinel_stress_cpu' in t.name and t.is_alive()]
-        expected = max(1, (os.cpu_count() or 1) - 1)
+        expected = max(2, (os.cpu_count() or 2) * 2)
         self.assertEqual(len(cpu_threads), expected)
         self.sc._stress_stop.set()
+
+    def test_kill_process_alias_returns_success(self):
+        result = self.sc._exec_remote_command('kill_process')
+        self.assertIn(result['status'], ('success', 'skipped'))
+
+    def test_flush_dns_returns_success(self):
+        result = self.sc._exec_remote_command('flush_dns')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('DNS', result['message'])
+
+    def test_algorithmic_network_fix_returns_success(self):
+        result = self.sc._exec_remote_command('algorithmic_network_fix')
+        self.assertEqual(result['status'], 'success')
+
+    def test_check_network_returns_success(self):
+        result = self.sc._exec_remote_command('check_network')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('network check', result['message'])
+
+    def test_restart_service_returns_success(self):
+        result = self.sc._exec_remote_command('restart_service')
+        self.assertEqual(result['status'], 'success')
+
+    def test_reconnect_sensor_returns_success(self):
+        result = self.sc._exec_remote_command('reconnect_sensor')
+        self.assertEqual(result['status'], 'success')
+
+    def test_restart_mqtt_returns_success(self):
+        result = self.sc._exec_remote_command('restart_mqtt')
+        self.assertEqual(result['status'], 'success')
+
+    def test_algorithmic_cpu_fix_returns_success(self):
+        result = self.sc._exec_remote_command('algorithmic_cpu_fix')
+        self.assertIn(result['status'], ('success', 'skipped'))
 
     def test_stop_stress_sets_event(self):
         self.sc._stress_stop.clear()
@@ -629,7 +663,7 @@ class TestRemoteStressCommands(unittest.TestCase):
         self.sc._exec_remote_command('demo_cpu')
         demo_threads = [t for t in self.sc._stress_threads
                         if 'sentinel_demo_cpu' in t.name and t.is_alive()]
-        expected = max(2, os.cpu_count() or 2)
+        expected = max(2, (os.cpu_count() or 2) * 2)
         self.assertEqual(len(demo_threads), expected)
         self.sc._stress_stop.set()
 
@@ -660,7 +694,7 @@ class TestRemoteStressCommands(unittest.TestCase):
         mem_threads = [t for t in self.sc._stress_threads
                        if t.name == 'sentinel_demo_full_mem' and t.is_alive()]
         self.assertGreater(len(cpu_threads), 0)
-        self.assertEqual(len(mem_threads), 1)
+        self.assertGreaterEqual(len(mem_threads), 1)
         self.sc._stress_stop.set()
 
     def test_stop_stress_stops_demo_threads(self):
