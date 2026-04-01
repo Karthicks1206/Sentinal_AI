@@ -454,6 +454,9 @@ def get_thresholds():
         'disk': 'disk.disk_percent',
     }
 
+    # Support ?device_id= for remote devices; default to local device
+    device_id = request.args.get('device_id') or get_config().device_id
+
     try:
         anomaly_agent = (
             external_agents.get('anomaly')
@@ -465,7 +468,8 @@ def get_thresholds():
             baseline_info = {}
 
             for key, flat_name in metric_map.items():
-                baseline = anomaly_agent._baselines.get(flat_name)
+                # Baselines are keyed by (device_id, metric_name) tuple
+                baseline = anomaly_agent._baselines.get((device_id, flat_name))
                 if baseline and baseline.ready:
                     stats = baseline.stats()
                     if stats:

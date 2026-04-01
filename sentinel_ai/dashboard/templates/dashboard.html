@@ -1916,82 +1916,118 @@
                 
                 <div id="distDeviceView" style="display:none;">
 
-                    
+                    <!-- Device header -->
                     <div class="dist-device-header">
                         <div class="dh-dot" id="distDotIndicator"></div>
-                        <div>
+                        <div style="flex:1;min-width:0;">
                             <div class="dh-name" id="distDeviceName">—</div>
                             <div class="dh-meta" id="distDeviceMeta">—</div>
                         </div>
-                        <div class="dh-status" id="distDeviceStatus">—</div>
+                        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                            <div id="distDeviceStatus" class="dh-status">—</div>
+                        </div>
                     </div>
 
-                    
+                    <!-- Live vitals strip -->
+                    <div id="distVitalsStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+                        <div class="card" style="padding:14px 16px;text-align:center;background:rgba(0,212,255,0.05);border-color:rgba(0,212,255,0.15);">
+                            <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">CPU</div>
+                            <div id="distVitalCpu" style="font-size:1.9em;font-weight:700;color:#00d4ff;font-variant-numeric:tabular-nums;">—</div>
+                            <div id="distVitalCpuSub" style="font-size:0.68em;color:#666;margin-top:2px;">—</div>
+                        </div>
+                        <div class="card" style="padding:14px 16px;text-align:center;background:rgba(255,107,107,0.05);border-color:rgba(255,107,107,0.15);">
+                            <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Memory</div>
+                            <div id="distVitalMem" style="font-size:1.9em;font-weight:700;color:#ff6b6b;font-variant-numeric:tabular-nums;">—</div>
+                            <div id="distVitalMemSub" style="font-size:0.68em;color:#666;margin-top:2px;">—</div>
+                        </div>
+                        <div class="card" style="padding:14px 16px;text-align:center;background:rgba(255,217,61,0.05);border-color:rgba(255,217,61,0.15);">
+                            <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Disk</div>
+                            <div id="distVitalDisk" style="font-size:1.9em;font-weight:700;color:#ffd93d;font-variant-numeric:tabular-nums;">—</div>
+                            <div id="distVitalDiskSub" style="font-size:0.68em;color:#666;margin-top:2px;">—</div>
+                        </div>
+                        <div class="card" style="padding:14px 16px;text-align:center;background:rgba(0,255,136,0.05);border-color:rgba(0,255,136,0.15);">
+                            <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Ping</div>
+                            <div id="distVitalNet" style="font-size:1.9em;font-weight:700;color:#00ff88;font-variant-numeric:tabular-nums;">—</div>
+                            <div id="distVitalNetSub" style="font-size:0.68em;color:#666;margin-top:2px;">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Metric cards -->
                     <div class="grid">
                         <div class="card">
-                            <h2>CPU Usage</h2>
+                            <h2>💻 CPU</h2>
                             <div class="metric">
-                                <div class="metric-label">Current</div>
+                                <div class="metric-label">Usage</div>
                                 <div class="metric-value" id="distCpuVal">0%</div>
                                 <div style="position:relative;margin-top:8px;">
                                     <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distCpuBar" style="width:0%">0%</div></div>
                                     <div id="distCpuThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
                                 </div>
                             </div>
-                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
-                                <span>Top Process: <span id="distCpuProc">—</span></span>
-                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distCpuFence">—</span>%</span>
+                            <div class="metric-label" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                                <span>Top: <span id="distCpuProc" style="color:#ccc;">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.82em;">Fence <span id="distCpuFence">—</span>%</span>
                             </div>
-                            <div class="metric-label" style="margin-top:4px;">Cores: <span id="distCpuCores">—</span> &nbsp;|&nbsp; Load 1m: <span id="distCpuLoad">—</span></div>
+                            <div class="metric-label" style="margin-top:4px;color:#666;">
+                                <span id="distCpuCores">—</span> cores &nbsp;·&nbsp; Load <span id="distCpuLoad">—</span>
+                            </div>
                         </div>
 
                         <div class="card">
-                            <h2>Memory Usage</h2>
+                            <h2>🧠 Memory</h2>
                             <div class="metric">
-                                <div class="metric-label">Current</div>
+                                <div class="metric-label">Usage</div>
                                 <div class="metric-value" id="distMemVal">0%</div>
                                 <div style="position:relative;margin-top:8px;">
                                     <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distMemBar" style="width:0%">0%</div></div>
                                     <div id="distMemThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
                                 </div>
                             </div>
-                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
-                                <span>Available: <span id="distMemAvail">—</span></span>
-                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distMemFence">—</span>%</span>
+                            <div class="metric-label" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                                <span>Free: <span id="distMemAvail" style="color:#ccc;">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.82em;">Fence <span id="distMemFence">—</span>%</span>
                             </div>
-                            <div class="metric-label" style="margin-top:4px;">Swap: <span id="distMemSwap">—</span> &nbsp;|&nbsp; Top: <span id="distMemProc">—</span></div>
+                            <div class="metric-label" style="margin-top:4px;color:#666;">
+                                Swap <span id="distMemSwap">—</span> &nbsp;·&nbsp; Top: <span id="distMemProc">—</span>
+                            </div>
                         </div>
 
                         <div class="card">
-                            <h2>Disk Usage</h2>
+                            <h2>💾 Disk</h2>
                             <div class="metric">
-                                <div class="metric-label">Current</div>
+                                <div class="metric-label">Usage</div>
                                 <div class="metric-value" id="distDiskVal">0%</div>
                                 <div style="position:relative;margin-top:8px;">
                                     <div class="progress-bar" style="margin-top:0;"><div class="progress-fill" id="distDiskBar" style="width:0%">0%</div></div>
                                     <div id="distDiskThreshLine" style="position:absolute;top:-2px;width:2px;height:10px;background:#ffaa00;display:none;pointer-events:none;"></div>
                                 </div>
                             </div>
-                            <div class="metric-label" style="margin-top:6px;display:flex;justify-content:space-between;">
-                                <span>Free: <span id="distDiskFree">—</span> &nbsp;|&nbsp; Total: <span id="distDiskTotal">—</span></span>
-                                <span style="color:#ffaa00;font-size:0.85em;">Fence: <span id="distDiskFence">—</span>%</span>
+                            <div class="metric-label" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                                <span>Free: <span id="distDiskFree" style="color:#ccc;">—</span></span>
+                                <span style="color:#ffaa00;font-size:0.82em;">Fence <span id="distDiskFence">—</span>%</span>
+                            </div>
+                            <div class="metric-label" style="margin-top:4px;color:#666;">
+                                Total <span id="distDiskTotal">—</span>
                             </div>
                         </div>
 
                         <div class="card">
-                            <h2>Network</h2>
+                            <h2>📶 Network</h2>
                             <div class="metric">
                                 <div class="metric-label">Ping Latency</div>
                                 <div class="metric-value" id="distNetLatency">— ms</div>
                             </div>
-                            <div class="metric-label" style="margin-top:8px;">Status: <span id="distNetStatus">—</span></div>
-                            <div class="metric-label" style="margin-top:6px;">
-                                Sent: <span id="distNetSent">—</span> &nbsp;|&nbsp; Recv: <span id="distNetRecv">—</span>
+                            <div class="metric-label" style="margin-top:8px;">
+                                <span id="distNetStatusDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:5px;"></span>
+                                <span id="distNetStatus">—</span>
+                            </div>
+                            <div class="metric-label" style="margin-top:6px;color:#666;">
+                                ↑ <span id="distNetSent">—</span> &nbsp;↓ <span id="distNetRecv">—</span>
                             </div>
                         </div>
                     </div>
 
-                    
+                    <!-- Live chart -->
                     <div class="chart-card" style="margin-top:0;">
                         <h2>Live Metrics — <span id="distChartLabel" style="color:#00ff88;font-size:0.85em;"></span></h2>
                         <div class="chart-wrapper">
@@ -1999,59 +2035,100 @@
                         </div>
                     </div>
 
+                    <!-- Pipeline status + Agent grid row -->
                     <div class="grid" style="margin-top:16px;">
                         <div class="card">
-                            <h2>Agent Status</h2>
-                            <div id="distAgentGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;"></div>
+                            <h2>Agent Pipeline</h2>
+                            <!-- Pipeline flow -->
+                            <div style="display:flex;align-items:center;gap:0;margin:12px 0 16px;font-size:0.78em;">
+                                <div style="flex:1;text-align:center;padding:8px 4px;border-radius:6px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);">
+                                    <div style="color:#00ff88;font-size:1.3em;margin-bottom:2px;">📡</div>
+                                    <div style="color:#ccc;font-weight:600;">Monitor</div>
+                                    <div id="distPipeMonitor" style="color:#00ff88;font-size:0.85em;margin-top:2px;">running</div>
+                                </div>
+                                <div style="color:#444;font-size:1.2em;padding:0 6px;">→</div>
+                                <div style="flex:1;text-align:center;padding:8px 4px;border-radius:6px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.2);">
+                                    <div style="color:#ffaa00;font-size:1.3em;margin-bottom:2px;">🔬</div>
+                                    <div style="color:#ccc;font-weight:600;">Anomaly</div>
+                                    <div id="distPipeAnomaly" style="color:#ffaa00;font-size:0.85em;margin-top:2px;">watching</div>
+                                </div>
+                                <div style="color:#444;font-size:1.2em;padding:0 6px;">→</div>
+                                <div style="flex:1;text-align:center;padding:8px 4px;border-radius:6px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);">
+                                    <div style="color:#00d4ff;font-size:1.3em;margin-bottom:2px;">🩺</div>
+                                    <div style="color:#ccc;font-weight:600;">Diagnosis</div>
+                                    <div id="distPipeDiag" style="color:#00d4ff;font-size:0.85em;margin-top:2px;">ready</div>
+                                </div>
+                                <div style="color:#444;font-size:1.2em;padding:0 6px;">→</div>
+                                <div style="flex:1;text-align:center;padding:8px 4px;border-radius:6px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);">
+                                    <div style="color:#00ff88;font-size:1.3em;margin-bottom:2px;">⚙️</div>
+                                    <div style="color:#ccc;font-weight:600;">Recovery</div>
+                                    <div id="distPipeRecovery" style="color:#00ff88;font-size:0.85em;margin-top:2px;">armed</div>
+                                </div>
+                            </div>
+                            <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;margin-top:4px;">
+                                <div style="font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Hub Agents</div>
+                                <div id="distAgentGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+                            </div>
                         </div>
                         <div class="card">
                             <h2>Controlled Instability</h2>
-                            <div style="font-size:0.7em;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Individual Stress</div>
+                            <div style="font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;">Individual Stress</div>
                             <div style="display:flex;flex-direction:column;gap:7px;">
-                                <button class="btn btn-warning" id="distBtnCpu" onclick="distStress(this,'stress_cpu')">CPU Spike</button>
-                                <button class="btn btn-warning" id="distBtnMem" onclick="distStress(this,'stress_memory')">Memory Pressure</button>
-                                <button class="btn btn-warning" id="distBtnDisk" onclick="distStress(this,'stress_disk')">Disk Fill</button>
+                                <button class="btn btn-warning" id="distBtnCpu" onclick="distStress(this,'stress_cpu')">💻 CPU Spike</button>
+                                <button class="btn btn-warning" id="distBtnMem" onclick="distStress(this,'stress_memory')">🧠 Memory Pressure</button>
+                                <button class="btn btn-warning" id="distBtnDisk" onclick="distStress(this,'stress_disk')">💾 Disk Fill</button>
                             </div>
-                            <div style="font-size:0.7em;color:#888;margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.06em;">Agent Demo — triggers all 3 agents</div>
+                            <div style="font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:.07em;margin:12px 0 8px;">Demo — triggers full pipeline</div>
                             <div style="display:flex;flex-direction:column;gap:7px;">
-                                <button class="btn" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;" id="distBtnDemoCpu" onclick="distStress(this,'demo_cpu')">Demo: CPU Pipeline</button>
-                                <button class="btn" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;" id="distBtnDemoMem" onclick="distStress(this,'demo_memory')">Demo: Memory Pipeline</button>
-                                <button class="btn" style="background:rgba(170,0,255,0.15);border:1px solid rgba(170,0,255,0.4);color:#aa00ff;" id="distBtnDemoFull" onclick="distStress(this,'demo_full')">Demo: Full Pipeline (CPU+Mem)</button>
+                                <button class="btn" style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.35);color:#00d4ff;" id="distBtnDemoCpu" onclick="distStress(this,'demo_cpu')">🚀 Demo: CPU Pipeline</button>
+                                <button class="btn" style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.35);color:#00d4ff;" id="distBtnDemoMem" onclick="distStress(this,'demo_memory')">🚀 Demo: Memory Pipeline</button>
+                                <button class="btn" style="background:rgba(170,0,255,0.12);border:1px solid rgba(170,0,255,0.35);color:#aa00ff;" id="distBtnDemoFull" onclick="distStress(this,'demo_full')">⚡ Demo: Full Pipeline</button>
                             </div>
-                            <div style="display:flex;gap:7px;margin-top:7px;">
-                                <button class="btn btn-danger" id="distBtnStop" onclick="distStress(this,'stop_stress')" style="flex:1;">Stop All</button>
+                            <div style="display:flex;gap:7px;margin-top:10px;">
+                                <button class="btn btn-danger" id="distBtnStop" onclick="distStress(this,'stop_stress')" style="flex:1;">■ Stop All</button>
                             </div>
-                            <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;min-height:16px;"></div>
+                            <div id="distSimResult" style="margin-top:8px;font-size:0.75em;color:#aaa;min-height:16px;border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;"></div>
                         </div>
                     </div>
 
+                    <!-- Big 3 feeds -->
                     <div class="grid" style="margin-top:16px;">
                         <div class="card">
-                            <h2>Anomaly Detection</h2>
-                            <div id="distAnmCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
-                            <div id="distAnmFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                <h2 style="margin:0;">🔬 Anomaly Detection</h2>
+                                <span id="distAnmCount" style="font-size:0.72em;color:#888;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.2);padding:2px 8px;border-radius:10px;"></span>
+                            </div>
+                            <div id="distAnmFeed" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
                         </div>
                         <div class="card">
-                            <h2>Diagnosis</h2>
-                            <div id="distDiagCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
-                            <div id="distDiagFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                <h2 style="margin:0;">🩺 Diagnosis</h2>
+                                <span id="distDiagCount" style="font-size:0.72em;color:#888;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);padding:2px 8px;border-radius:10px;"></span>
+                            </div>
+                            <div id="distDiagFeed" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
                         </div>
                         <div class="card">
-                            <h2>Recovery Actions</h2>
-                            <div id="distRecCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
-                            <div id="distRecFeed" style="max-height:200px;overflow-y:auto;font-size:0.78em;"></div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                <h2 style="margin:0;">⚙️ Recovery</h2>
+                                <span id="distRecCount" style="font-size:0.72em;color:#888;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.2);padding:2px 8px;border-radius:10px;"></span>
+                            </div>
+                            <div id="distRecFeed" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
                         </div>
                     </div>
 
+                    <!-- Incident timeline -->
                     <div class="card" style="margin-top:16px;">
-                        <h2>Incident Timeline</h2>
-                        <div id="distIncCount" style="font-size:0.75em;color:#aaa;margin-bottom:6px;"></div>
-                        <div id="distIncList" style="max-height:220px;overflow-y:auto;font-size:0.78em;"></div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                            <h2 style="margin:0;">Incident Timeline</h2>
+                            <span id="distIncCount" style="font-size:0.72em;color:#888;background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);"></span>
+                        </div>
+                        <div id="distIncList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
                     </div>
 
+                    <!-- Activity log -->
                     <div class="card" style="margin-top:16px;">
                         <h2>Activity Log</h2>
-                        <div id="distLogFeed" style="max-height:180px;overflow-y:auto;font-size:0.75em;font-family:monospace;"></div>
+                        <div id="distLogFeed" style="max-height:180px;overflow-y:auto;font-size:0.73em;font-family:monospace;line-height:1.5;"></div>
                     </div>
 
                 </div>
@@ -2062,14 +2139,14 @@
     </div>
     </div>
 
-    
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
         let thresholds = { cpu: 80, memory: 85, disk: 90, network: 5 };
 
-        function loadThresholds() {
-            fetch('/api/thresholds')
+        function loadThresholds(deviceId) {
+            const qs = deviceId ? '?device_id=' + encodeURIComponent(deviceId) : '';
+            fetch('/api/thresholds' + qs)
                 .then(r => r.json())
                 .then(t => {
                     thresholds = t;
@@ -3411,31 +3488,74 @@
             const net = m.network || {};
             const thr = t || {};
 
-            _setText('distCpuVal', (cpu.cpu_percent != null ? cpu.cpu_percent.toFixed(1) : '—') + '%');
-            _setBar('distCpuBar', cpu.cpu_percent);
+            // Vitals strip — big numbers
+            const cpuPct = cpu.cpu_percent;
+            const memPct = mem.memory_percent;
+            const dskPct = dsk.disk_percent;
+            const ping   = net.ping_latency_ms;
+
+            const _vitalColor = (pct, warn=70, crit=85) =>
+                pct == null ? '#666' : pct >= crit ? '#ff4444' : pct >= warn ? '#ffd93d' : null;
+
+            const cpuEl = document.getElementById('distVitalCpu');
+            if (cpuEl) {
+                cpuEl.textContent = cpuPct != null ? cpuPct.toFixed(1) + '%' : '—';
+                const c = _vitalColor(cpuPct, 70, 85);
+                cpuEl.style.color = c || '#00d4ff';
+            }
+            _setText('distVitalCpuSub', cpu.top_process_name ? `top: ${cpu.top_process_name}` : (cpu.cpu_count ? `${cpu.cpu_count} cores` : '—'));
+
+            const memEl = document.getElementById('distVitalMem');
+            if (memEl) {
+                memEl.textContent = memPct != null ? memPct.toFixed(1) + '%' : '—';
+                const c = _vitalColor(memPct, 75, 90);
+                memEl.style.color = c || '#ff6b6b';
+            }
+            _setText('distVitalMemSub', mem.memory_available_mb != null ? `${(mem.memory_available_mb/1024).toFixed(1)} GB free` : '—');
+
+            const dskEl = document.getElementById('distVitalDisk');
+            if (dskEl) {
+                dskEl.textContent = dskPct != null ? dskPct.toFixed(1) + '%' : '—';
+                const c = _vitalColor(dskPct, 80, 92);
+                dskEl.style.color = c || '#ffd93d';
+            }
+            _setText('distVitalDiskSub', dsk.disk_free_gb != null ? `${dsk.disk_free_gb.toFixed(1)} GB free` : '—');
+
+            const netEl = document.getElementById('distVitalNet');
+            if (netEl) {
+                netEl.textContent = ping != null ? ping.toFixed(0) + 'ms' : '—';
+                netEl.style.color = !net.ping_success ? '#ff4444' : ping > 200 ? '#ffd93d' : '#00ff88';
+            }
+            _setText('distVitalNetSub', net.ping_success ? 'reachable' : 'unreachable');
+
+            // Detail cards
+            _setText('distCpuVal', (cpuPct != null ? cpuPct.toFixed(1) : '—') + '%');
+            _setBar('distCpuBar', cpuPct);
             _setText('distCpuProc', cpu.top_process_name);
             _setText('distCpuCores', cpu.cpu_count);
             _setText('distCpuLoad', cpu.load_avg_1min != null ? cpu.load_avg_1min.toFixed(2) : '—');
             _setText('distCpuFence', thr.cpu != null ? thr.cpu : '—');
-            _applyDistThreshLine('distCpuThreshLine', cpu.cpu_percent, thr.cpu);
+            _applyDistThreshLine('distCpuThreshLine', cpuPct, thr.cpu);
 
-            _setText('distMemVal', (mem.memory_percent != null ? mem.memory_percent.toFixed(1) : '—') + '%');
-            _setBar('distMemBar', mem.memory_percent);
+            _setText('distMemVal', (memPct != null ? memPct.toFixed(1) : '—') + '%');
+            _setBar('distMemBar', memPct);
             _setText('distMemAvail', mem.memory_available_mb != null ? (mem.memory_available_mb / 1024).toFixed(1) + ' GB' : '—');
             _setText('distMemSwap', mem.swap_percent != null ? mem.swap_percent.toFixed(1) + '%' : '—');
             _setText('distMemProc', mem.top_process_name);
             _setText('distMemFence', thr.memory != null ? thr.memory : '—');
-            _applyDistThreshLine('distMemThreshLine', mem.memory_percent, thr.memory);
+            _applyDistThreshLine('distMemThreshLine', memPct, thr.memory);
 
-            _setText('distDiskVal', (dsk.disk_percent != null ? dsk.disk_percent.toFixed(1) : '—') + '%');
-            _setBar('distDiskBar', dsk.disk_percent);
+            _setText('distDiskVal', (dskPct != null ? dskPct.toFixed(1) : '—') + '%');
+            _setBar('distDiskBar', dskPct);
             _setText('distDiskFree', dsk.disk_free_gb != null ? dsk.disk_free_gb.toFixed(1) + ' GB' : '—');
             _setText('distDiskTotal', dsk.disk_total_gb != null ? dsk.disk_total_gb.toFixed(1) + ' GB' : '—');
             _setText('distDiskFence', thr.disk != null ? thr.disk : '—');
-            _applyDistThreshLine('distDiskThreshLine', dsk.disk_percent, thr.disk);
+            _applyDistThreshLine('distDiskThreshLine', dskPct, thr.disk);
 
-            _setText('distNetLatency', net.ping_latency_ms != null ? net.ping_latency_ms.toFixed(1) + ' ms' : '— ms');
+            _setText('distNetLatency', ping != null ? ping.toFixed(1) + ' ms' : '— ms');
             _setText('distNetStatus', net.ping_success ? 'Connected' : 'Unreachable');
+            const ndot = document.getElementById('distNetStatusDot');
+            if (ndot) ndot.style.background = net.ping_success ? '#00ff88' : '#ff4444';
             _setText('distNetSent', net.bytes_sent_mb != null ? net.bytes_sent_mb.toFixed(1) + ' MB' : '—');
             _setText('distNetRecv', net.bytes_recv_mb != null ? net.bytes_recv_mb.toFixed(1) + ' MB' : '—');
         }
@@ -3453,7 +3573,7 @@
                             d.metrics = mr.ok ? await mr.json() : {};
                         } catch { d.metrics = {}; }
                     })),
-                    fetch('/api/thresholds').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+                    fetch('/api/thresholds' + (selectedDistDevice ? '?device_id=' + encodeURIComponent(selectedDistDevice) : '')).then(r => r.ok ? r.json() : {}).catch(() => ({})),
                 ]);
                 window._distThresholds = thrResp;
 
@@ -3535,8 +3655,8 @@
         async function updateDistDeviceData(deviceId) {
             if (!deviceId) return;
             const enc = encodeURIComponent(deviceId);
-            const statusDot = { monitoring: '#00ff88', anomaly: '#00ff88', diagnosis: '#00ff88', recovery: '#00ff88', learning: '#00ff88' };
 
+            // Agent status + pipeline indicators
             try {
                 const sr = await fetch('/api/status');
                 if (sr.ok) {
@@ -3545,92 +3665,143 @@
                     if (ag) {
                         const agents = [
                             {key: 'monitoring_agent', label: 'Monitoring'},
-                            {key: 'anomaly_agent', label: 'Anomaly'},
-                            {key: 'diagnosis_agent', label: 'Diagnosis'},
-                            {key: 'recovery_agent', label: 'Recovery'},
-                            {key: 'learning_agent', label: 'Learning'},
-                            {key: 'device_link', label: 'Device Link', fixed: '#aa00ff'},
+                            {key: 'anomaly_agent',    label: 'Anomaly'},
+                            {key: 'diagnosis_agent',  label: 'Diagnosis'},
+                            {key: 'recovery_agent',   label: 'Recovery'},
+                            {key: 'learning_agent',   label: 'Learning'},
+                            {key: 'device_link',      label: 'Device Link', fixed: '#aa00ff'},
                         ];
                         ag.innerHTML = agents.map(a => {
                             const color = a.fixed || (st.agents && st.agents[a.key] === 'running' ? '#00ff88' : '#ff4444');
                             return `<div style="display:flex;align-items:center;gap:6px;">
-                                <span style="width:10px;height:10px;border-radius:50%;background:${color};box-shadow:0 0 6px ${color};display:inline-block;"></span>
+                                <span style="width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 5px ${color};display:inline-block;flex-shrink:0;"></span>
                                 <span style="font-size:0.78em;color:#ccc;">${a.label}</span>
                             </div>`;
                         }).join('');
                     }
+                    // Pipeline label updates based on agent state
+                    const running = (k) => st.agents && st.agents[k] === 'running';
+                    const _setPipeLabel = (id, ok, okText, failText) => {
+                        const el = document.getElementById(id);
+                        if (el) { el.textContent = ok ? okText : failText; el.style.color = ok ? el.style.color : '#ff4444'; }
+                    };
+                    _setPipeLabel('distPipeAnomaly', running('anomaly_agent'),   'watching', 'stopped');
+                    _setPipeLabel('distPipeDiag',    running('diagnosis_agent'), 'ready',    'stopped');
+                    _setPipeLabel('distPipeRecovery', running('recovery_agent'), 'armed',    'stopped');
                 }
             } catch {}
 
-            const sev = {critical:'#ff4444',high:'#ff8800',medium:'#ffd93d',low:'#00aaff'};
+            // Severity badge helper (reuse global helpers)
+            const _sevBadge = (sev) => `<span class="sev-badge ${severityClass(sev)}">${(sev||'').toUpperCase()}</span>`;
+            const _empty = (msg) => `<div style="color:#555;font-size:0.88em;padding:8px 0;text-align:center;">${msg}</div>`;
+            const _ts = (t) => (t||'').slice(11,19);
 
+            // Anomaly feed
             try {
                 const r = await fetch(`/api/devices/${enc}/anomalies`);
                 if (r.ok) {
                     const items = await r.json();
                     const el = document.getElementById('distAnmFeed');
                     const cnt = document.getElementById('distAnmCount');
-                    if (cnt) cnt.textContent = items.length + ' anomalies';
-                    if (el) el.innerHTML = items.length ? items.map(a =>
-                        `<div style="padding:4px 0;border-bottom:1px solid #222;color:${sev[a.severity]||'#ccc'};">
-                            <span style="font-size:0.9em;">${a.metric || a.anomaly_type || ''}</span>
-                            <span style="float:right;color:#888;">${(a.timestamp||'').slice(11,19)}</span>
-                        </div>`).join('') : '<div style="color:#555;padding:4px 0;">No anomalies detected</div>';
+                    if (cnt) cnt.textContent = items.length ? items.length + ' detected' : 'none';
+                    if (el) el.innerHTML = items.length ? items.map(a => {
+                        const sev = a.severity || 'low';
+                        const leftCol = {'critical':'#ff4444','high':'#ff8800','medium':'#ffd93d','low':'#00aaff'}[sev] || '#888';
+                        return `<div style="padding:7px 10px;border-radius:6px;background:rgba(255,255,255,0.03);border-left:3px solid ${leftCol};font-size:0.82em;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                                ${_sevBadge(sev)}
+                                <span style="color:#ddd;font-weight:600;">${a.metric || a.anomaly_type || 'unknown'}</span>
+                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(a.timestamp)}</span>
+                            </div>
+                            ${a.value != null ? `<div style="color:#888;">value: <span style="color:#ccc;">${typeof a.value === 'number' ? a.value.toFixed(2) : a.value}</span></div>` : ''}
+                        </div>`;
+                    }).join('') : _empty('No anomalies detected yet — run a simulation to test the pipeline');
                 }
             } catch {}
 
+            // Diagnosis feed
             try {
                 const r = await fetch(`/api/devices/${enc}/diagnoses`);
                 if (r.ok) {
                     const items = await r.json();
                     const el = document.getElementById('distDiagFeed');
                     const cnt = document.getElementById('distDiagCount');
-                    if (cnt) cnt.textContent = items.length + ' diagnoses';
-                    if (el) el.innerHTML = items.length ? items.map(d =>
-                        `<div style="padding:4px 0;border-bottom:1px solid #222;">
-                            <div style="color:#00ccff;">${d.root_cause || d.diagnosis || 'Diagnosis pending'}</div>
-                            <div style="color:#888;font-size:0.9em;">${(d.timestamp||'').slice(11,19)}</div>
-                        </div>`).join('') : '<div style="color:#555;padding:4px 0;">No diagnoses yet</div>';
+                    if (cnt) cnt.textContent = items.length ? items.length + ' completed' : 'none';
+                    if (el) el.innerHTML = items.length ? items.map(d => {
+                        const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
+                        return `<div style="padding:7px 10px;border-radius:6px;background:rgba(0,212,255,0.04);border-left:3px solid rgba(0,212,255,0.4);font-size:0.82em;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                                <span style="color:#00d4ff;font-weight:600;">${d.root_cause || 'Unknown cause'}</span>
+                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(d.timestamp)}</span>
+                            </div>
+                            <div style="color:#aaa;">${d.diagnosis || ''}</div>
+                            ${conf != null ? `<div style="margin-top:3px;"><span style="font-size:0.85em;color:#666;">confidence </span><span style="color:#00d4ff;font-size:0.85em;">${conf}%</span></div>` : ''}
+                        </div>`;
+                    }).join('') : _empty('No diagnoses yet — anomalies trigger diagnosis automatically');
                 }
             } catch {}
 
+            // Recovery feed
             try {
                 const r = await fetch(`/api/devices/${enc}/recoveries`);
                 if (r.ok) {
                     const items = await r.json();
                     const el = document.getElementById('distRecFeed');
                     const cnt = document.getElementById('distRecCount');
-                    if (cnt) cnt.textContent = items.length + ' actions';
+                    if (cnt) cnt.textContent = items.length ? items.length + ' actions' : 'none';
                     if (el) el.innerHTML = items.length ? items.map(rec => {
-                        const sc = rec.status === 'success' ? '#00ff88' : rec.status === 'error' ? '#ff4444' : '#ffd93d';
-                        return `<div style="padding:4px 0;border-bottom:1px solid #222;">
-                            <span style="color:${sc};">${rec.action || ''}</span>
-                            <span style="float:right;color:#888;">${(rec.timestamp||'').slice(11,19)}</span>
-                            <div style="color:#aaa;font-size:0.9em;">${rec.message||''}</div>
+                        const st = rec.status || 'skipped';
+                        const chipCls = chipClass(st === 'queued_remote' ? 'success' : st);
+                        const stLabel = st === 'queued_remote' ? 'queued→remote' : st;
+                        return `<div style="padding:7px 10px;border-radius:6px;background:rgba(0,255,136,0.03);border-left:3px solid rgba(0,255,136,0.3);font-size:0.82em;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                                <span class="action-chip ${chipCls}">${stLabel}</span>
+                                <span style="color:#ddd;font-weight:600;">${rec.action || ''}</span>
+                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(rec.timestamp)}</span>
+                            </div>
+                            ${rec.message ? `<div style="color:#888;">${rec.message}</div>` : ''}
                         </div>`;
-                    }).join('') : '<div style="color:#555;padding:4px 0;">No recovery actions yet</div>';
+                    }).join('') : _empty('No recovery actions yet — diagnosis triggers recovery automatically');
                 }
             } catch {}
 
+            // Incident timeline — match local dashboard card style
             try {
                 const r = await fetch(`/api/devices/${enc}/incidents`);
                 if (r.ok) {
                     const items = await r.json();
                     const el = document.getElementById('distIncList');
                     const cnt = document.getElementById('distIncCount');
-                    if (cnt) cnt.textContent = items.length + ' incidents';
+                    if (cnt) cnt.textContent = items.length ? items.length + ' incidents' : 'none';
                     if (el) el.innerHTML = items.length ? items.map(inc => {
-                        const bc = inc.outcome === 'resolved' ? '#00ff88' : inc.outcome === 'failed' ? '#ff4444' : '#ffd93d';
-                        return `<div style="padding:6px 0;border-bottom:1px solid #222;">
-                            <span style="background:${bc};color:#000;padding:1px 6px;border-radius:3px;font-size:0.8em;">${inc.outcome||'detected'}</span>
-                            <span style="margin-left:8px;color:#ccc;">${inc.anomaly_type||''}</span>
-                            <span style="float:right;color:#888;font-size:0.85em;">${(inc.timestamp||'').slice(0,19).replace('T',' ')}</span>
-                            <div style="color:#aaa;margin-top:2px;font-size:0.85em;">${inc.root_cause||''}</div>
+                        const sev = inc.severity || 'medium';
+                        const sta = inc.status || inc.outcome || 'detected';
+                        const actionChips = (inc.actions || []).map(a =>
+                            `<span class="action-chip ${chipClass(a.status)}">${a.action_name} (${a.status})</span>`
+                        ).join('') || '<span style="color:#555;font-size:0.85em;">No recovery attempted</span>';
+                        return `<div class="incident-card severity-${sev}" style="font-size:0.85em;">
+                            <div class="incident-header">
+                                <span class="incident-title">${inc.anomaly_type || 'anomaly'}</span>
+                                <span>
+                                    <span class="sev-badge ${severityClass(sev)}">${sev}</span>&nbsp;
+                                    <span class="status-pill ${statusClass(sta)}">${statusLabel(sta)}</span>
+                                </span>
+                            </div>
+                            <div class="incident-row">
+                                <span class="incident-label">Diagnosis</span>
+                                <span class="incident-value">${inc.diagnosis || '—'}</span>
+                            </div>
+                            <div class="incident-row">
+                                <span class="incident-label">Recovery</span>
+                                <span class="incident-value">${actionChips}</span>
+                            </div>
+                            <div style="font-size:0.82em;color:#555;margin-top:4px;">${(inc.timestamp||'').slice(0,19).replace('T',' ')}</div>
                         </div>`;
-                    }).join('') : '<div style="color:#555;padding:4px 0;">No incidents yet</div>';
+                    }).join('') : _empty('No incidents yet — run a simulation to see the full pipeline in action');
                 }
             } catch {}
 
+            // Activity log
             try {
                 const r = await fetch(`/api/devices/${enc}/logs`);
                 if (r.ok) {
@@ -3639,8 +3810,8 @@
                     if (el) {
                         el.innerHTML = items.length ? items.map(log => {
                             const lc = log.level === 'ERROR' ? '#ff4444' : log.level === 'WARNING' ? '#ffd93d' : '#aaa';
-                            return `<div style="color:${lc};padding:1px 0;">${(log.timestamp||'').slice(11,19)} ${log.message||''}</div>`;
-                        }).join('') : '<div style="color:#555;">No log entries</div>';
+                            return `<div style="color:${lc};padding:1px 0;"><span style="color:#555;">${_ts(log.timestamp)}</span> ${log.message||''}</div>`;
+                        }).join('') : _empty('No log entries');
                         el.scrollTop = el.scrollHeight;
                     }
                 }
@@ -3660,6 +3831,7 @@
         updateSecurityPanel();
         updateDevices();
         updateDistributed();
+
     </script>
 </body>
 </html>
