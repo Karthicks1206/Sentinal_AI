@@ -443,6 +443,23 @@ class AnomalyDetectionAgent(BaseAgent):
                         })
                 else:
                     # Groq gate: validate in background thread, publish only if confirmed
+                    # Bypass Groq for hard threshold breaches — they are self-evidently genuine
+                    if anomaly.get('type') == 'threshold_breach':
+                        self._publish_anomaly(anomaly, device_id, timestamp)
+                        if self.database:
+                            self.database.store_anomaly({
+                                'anomaly_id': anomaly['anomaly_id'],
+                                'timestamp': timestamp,
+                                'device_id': device_id,
+                                'metric_name': anomaly['metric_name'],
+                                'anomaly_type': anomaly['type'],
+                                'severity': anomaly['severity'],
+                                'value': anomaly['value'],
+                                'expected_value': anomaly.get('expected_value'),
+                                'deviation': anomaly.get('deviation'),
+                                'confidence': anomaly.get('confidence', 0.95),
+                            })
+                        continue
                     def _gate(
                         _a=anomaly, _d=device_id, _t=timestamp,
                         _name=top_proc_name, _cpu=top_proc_cpu, _mem=top_proc_mem,
