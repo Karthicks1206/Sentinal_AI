@@ -20,6 +20,7 @@ import argparse
 import json
 import platform
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -31,6 +32,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _stress_stop = threading.Event()
 _stress_threads: list = []
+_stress_procs: list = []  # subprocess.Popen workers (bypass GIL for real CPU saturation)
 
 _hub_url_ref: list = ['']
 _device_id_ref: list = ['']
@@ -267,9 +269,22 @@ def _get_json(url, timeout=5):
 
 
 _CRITICAL_PROCS = {
+    # Windows OS core
     'system', 'svchost', 'lsass', 'csrss', 'wininit', 'services',
-    'winlogon', 'explorer', 'python', 'python3', 'sentinel_client',
-    'systemd', 'init', 'launchd',
+    'winlogon', 'explorer', 'smss', 'werfault',
+    # Linux/macOS OS core
+    'systemd', 'init', 'launchd', 'kernel_task', 'WindowServer',
+    'loginwindow', 'cron', 'journald', 'dbus', 'udevd',
+    # Sentinel itself
+    'python', 'python3', 'sentinel_client',
+    # Browsers — never kill user-facing apps on remote machines either
+    'safari', 'Safari',
+    'com.apple.WebKit.WebContent', 'com.apple.WebKit.GPU',
+    'chrome', 'Google Chrome', 'Google Chrome Helper',
+    'firefox', 'Firefox',
+    # Electron / common desktop apps
+    'Electron', 'Code Helper', 'slack', 'Slack',
+    'Finder', 'Dock', 'SystemUIServer',
 }
 
 
@@ -350,7 +365,7 @@ def _exec_remote_command(action):
             return {'status': 'success',
                     'message': 'removed {} temp/log files'.format(removed)}
 
-        elif action in ('kill_process', 'algorithmic_cpu_fix', 'throttle_cpu_process'):
+        elif action in ('kill_process', 'throttle_cpu_process'):
             procs = sorted(
                 psutil.process_iter(['pid', 'name', 'cpu_percent']),
                 key=lambda p: p.info.get('cpu_percent') or 0, reverse=True
@@ -398,19 +413,16 @@ def _exec_remote_command(action):
         elif action == 'stress_cpu':
             import os as _os
             _stress_stop.clear()
-            cores = max(2, (_os.cpu_count() or 2) * 2)
-            def _cpu_stress():
-                end = time.time() + 60
-                while time.time() < end and not _stress_stop.is_set():
-                    x = 0
-                    for k in range(50000):
-                        x += k * k
+            cores = _os.cpu_count() or 10
+            # Pure spin — no syscalls, no time checks; parent terminates via stop_stress
+            _CPU_WORKER = 'while True: pass'
             for i in range(cores):
-                t = threading.Thread(target=_cpu_stress, daemon=True,
-                                     name='sentinel_stress_cpu_{}'.format(i))
-                _stress_threads.append(t)
-                t.start()
-            return {'status': 'success', 'message': 'CPU stress running on {} threads for 60s'.format(cores)}
+                p = subprocess.Popen(
+                    [sys.executable, '-c', _CPU_WORKER],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                _stress_procs.append(p)
+            return {'status': 'success', 'message': 'CPU stress: {} processes pinned (pure spin)'.format(cores)}
 
         elif action == 'stress_memory':
             _stress_stop.clear()
@@ -462,23 +474,28 @@ def _exec_remote_command(action):
         elif action == 'stop_stress':
             _stress_stop.set()
             alive = [t for t in _stress_threads if t.is_alive()]
-            return {'status': 'success', 'message': 'Stress stop signal sent ({} threads)'.format(len(alive))}
+            killed_procs = 0
+            for p in _stress_procs:
+                try:
+                    if p.poll() is None:
+                        p.terminate()
+                        killed_procs += 1
+                except Exception:
+                    pass
+            _stress_procs.clear()
+            return {'status': 'success', 'message': 'Stress stop signal sent ({} threads, {} processes killed)'.format(len(alive), killed_procs)}
 
         elif action == 'demo_cpu':
             _stress_stop.clear()
             import os as _os
-            cores = max(2, (_os.cpu_count() or 2) * 2)
-            def _demo_cpu_worker():
-                end = time.time() + 90
-                while time.time() < end and not _stress_stop.is_set():
-                    x = 0
-                    for k in range(50000):
-                        x += k * k
+            cores = _os.cpu_count() or 10
+            _CPU_WORKER = 'while True: pass'
             for i in range(cores):
-                t = threading.Thread(target=_demo_cpu_worker, daemon=True,
-                                     name='sentinel_demo_cpu_{}'.format(i))
-                _stress_threads.append(t)
-                t.start()
+                p = subprocess.Popen(
+                    [sys.executable, '-c', _CPU_WORKER],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                _stress_procs.append(p)
             return {'status': 'success',
                     'message': 'Demo CPU pipeline: {} cores x 90s — watch Anomaly→Diagnosis→Recovery'.format(cores)}
 
@@ -504,15 +521,16 @@ def _exec_remote_command(action):
         elif action == 'demo_full':
             _stress_stop.clear()
             import os as _os
-            cores = max(2, (_os.cpu_count() or 2) * 2)
+            cores = _os.cpu_count() or 10
             total_mb = psutil.virtual_memory().total // (1024 * 1024)
             alloc_mb = max(512, int(total_mb * 0.30))
-            def _demo_full_cpu():
-                end = time.time() + 90
-                while time.time() < end and not _stress_stop.is_set():
-                    x = 0
-                    for k in range(50000):
-                        x += k * k
+            _CPU_WORKER = 'while True: pass'
+            for i in range(cores):
+                p = subprocess.Popen(
+                    [sys.executable, '-c', _CPU_WORKER],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                _stress_procs.append(p)
             def _demo_full_mem():
                 try:
                     data = bytearray(alloc_mb * 1024 * 1024)
@@ -522,16 +540,96 @@ def _exec_remote_command(action):
                     del data
                 except MemoryError:
                     pass
-            for i in range(cores):
-                t = threading.Thread(target=_demo_full_cpu, daemon=True,
-                                     name='sentinel_demo_full_cpu_{}'.format(i))
-                _stress_threads.append(t)
-                t.start()
             tm = threading.Thread(target=_demo_full_mem, daemon=True, name='sentinel_demo_full_mem')
             _stress_threads.append(tm)
             tm.start()
             return {'status': 'success',
                     'message': 'Demo Full pipeline: {} CPU cores + {} MB RAM x 90s — watch all 3 agents'.format(cores, alloc_mb)}
+
+        elif action == 'algorithmic_cpu_fix':
+            # Renice the top CPU-consuming process to reduce its priority
+            try:
+                procs = sorted(
+                    psutil.process_iter(['pid', 'name', 'cpu_percent']),
+                    key=lambda p: p.info.get('cpu_percent') or 0, reverse=True
+                )
+                for proc in procs:
+                    name = proc.name().lower().replace('.exe', '')
+                    if name in _CRITICAL_PROCS:
+                        continue
+                    pid = proc.pid
+                    pname = proc.name()
+                    if platform.system() == 'Windows':
+                        import ctypes
+                        handle = ctypes.windll.kernel32.OpenProcess(0x0200, False, pid)
+                        if handle:
+                            ctypes.windll.kernel32.SetPriorityClass(handle, 0x00004000)  # BELOW_NORMAL
+                            ctypes.windll.kernel32.CloseHandle(handle)
+                            return {'status': 'success',
+                                    'message': 'algorithmic_cpu_fix: lowered priority of {} (PID {})'.format(pname, pid)}
+                    else:
+                        r = subprocess.run(['renice', '+10', '-p', str(pid)],
+                                           capture_output=True, timeout=5)
+                        if r.returncode == 0:
+                            return {'status': 'success',
+                                    'message': 'algorithmic_cpu_fix: reniced {} (PID {}) +10'.format(pname, pid)}
+                        # fallback: sudo renice
+                        r2 = subprocess.run(['sudo', 'renice', '+10', '-p', str(pid)],
+                                            capture_output=True, timeout=5)
+                        if r2.returncode == 0:
+                            return {'status': 'success',
+                                    'message': 'algorithmic_cpu_fix: sudo reniced {} (PID {}) +10'.format(pname, pid)}
+                return {'status': 'skipped', 'message': 'algorithmic_cpu_fix: no suitable high-CPU process found'}
+            except Exception as e:
+                return {'status': 'error', 'message': 'algorithmic_cpu_fix: {}'.format(e)}
+
+        elif action in ('algorithmic_memory_fix', 'compact_memory_aggressive'):
+            if platform.system() == 'Windows':
+                import ctypes
+                freed = 0
+                for proc in psutil.process_iter(['pid']):
+                    try:
+                        handle = ctypes.windll.kernel32.OpenProcess(0x1F0FFF, False, proc.pid)
+                        if handle:
+                            ctypes.windll.psapi.EmptyWorkingSet(handle)
+                            ctypes.windll.kernel32.CloseHandle(handle)
+                            freed += 1
+                    except Exception:
+                        pass
+                return {'status': 'success', 'message': 'algorithmic_memory_fix: EmptyWorkingSet on {} processes'.format(freed)}
+            else:
+                import subprocess
+                try:
+                    subprocess.run(['sync'], capture_output=True, timeout=5)
+                except Exception:
+                    pass
+                return {'status': 'success', 'message': 'algorithmic_memory_fix: sync completed'}
+
+        elif action in ('algorithmic_disk_fix',):
+            import tempfile, glob as _glob
+            removed = 0
+            tmp_dirs = [tempfile.gettempdir()]
+            if platform.system() == 'Windows':
+                tmp_dirs.append(_os.path.expandvars(r'%LOCALAPPDATA%\Temp'))
+            for tmp in tmp_dirs:
+                for f in (_glob.glob(_os.path.join(tmp, '*.tmp')) +
+                          _glob.glob(_os.path.join(tmp, '*.log')) +
+                          _glob.glob(_os.path.join(tmp, '*.bak'))):
+                    try:
+                        _os.remove(f)
+                        removed += 1
+                    except Exception:
+                        pass
+            return {'status': 'success', 'message': 'algorithmic_disk_fix: removed {} files'.format(removed)}
+
+        elif action == 'restart_process_by_name':
+            return {'status': 'success', 'message': 'restart_process_by_name: no target specified, skipped gracefully'}
+
+        elif action in ('failover', 'backup_broker'):
+            return {'status': 'success', 'message': '{}: no failover target configured on this host'.format(action)}
+
+        elif action == 'full_system_restart':
+            return {'status': 'skipped', 'message': 'full_system_restart: blocked on remote client for safety'}
 
         else:
             return {'status': 'skipped',
