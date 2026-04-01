@@ -662,15 +662,23 @@ remote_device_manager = None
 
 
 def _get_remote_manager():
-    """Return (or lazily create) the RemoteDeviceManager."""
+    """Return (or lazily create) the RemoteDeviceManager.
+    When launched from main.py, app.remote_device_manager is injected — use that
+    so the RecoveryAgent and the Flask endpoints share the same instance.
+    """
     global remote_device_manager
     if remote_device_manager is None:
-        from agents.monitoring.remote_device_manager import RemoteDeviceManager
-        from core.event_bus import get_event_bus
-        from core.logging import get_logger
-        eb = get_event_bus()
-        remote_device_manager = RemoteDeviceManager(eb, get_logger('RemoteDeviceManager'))
-        remote_device_manager.start()
+        # main.py injects its instance via _dash_app.remote_device_manager
+        injected = getattr(app, 'remote_device_manager', None)
+        if injected is not None:
+            remote_device_manager = injected
+        else:
+            from agents.monitoring.remote_device_manager import RemoteDeviceManager
+            from core.event_bus import get_event_bus
+            from core.logging import get_logger
+            eb = get_event_bus()
+            remote_device_manager = RemoteDeviceManager(eb, get_logger('RemoteDeviceManager'))
+            remote_device_manager.start()
     return remote_device_manager
 
 
