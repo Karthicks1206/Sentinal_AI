@@ -299,11 +299,28 @@ simulation:
       target_percent: 95
       duration_seconds: 120
 
+database:
+  backend: "postgres"                        # "postgres" | "sqlite"
+  postgres:
+    host:     "${PG_HOST:-localhost}"
+    port:     5432
+    dbname:   "${PG_DBNAME:-sentinel_ai}"
+    user:     "${PG_USER:-sentinel_user}"
+    password: "${PG_PASSWORD:-sentinel_pass}"
+    pool_min: 2
+    pool_max: 20
+  sqlite:
+    path: "data/sentinel.db"                 # fallback only
+
 security:
   enabled: true
   scan_interval_seconds: 30      # How often to run threat checks
   demo_mode: true                # Inject synthetic threats for demo visibility
   allowlist_ports: [22, 80, 443, 1883, 5001, 8883]  # Expected listening ports
+  claude:
+    model: "claude-opus-4-6"     # Claude model for AI-powered threat analysis
+    # Fail-open: if Claude is down or key missing, threats are published as-is
+    # Fail-SAFE on suppression: Claude must explicitly say genuine=false to suppress
 
 logging:
   level: "${LOG_LEVEL:-INFO}"

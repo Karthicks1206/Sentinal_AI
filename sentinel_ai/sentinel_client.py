@@ -294,9 +294,20 @@ def _exec_remote_command(action):
         import os as _os
         import psutil
 
+        _own_pid = _os.getpid()
+
         def _safe_kill(proc):
             name = proc.name().lower().replace('.exe', '')
-            if name in _CRITICAL_PROCS:
+            # Always protect this sentinel_client process
+            if proc.pid == _own_pid:
+                return False, "protected: sentinel_client main process"
+            # Allow killing Python stress worker children (fork/subprocess workers)
+            if name in ('python', 'python3') or name.startswith('python3.'):
+                if proc.pid in _stress_procs:
+                    pass  # it's our stress worker — killable
+                else:
+                    return False, "protected python process (pid {})".format(proc.pid)
+            elif name in _CRITICAL_PROCS:
                 return False, "protected process: {}".format(name)
             try:
                 proc.kill()
@@ -411,18 +422,21 @@ def _exec_remote_command(action):
             return {'status': 'success', 'message': 'network check: ' + ', '.join(results)}
 
         elif action == 'stress_cpu':
-            import os as _os
+            import os as _os, signal as _sig
             _stress_stop.clear()
             cores = _os.cpu_count() or 10
-            # Pure spin — no syscalls, no time checks; parent terminates via stop_stress
-            _CPU_WORKER = 'while True: pass'
-            for i in range(cores):
-                p = subprocess.Popen(
-                    [sys.executable, '-c', _CPU_WORKER],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                _stress_procs.append(p)
-            return {'status': 'success', 'message': 'CPU stress: {} processes pinned (pure spin)'.format(cores)}
+            if hasattr(_os, 'fork'):
+                for i in range(cores):
+                    pid = _os.fork()
+                    if pid == 0:
+                        while True: pass  # child: pure spin, killed by parent
+                    _stress_procs.append(pid)
+            else:
+                for i in range(cores):
+                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    _stress_procs.append(p)
+            return {'status': 'success', 'message': 'CPU stress: {} cores pinned'.format(cores)}
 
         elif action == 'stress_memory':
             _stress_stop.clear()
@@ -472,32 +486,39 @@ def _exec_remote_command(action):
             return {'status': 'success', 'message': 'Disk stress running (sustained 200 MB cycling writes)'}
 
         elif action == 'stop_stress':
+            import os as _os, signal as _sig
             _stress_stop.set()
             alive = [t for t in _stress_threads if t.is_alive()]
-            killed_procs = 0
+            killed = 0
             for p in _stress_procs:
                 try:
-                    if p.poll() is None:
+                    if isinstance(p, int):
+                        _os.kill(p, _sig.SIGKILL)
+                    elif p.poll() is None:
                         p.terminate()
-                        killed_procs += 1
+                    killed += 1
                 except Exception:
                     pass
             _stress_procs.clear()
-            return {'status': 'success', 'message': 'Stress stop signal sent ({} threads, {} processes killed)'.format(len(alive), killed_procs)}
+            return {'status': 'success', 'message': 'Stopped {} CPU workers'.format(killed)}
 
         elif action == 'demo_cpu':
+            import os as _os, signal as _sig
             _stress_stop.clear()
-            import os as _os
             cores = _os.cpu_count() or 10
-            _CPU_WORKER = 'while True: pass'
-            for i in range(cores):
-                p = subprocess.Popen(
-                    [sys.executable, '-c', _CPU_WORKER],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                _stress_procs.append(p)
+            if hasattr(_os, 'fork'):
+                for i in range(cores):
+                    pid = _os.fork()
+                    if pid == 0:
+                        while True: pass
+                    _stress_procs.append(pid)
+            else:
+                for i in range(cores):
+                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    _stress_procs.append(p)
             return {'status': 'success',
-                    'message': 'Demo CPU pipeline: {} cores x 90s — watch Anomaly→Diagnosis→Recovery'.format(cores)}
+                    'message': 'Demo CPU: {} cores pinned — watch Anomaly→Diagnosis→Recovery'.format(cores)}
 
         elif action == 'demo_memory':
             _stress_stop.clear()
@@ -519,18 +540,22 @@ def _exec_remote_command(action):
                     'message': 'Demo Memory pipeline: {} MB (40% RAM) x 90s — watch Anomaly→Diagnosis→Recovery'.format(alloc_mb)}
 
         elif action == 'demo_full':
+            import os as _os, signal as _sig
             _stress_stop.clear()
-            import os as _os
             cores = _os.cpu_count() or 10
             total_mb = psutil.virtual_memory().total // (1024 * 1024)
             alloc_mb = max(512, int(total_mb * 0.30))
-            _CPU_WORKER = 'while True: pass'
-            for i in range(cores):
-                p = subprocess.Popen(
-                    [sys.executable, '-c', _CPU_WORKER],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                _stress_procs.append(p)
+            if hasattr(_os, 'fork'):
+                for i in range(cores):
+                    pid = _os.fork()
+                    if pid == 0:
+                        while True: pass
+                    _stress_procs.append(pid)
+            else:
+                for i in range(cores):
+                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    _stress_procs.append(p)
             def _demo_full_mem():
                 try:
                     data = bytearray(alloc_mb * 1024 * 1024)
@@ -554,8 +579,14 @@ def _exec_remote_command(action):
                     key=lambda p: p.info.get('cpu_percent') or 0, reverse=True
                 )
                 for proc in procs:
+                    if proc.pid == _own_pid:
+                        continue
                     name = proc.name().lower().replace('.exe', '')
-                    if name in _CRITICAL_PROCS:
+                    is_stress_worker = (
+                        (name in ('python', 'python3') or name.startswith('python3.'))
+                        and proc.pid in _stress_procs
+                    )
+                    if not is_stress_worker and name in _CRITICAL_PROCS:
                         continue
                     pid = proc.pid
                     pname = proc.name()
