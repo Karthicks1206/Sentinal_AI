@@ -327,6 +327,18 @@ def main():
     print(" 3. Rule-based — instant fallback when no LLM is reachable")
     print("="*70 + "\n")
 
+    # Create SentinelAI and inject into dashboard BEFORE starting the dashboard
+    # thread — prevents a race where the Flask app creates its own RemoteDeviceManager
+    # before the correct one is injected.
+    sentinel = SentinelAI(config_path=args.config)
+
+    try:
+        import dashboard.app as _dash_app
+        _dash_app.external_agents = sentinel.agents
+        _dash_app.remote_device_manager = sentinel.remote_device_manager
+    except Exception:
+        pass
+
     def start_dashboard():
         try:
             from dashboard.app import run_dashboard
@@ -342,15 +354,6 @@ def main():
         webbrowser.open('http://localhost:5001')
 
     threading.Thread(target=open_browser, daemon=True).start()
-
-    sentinel = SentinelAI(config_path=args.config)
-
-    try:
-        import dashboard.app as _dash_app
-        _dash_app.external_agents = sentinel.agents
-        _dash_app.remote_device_manager = sentinel.remote_device_manager
-    except Exception:
-        pass
 
     try:
         sentinel.start()
