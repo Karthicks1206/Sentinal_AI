@@ -479,23 +479,36 @@ class Database:
 _global_db: Optional[Database] = None
 
 
-def get_database(config=None) -> Database:
+def get_database(config=None):
     """
-    Get global database instance
+    Return the active database instance.
 
-    Args:
-        config: Optional configuration
+    Selection order:
+      1. DATABASE_URL or PG_HOST env var set  →  PostgreSQL (db_postgres.py)
+      2. config has database.backend = 'sqlite' →  SQLite (this file)
+      3. default                               →  PostgreSQL
 
-    Returns:
-        Database instance
+    Both backends expose the same public interface so no agent code changes.
     """
     global _global_db
 
-    if _global_db is None:
+    if _global_db is not None:
+        return _global_db
+
+    import os
+    use_pg = (
+        os.environ.get('DATABASE_URL', '').strip()
+        or os.environ.get('PG_HOST', '').strip()
+        or (config and config.get('database.backend', 'postgres') == 'postgres')
+    )
+
+    if use_pg:
+        from core.database.db_postgres import get_postgres_database
+        _global_db = get_postgres_database(config)
+    else:
+        db_path = 'data/sentinel.db'
         if config:
-            db_path = config.get('learning.local_db.path', 'data/sentinel.db')
-            _global_db = Database(db_path)
-        else:
-            _global_db = Database()
+            db_path = config.get('learning.local_db.path', db_path)
+        _global_db = Database(db_path)
 
     return _global_db

@@ -299,7 +299,7 @@ class DiagnosisAgent(BaseAgent):
         }
 
         if self.rules_config.get('enabled', True):
-            rule_diagnosis = self._diagnose_with_rules(anomaly)
+            rule_diagnosis = self._diagnose_with_rules(anomaly, device_id)
             if rule_diagnosis:
                 diagnosis_result.update(rule_diagnosis)
                 diagnosis_result['methods_used'].append('rule_based')
@@ -343,12 +343,13 @@ class DiagnosisAgent(BaseAgent):
 
         return diagnosis_result if diagnosis_result['diagnosis'] else None
 
-    def _diagnose_with_rules(self, anomaly: Dict) -> Optional[Dict]:
+    def _diagnose_with_rules(self, anomaly: Dict, device_id: str = None) -> Optional[Dict]:
         """
         Diagnose using rule-based reasoning
 
         Args:
             anomaly: Anomaly data
+            device_id: Device the anomaly came from
 
         Returns:
             Diagnosis result or None
@@ -356,7 +357,7 @@ class DiagnosisAgent(BaseAgent):
         metric_name = anomaly.get('metric_name', '')
         value = anomaly.get('value', 0)
 
-        recent_data = self._get_recent_metrics()
+        recent_data = self._get_recent_metrics(device_id)
 
         bare = metric_name.split('.')[-1]
         recent_data.setdefault(metric_name, value)
@@ -365,7 +366,7 @@ class DiagnosisAgent(BaseAgent):
             recent_data.setdefault(k, v)
 
         for rule in self.rules:
-            if self._match_rule(rule, metric_name, value, recent_data):
+            if self._match_rule(rule, metric_name, value, recent_data, device_id):
                 diagnosis = rule.get('diagnosis', 'Unknown issue')
                 diagnosis = self._format_diagnosis(diagnosis, recent_data)
 
@@ -380,7 +381,7 @@ class DiagnosisAgent(BaseAgent):
 
         return None
 
-    def _match_rule(self, rule: Dict, metric_name: str, value: float, context: Dict) -> bool:
+    def _match_rule(self, rule: Dict, metric_name: str, value: float, context: Dict, device_id: str = None) -> bool:
         """
         Check if a rule matches the current anomaly
 
@@ -418,7 +419,7 @@ class DiagnosisAgent(BaseAgent):
                 if not (metric_value == threshold):
                     return False
             elif operator == 'increasing':
-                if not self._check_trend(condition_metric, 'increasing'):
+                if not self._check_trend(condition_metric, 'increasing', device_id):
                     return False
 
         return True
@@ -451,13 +452,14 @@ class DiagnosisAgent(BaseAgent):
 
         return diagnosis
 
-    def _check_trend(self, metric_name: str, trend_type: str) -> bool:
+    def _check_trend(self, metric_name: str, trend_type: str, device_id: str = None) -> bool:
         """
         Check if metric shows a specific trend
 
         Args:
             metric_name: Metric name
             trend_type: Type of trend (increasing, decreasing)
+            device_id: Device to check trend for (defaults to local device)
 
         Returns:
             True if trend matches
@@ -467,7 +469,7 @@ class DiagnosisAgent(BaseAgent):
 
         try:
             history = self.database.get_metrics_history(
-                device_id=self.device_id,
+                device_id=device_id or self.device_id,
                 metric_type=metric_name.split('.')[0],
                 hours=1
             )
@@ -920,14 +922,14 @@ Format your response as JSON:
         except:
             return {}
 
-    def _get_recent_metrics(self) -> Dict:
+    def _get_recent_metrics(self, device_id: str = None) -> Dict:
         """Get recent metrics from database or buffer"""
         if not self.database:
             return {}
 
         try:
             metrics = self.database.get_metrics_history(
-                device_id=self.device_id,
+                device_id=device_id or self.device_id,
                 hours=1
             )
 

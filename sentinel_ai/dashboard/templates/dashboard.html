@@ -3664,15 +3664,15 @@
                     const ag = document.getElementById('distAgentGrid');
                     if (ag) {
                         const agents = [
-                            {key: 'monitoring_agent', label: 'Monitoring'},
-                            {key: 'anomaly_agent',    label: 'Anomaly'},
-                            {key: 'diagnosis_agent',  label: 'Diagnosis'},
-                            {key: 'recovery_agent',   label: 'Recovery'},
-                            {key: 'learning_agent',   label: 'Learning'},
-                            {key: 'device_link',      label: 'Device Link', fixed: '#aa00ff'},
+                            {key: 'monitoring', label: 'Monitoring'},
+                            {key: 'anomaly',    label: 'Anomaly'},
+                            {key: 'diagnosis',  label: 'Diagnosis'},
+                            {key: 'recovery',   label: 'Recovery'},
+                            {key: 'learning',   label: 'Learning'},
+                            {key: 'device_link', label: 'Device Link', fixed: '#aa00ff'},
                         ];
                         ag.innerHTML = agents.map(a => {
-                            const color = a.fixed || (st.agents && st.agents[a.key] === 'running' ? '#00ff88' : '#ff4444');
+                            const color = a.fixed || (st.agents && st.agents[a.key] ? '#00ff88' : '#ff4444');
                             return `<div style="display:flex;align-items:center;gap:6px;">
                                 <span style="width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 5px ${color};display:inline-block;flex-shrink:0;"></span>
                                 <span style="font-size:0.78em;color:#ccc;">${a.label}</span>
@@ -3680,14 +3680,14 @@
                         }).join('');
                     }
                     // Pipeline label updates based on agent state
-                    const running = (k) => st.agents && st.agents[k] === 'running';
+                    const running = (k) => st.agents && !!st.agents[k];
                     const _setPipeLabel = (id, ok, okText, failText) => {
                         const el = document.getElementById(id);
                         if (el) { el.textContent = ok ? okText : failText; el.style.color = ok ? el.style.color : '#ff4444'; }
                     };
-                    _setPipeLabel('distPipeAnomaly', running('anomaly_agent'),   'watching', 'stopped');
-                    _setPipeLabel('distPipeDiag',    running('diagnosis_agent'), 'ready',    'stopped');
-                    _setPipeLabel('distPipeRecovery', running('recovery_agent'), 'armed',    'stopped');
+                    _setPipeLabel('distPipeAnomaly', running('anomaly'),   'watching', 'stopped');
+                    _setPipeLabel('distPipeDiag',    running('diagnosis'), 'ready',    'stopped');
+                    _setPipeLabel('distPipeRecovery', running('recovery'), 'armed',    'stopped');
                 }
             } catch {}
 

@@ -40,9 +40,26 @@ def _try_resolve(hostname: str) -> bool:
         return False
 
 _CRITICAL_PROCESSES = {
+    # OS core
     'systemd', 'init', 'launchd', 'sshd', 'kernel_task', 'WindowServer',
-    'sentinel', 'python3', 'python', 'bash', 'zsh', 'loginwindow', 'cron',
-    'journald', 'dbus', 'udevd',
+    'loginwindow', 'cron', 'journald', 'dbus', 'udevd',
+    # Sentinel itself
+    'sentinel', 'python3', 'python', 'bash', 'zsh',
+    # macOS browsers & renderers — never kill user-facing apps
+    'Safari', 'safari', 'com.apple.webkit.webcontentt',
+    'com.apple.WebKit.WebContent', 'com.apple.WebKit.GPU',
+    'com.apple.WebKit.Networking', 'com.apple.Safari.SafeBrowsing',
+    # Chrome / Chromium family
+    'Google Chrome', 'Google Chrome Helper', 'Google Chrome Helper (Renderer)',
+    'Google Chrome Helper (GPU)', 'Chromium', 'chrome',
+    # Firefox
+    'firefox', 'Firefox', 'plugin-container',
+    # Electron apps (VS Code, Slack, etc.)
+    'Electron', 'Code Helper', 'Code Helper (Renderer)', 'Code Helper (GPU)',
+    'Slack Helper', 'Slack Helper (Renderer)',
+    # Other user-visible macOS apps that should never be killed
+    'Finder', 'Dock', 'SystemUIServer', 'ControlStrip', 'AirPlayUIAgent',
+    'NotificationCenter', 'Spotlight',
 }
 
 
@@ -557,11 +574,13 @@ class SystemProfiler:
         dns_ok = _dns_result[0]
 
         internet_ok = False
-        try:
-            _socket.create_connection(('8.8.8.8', 53), timeout=3)
-            internet_ok = True
-        except Exception:
-            pass
+        for _ih, _ip in [('1.1.1.1', 80), ('1.1.1.1', 443), ('8.8.4.4', 443), ('8.8.8.8', 443)]:
+            try:
+                _socket.create_connection((_ih, _ip), timeout=3)
+                internet_ok = True
+                break
+            except Exception:
+                continue
 
         classification = self._classify_network(
             ping_ms=ping_ms,
@@ -598,30 +617,50 @@ class SystemProfiler:
         )
 
     @staticmethod
-    def _measure_latency(host: str = '8.8.8.8', count: int = 4) -> Tuple[float, float]:
-        """Ping host and return (avg_ms, loss_pct)."""
-        try:
-            cmd = ['ping', '-c', str(count), '-W', '1', host] if _IS_LINUX else \
-                  ['ping', '-c', str(count), '-t', '1', host]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            out = r.stdout
-            avg_ms = 0.0
-            for line in out.split('\n'):
-                if 'avg' in line and '/' in line:
-                    parts = line.split('=')[-1].strip().split('/')
-                    if len(parts) >= 2:
-                        avg_ms = float(parts[1])
-                        break
-            loss_pct = 0.0
-            for line in out.split('\n'):
-                if 'packet loss' in line:
-                    for token in line.split():
-                        if token.endswith('%'):
-                            loss_pct = float(token.rstrip('%'))
-                            break
-            return avg_ms, loss_pct
-        except Exception:
+    def _measure_latency(host: str = None, count: int = 4) -> Tuple[float, float]:
+        """
+        Measure round-trip latency and packet loss.
+        Probes multiple well-known hosts on port 80/443 with TCP connect —
+        avoids the macOS ping -t TTL=1 bug and ICMP permission issues.
+        Falls back through a probe list until one succeeds.
+        """
+        import socket as _sock
+        _PROBES = [
+            ('1.1.1.1', 80), ('1.1.1.1', 443),
+            ('8.8.4.4', 443), ('8.8.8.8', 443),
+            ('google.com', 443), ('cloudflare.com', 443),
+        ]
+        if host:
+            _PROBES = [(host, 80), (host, 443)] + _PROBES
+
+        # Find first reachable probe
+        probe = None
+        for h, p in _PROBES:
+            try:
+                s = _sock.create_connection((h, p), timeout=2)
+                s.close()
+                probe = (h, p)
+                break
+            except Exception:
+                continue
+
+        if probe is None:
             return 999.0, 100.0
+
+        successes = []
+        failures = 0
+        for _ in range(count):
+            try:
+                t0 = time.time()
+                s = _sock.create_connection(probe, timeout=3)
+                s.close()
+                successes.append((time.time() - t0) * 1000)
+            except Exception:
+                failures += 1
+
+        loss_pct = (failures / count) * 100.0
+        avg_ms = (sum(successes) / len(successes)) if successes else 999.0
+        return round(avg_ms, 2), round(loss_pct, 1)
 
     @staticmethod
     def _classify_network(ping_ms, loss_pct, time_wait, close_wait, established, dns_ok, internet_ok) -> str:
@@ -639,7 +678,7 @@ class SystemProfiler:
             return 'CONNECTION_LEAK'
         if ping_ms > 200:
             return 'HIGH_LATENCY'
-        return 'HIGH_LATENCY'
+        return 'NORMAL'
 
 
 class AlgorithmicRecoveryEngine:
@@ -767,6 +806,20 @@ class AlgorithmicRecoveryEngine:
                 return self._network_fix_connection_leak(profile, before)
             elif profile.classification == 'HIGH_LATENCY':
                 return self._network_fix_latency(profile, before)
+            elif profile.classification == 'NORMAL':
+                return HealResult(
+                    success=True,
+                    classification='NORMAL',
+                    algorithm='no_action_needed',
+                    evidence_before=before,
+                    evidence_after=before,
+                    actions_taken=['Network profiled — connectivity normal, no intervention needed'],
+                    message=(
+                        f"Network is healthy: ping={profile.ping_ms:.1f}ms, "
+                        f"loss={profile.packet_loss_pct:.0f}%, DNS=ok, internet=ok. "
+                        "Anomaly may have been transient."
+                    ),
+                )
             else:
                 return self._network_fix_interface(profile, before)
 

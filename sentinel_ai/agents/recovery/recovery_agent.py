@@ -17,6 +17,7 @@ Escalation levels (per metric category, within rolling 30-min window):
 
 import glob
 import gzip
+import json
 import os
 import shutil
 import subprocess
@@ -28,6 +29,13 @@ import platform
 import psutil
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+
+try:
+    from groq import Groq as _GroqClient
+    _GROQ_AVAIL = True
+except ImportError:
+    _GroqClient = None
+    _GROQ_AVAIL = False
 
 _IS_MACOS = platform.system() == 'Darwin'
 
@@ -44,8 +52,25 @@ def _get_algo_engine(logger=None, ollama_model='llama3.2:3b'):
     return _algo_engine
 
 _CRITICAL_PROCESSES = {
+    # OS core
     'systemd', 'init', 'launchd', 'sshd', 'kernel_task', 'WindowServer',
-    'sentinel', 'python3', 'python', 'bash', 'zsh', 'loginwindow',
+    'loginwindow', 'cron', 'journald', 'dbus', 'udevd',
+    # Sentinel itself
+    'sentinel', 'python3', 'python', 'bash', 'zsh',
+    # macOS browsers & renderers — never kill user-facing apps
+    'Safari', 'safari',
+    'com.apple.WebKit.WebContent', 'com.apple.WebKit.GPU',
+    'com.apple.WebKit.Networking', 'com.apple.Safari.SafeBrowsing',
+    # Chrome / Chromium family
+    'Google Chrome', 'Google Chrome Helper', 'Google Chrome Helper (Renderer)',
+    'Google Chrome Helper (GPU)', 'Chromium', 'chrome',
+    # Firefox
+    'firefox', 'Firefox', 'plugin-container',
+    # Electron apps
+    'Electron', 'Code Helper', 'Code Helper (Renderer)', 'Code Helper (GPU)',
+    'Slack Helper', 'Slack Helper (Renderer)',
+    # Other user-visible macOS apps
+    'Finder', 'Dock', 'SystemUIServer', 'ControlStrip', 'NotificationCenter',
 }
 
 from agents.base_agent import BaseAgent
@@ -183,9 +208,109 @@ class RecoveryAgent(BaseAgent):
         self._pending_verifications: Dict[str, tuple] = {}
         self._verification_lock = threading.RLock()
 
+        self._groq_client = None
+        self._groq_config: Dict = {}
+        self._init_recovery_groq(config)
+
         self.event_bus.subscribe("diagnosis.complete", self.process_event)
         self.event_bus.subscribe("health.metric", self._on_health_metric)
 
+
+    def _init_recovery_groq(self, config):
+        """Initialize Groq client for the kill-action safety guard."""
+        if not _GROQ_AVAIL:
+            return
+        groq_cfg = config.get_section('groq') or {}
+        if not groq_cfg.get('enabled', True):
+            return
+        import os
+        from pathlib import Path
+        api_key = os.environ.get('GROQ_API_KEY')
+        if not api_key:
+            try:
+                env_path = Path(__file__).parent.parent.parent / '.env'
+                if env_path.exists():
+                    for line in env_path.read_text().splitlines():
+                        if line.startswith('GROQ_API_KEY='):
+                            api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+                            break
+            except Exception:
+                pass
+        if not api_key:
+            return
+        try:
+            self._groq_client = _GroqClient(api_key=api_key)
+            self._groq_config = groq_cfg
+            self.logger.info("Recovery kill guard: Groq AI sanity check enabled")
+        except Exception as e:
+            self.logger.warning(f"Recovery Groq init failed: {e}")
+
+    def _groq_ok_to_kill(self, proc_name: str, usage_pct: float, kind: str) -> bool:
+        """
+        Ask Groq whether it is safe to kill this process.
+        Returns True to allow the kill, False to block it.
+        Fail-safe: if Groq is unavailable or errors, the kill is BLOCKED.
+        """
+        if not self._groq_client:
+            # No Groq client — allow kill (still protected by _CRITICAL_PROCESSES)
+            return True
+
+        try:
+            model = self._groq_config.get('model', 'llama-3.3-70b-versatile')
+
+            response = self._groq_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the safety guard for Sentinel AI's autonomous recovery system. "
+                            "Decide if it is SAFE to forcibly terminate a process to reclaim system resources. "
+                            "PROTECT: browsers (Safari, Chrome, Firefox, WebKit), user productivity apps "
+                            "(Slack, Finder, IDEs, Electron apps, Terminal), OS services "
+                            "(launchd, WindowServer, sshd, cron, Dock, NotificationCenter). "
+                            "ALLOW killing: runaway background workers, data pipelines, stress-test tools "
+                            "(stress-ng, sysbench, yes, sha256sum loops), orphan/zombie processes, "
+                            "unknown daemons with no UI. "
+                            "Respond ONLY with valid JSON."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Process to terminate:\n"
+                            f"- Name: '{proc_name}'\n"
+                            f"- {kind.upper()} usage: {usage_pct:.1f}%\n"
+                            f"- Reason: excessive {kind} consumption\n\n"
+                            f"Is it safe to kill this process?\n"
+                            f'{{"safe_to_kill": true, "reason": "one sentence"}}'
+                        ),
+                    },
+                ],
+                max_tokens=80,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            safe = bool(result.get('safe_to_kill', True))
+            reason = result.get('reason', '')
+
+            if not safe:
+                self.logger.warning(
+                    f"[GROQ KILL GUARD] Blocked kill of '{proc_name}' "
+                    f"({usage_pct:.1f}% {kind}): {reason}"
+                )
+            else:
+                self.logger.info(
+                    f"[GROQ KILL GUARD] Approved kill of '{proc_name}' "
+                    f"({usage_pct:.1f}% {kind}): {reason}"
+                )
+            return safe
+
+        except Exception as e:
+            self.logger.debug(f"Groq kill guard error — blocking kill by default: {e}")
+            return False  # fail-safe: if Groq check fails, don't kill
 
     def _run(self):
         self.logger.info("Recovery Agent started — graduated escalation + outcome verification active")
@@ -329,16 +454,31 @@ class RecoveryAgent(BaseAgent):
             results.append(result)
 
             if self.database:
-                self.database.store_recovery_action({
-                    'action_id': result.get('action_id'),
-                    'incident_id': diagnosis.get('diagnosis_id'),
-                    'timestamp': timestamp,
-                    'action_type': action_name,
-                    'parameters': result.get('parameters', {}),
-                    'status': result.get('status'),
-                    'result': result.get('message'),
-                    'execution_time_seconds': result.get('execution_time', 0),
-                })
+                try:
+                    incident_id = diagnosis.get('diagnosis_id')
+                    # Ensure the parent incident row exists (ON CONFLICT DO NOTHING)
+                    self.database.store_incident({
+                        'incident_id': incident_id,
+                        'timestamp': timestamp,
+                        'device_id': device_id,
+                        'anomaly_type': anomaly.get('type') if anomaly else 'unknown',
+                        'severity': diagnosis.get('severity', 'medium'),
+                        'diagnosis': diagnosis.get('diagnosis'),
+                        'root_cause': diagnosis.get('root_cause'),
+                        'recovery_status': 'in_progress',
+                    })
+                    self.database.store_recovery_action({
+                        'action_id': result.get('action_id'),
+                        'incident_id': incident_id,
+                        'timestamp': timestamp,
+                        'action_type': action_name,
+                        'parameters': result.get('parameters', {}),
+                        'status': result.get('status'),
+                        'result': result.get('message'),
+                        'execution_time_seconds': result.get('execution_time', 0),
+                    })
+                except Exception as db_err:
+                    self.logger.warning(f"DB store failed (recovery still executed): {db_err}")
 
             self._set_cooldown(action_name)
             self.logger.info(
@@ -763,6 +903,13 @@ class RecoveryAgent(BaseAgent):
 
             pid = top_proc.info['pid']
             name = top_proc.info['name']
+
+            if not self._groq_ok_to_kill(name, max_cpu, 'cpu'):
+                return {
+                    'success': True,
+                    'message': f"Kill blocked by AI guard for '{name}' ({max_cpu:.1f}% CPU) — protected process",
+                }
+
             proc = psutil.Process(pid)
             proc.terminate()
             try:
@@ -797,6 +944,13 @@ class RecoveryAgent(BaseAgent):
 
             pid = top_proc.info['pid']
             name = top_proc.info['name']
+
+            if not self._groq_ok_to_kill(name, max_mem, 'memory'):
+                return {
+                    'success': True,
+                    'message': f"Kill blocked by AI guard for '{name}' ({max_mem:.1f}% MEM) — protected process",
+                }
+
             proc = psutil.Process(pid)
             proc.terminate()
             try:

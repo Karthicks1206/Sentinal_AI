@@ -13,19 +13,35 @@ echo "================================================================"
 
 # ── 1. Kill any existing instances ──────────────────────────────────
 echo ""
-echo "[1/5] Stopping any existing Sentinel instances..."
+echo "[1/6] Stopping any existing Sentinel instances..."
 kill $(lsof -ti :5001) 2>/dev/null && echo "      Killed Flask server on :5001" || true
 pkill -f "python.*main.py"      2>/dev/null && echo "      Killed background main.py" || true
 pkill -f "cpu_stress\|memory_stress\|disk_stress" 2>/dev/null && echo "      Killed stress simulations" || true
 sleep 1
 
 # ── 2. Clear Python cache (avoids stale bytecode issues) ────────────
-echo "[2/5] Clearing Python cache..."
+echo "[2/6] Clearing Python cache..."
 find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 find . -name "*.pyc" -delete 2>/dev/null || true
 
-# ── 3. Start Ollama (local AI model for diagnosis) ──────────────────
-echo "[3/5] Starting Ollama (llama3.2:3b)..."
+# ── 3. Start PostgreSQL ──────────────────────────────────────────────
+echo "[3/6] Starting PostgreSQL..."
+if command -v brew &>/dev/null; then
+    brew services start postgresql@16 2>/dev/null || true
+    # Wait until PostgreSQL accepts connections (up to 10s)
+    for i in $(seq 1 10); do
+        if /opt/homebrew/opt/postgresql@16/bin/pg_isready -q 2>/dev/null; then
+            echo "      PostgreSQL ready."
+            break
+        fi
+        sleep 1
+    done
+else
+    echo "      WARNING: brew not found — ensure PostgreSQL is running manually."
+fi
+
+# ── 4. Start Ollama (local AI model for diagnosis) ──────────────────
+echo "[4/6] Starting Ollama (llama3.2:3b)..."
 if command -v brew &>/dev/null; then
     brew services start ollama 2>/dev/null || true
 else
@@ -33,8 +49,8 @@ else
 fi
 sleep 2
 
-# ── 4. Activate virtual environment ─────────────────────────────────
-echo "[4/5] Activating virtual environment..."
+# ── 5. Activate virtual environment ─────────────────────────────────
+echo "[5/6] Activating virtual environment..."
 if [ -d "venv" ]; then
     source venv/bin/activate
 else
@@ -42,8 +58,8 @@ else
     exit 1
 fi
 
-# ── 5. Launch Sentinel AI ────────────────────────────────────────────
-echo "[5/5] Launching Sentinel AI..."
+# ── 6. Launch Sentinel AI ────────────────────────────────────────────
+echo "[6/6] Launching Sentinel AI..."
 echo ""
 echo "================================================================"
 echo "  Dashboard → http://localhost:5001"
