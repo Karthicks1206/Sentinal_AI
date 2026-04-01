@@ -76,7 +76,11 @@ anomaly_detection:
     trend_elevation:
       enabled: true         # sustained elevation above mean+1.5σ for 5 consecutive readings
     threshold:
-      enabled: false        # DISABLED — replaced by adaptive IQR / z-score
+      enabled: true         # Hard floor — fires even if baseline is contaminated by stress tests
+      cpu_percent: 80
+      memory_percent: 85
+      disk_percent: 90
+      swap_percent: 70
 
   # Machine Learning
   ml:
@@ -87,9 +91,9 @@ anomaly_detection:
     min_samples_for_training: 50
 
   # Rolling baseline window per metric (number of readings)
-  # 300 readings × 5s interval = 25 minutes of adaptive memory
+  # Reduced to 60 readings (5 minutes) so stress-test data flushes quickly
   baseline:
-    window_size: 300
+    window_size: 60
     update_interval_minutes: 15
 
 diagnosis:

@@ -19,12 +19,21 @@ Confirmed anomalies flow to the Diagnosis Agent, which must confirm a real
 error before the Recovery Agent acts. No false alarm → no recovery.
 """
 
+import json
+import threading
 import uuid
 from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 
 import numpy as np
+
+try:
+    from groq import Groq as _GroqClient
+    _GROQ_AVAIL = True
+except ImportError:
+    _GroqClient = None
+    _GROQ_AVAIL = False
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -214,6 +223,10 @@ class AnomalyDetectionAgent(BaseAgent):
         }
         self.excluded_prefixes = ('network.ping_results.',)
 
+        self._groq_client = None
+        self._groq_config: Dict = {}
+        self._init_anomaly_groq(config)
+
         self.event_bus.subscribe("health.metric", self.process_event)
 
         self.logger.info(
@@ -222,6 +235,117 @@ class AnomalyDetectionAgent(BaseAgent):
             f"consecutive: {self.min_consecutive}, cooldown: {self.cooldown_minutes} min)"
         )
 
+
+    def _init_anomaly_groq(self, config):
+        """Initialize Groq client for the pre-publish validation gate."""
+        if not _GROQ_AVAIL:
+            return
+        groq_cfg = config.get_section('groq') or {}
+        if not groq_cfg.get('enabled', True):
+            return
+        import os
+        from pathlib import Path
+        api_key = os.environ.get('GROQ_API_KEY')
+        if not api_key:
+            try:
+                env_path = Path(__file__).parent.parent.parent / '.env'
+                if env_path.exists():
+                    for line in env_path.read_text().splitlines():
+                        if line.startswith('GROQ_API_KEY='):
+                            api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+                            break
+            except Exception:
+                pass
+        if not api_key:
+            return
+        try:
+            self._groq_client = _GroqClient(api_key=api_key)
+            self._groq_config = groq_cfg
+            self.logger.info(
+                "Anomaly gate: Groq validation enabled — "
+                "false positives filtered before pipeline entry"
+            )
+        except Exception as e:
+            self.logger.warning(f"Anomaly Groq init failed: {e}")
+
+    def _groq_validate_anomaly(
+        self,
+        anomaly: Dict,
+        top_proc_name: Optional[str],
+        top_proc_pct: float,
+        kind: str,
+    ) -> bool:
+        """
+        Ask Groq whether this anomaly is a genuine system problem or normal
+        user behavior.  Returns True to publish, False to suppress.
+        Fail-open: if Groq is unavailable or times out, the anomaly is published.
+        """
+        if not self._groq_client:
+            return True
+
+        try:
+            metric = anomaly.get('metric_name', 'unknown')
+            value = anomaly.get('value', 0)
+            expected = anomaly.get('expected_value', 0)
+            severity = anomaly.get('severity', 'medium')
+
+            proc_ctx = (
+                f"\nTop process: '{top_proc_name}' using {top_proc_pct:.1f}% {kind.upper()}"
+                if top_proc_name
+                else ""
+            )
+
+            model = self._groq_config.get('model', 'llama-3.3-70b-versatile')
+
+            response = self._groq_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a smart false-positive filter for Sentinel AI. "
+                            "Decide if a detected anomaly is a GENUINE system problem "
+                            "that needs recovery action, or just normal user activity. "
+                            "Browsers (Safari, Chrome), video players, IDEs, Slack, "
+                            "and other user-facing apps using high resources while the "
+                            "user is actively working is NORMAL and should NOT be flagged. "
+                            "Respond ONLY with valid JSON — no markdown."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Anomaly detected:\n"
+                            f"- Metric: {metric}\n"
+                            f"- Value: {value:.1f} (expected ≈ {expected:.1f})\n"
+                            f"- Severity: {severity}"
+                            f"{proc_ctx}\n\n"
+                            f'Is this a genuine system problem?\n'
+                            f'{{"is_genuine": true, "reason": "one sentence"}}'
+                        ),
+                    },
+                ],
+                max_tokens=100,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            is_genuine = result.get('is_genuine', True)
+            reason = result.get('reason', '')
+
+            if not is_genuine:
+                self.logger.info(
+                    f"[GROQ GATE] Suppressed {metric}={value:.1f} — {reason}"
+                )
+            else:
+                self.logger.debug(f"[GROQ GATE] Confirmed anomaly {metric}: {reason}")
+
+            return bool(is_genuine)
+
+        except Exception as e:
+            self.logger.debug(f"Groq anomaly gate error (publishing anomaly): {e}")
+            return True  # fail-open
 
     def _init_isolation_forest(self):
         try:
@@ -272,7 +396,7 @@ class AnomalyDetectionAgent(BaseAgent):
 
         try:
             metrics = event.data.get('metrics', {})
-            device_id = event.data.get('device_id')
+            device_id = event.data.get('device_id') or self.device_id
             timestamp = event.data.get('timestamp')
 
             flat_metrics = self._flatten_metrics(metrics)
@@ -280,7 +404,7 @@ class AnomalyDetectionAgent(BaseAgent):
             if self.lstm_detector is not None:
                 self.lstm_detector.add_reading(flat_metrics)
 
-            anomalies = self.detect_anomalies(flat_metrics, timestamp)
+            anomalies = self.detect_anomalies(flat_metrics, timestamp, device_id)
 
             string_context = {}
             for section, section_data in metrics.items():
@@ -290,23 +414,65 @@ class AnomalyDetectionAgent(BaseAgent):
                             string_context[f"{section}.{k}"] = v
                             string_context[k] = v
 
+            # Top process context for Groq validation
+            top_proc_name = (
+                string_context.get('cpu.top_process_name')
+                or string_context.get('top_process_name')
+            )
+            top_proc_cpu = flat_metrics.get('cpu.top_process_cpu', 0.0)
+            top_proc_mem = flat_metrics.get('memory.top_process_memory', 0.0)
+
             for anomaly in anomalies:
                 anomaly['context'] = string_context
-                self._publish_anomaly(anomaly, device_id, timestamp)
 
-                if self.database:
-                    self.database.store_anomaly({
-                        'anomaly_id': anomaly['anomaly_id'],
-                        'timestamp': timestamp,
-                        'device_id': device_id,
-                        'metric_name': anomaly['metric_name'],
-                        'anomaly_type': anomaly['type'],
-                        'severity': anomaly['severity'],
-                        'value': anomaly['value'],
-                        'expected_value': anomaly.get('expected_value'),
-                        'deviation': anomaly.get('deviation'),
-                        'confidence': anomaly.get('confidence', 0.8),
-                    })
+                if not self._groq_client:
+                    # No Groq — publish immediately (guarded by consecutive/cooldown gates)
+                    self._publish_anomaly(anomaly, device_id, timestamp)
+                    if self.database:
+                        self.database.store_anomaly({
+                            'anomaly_id': anomaly['anomaly_id'],
+                            'timestamp': timestamp,
+                            'device_id': device_id,
+                            'metric_name': anomaly['metric_name'],
+                            'anomaly_type': anomaly['type'],
+                            'severity': anomaly['severity'],
+                            'value': anomaly['value'],
+                            'expected_value': anomaly.get('expected_value'),
+                            'deviation': anomaly.get('deviation'),
+                            'confidence': anomaly.get('confidence', 0.8),
+                        })
+                else:
+                    # Groq gate: validate in background thread, publish only if confirmed
+                    def _gate(
+                        _a=anomaly, _d=device_id, _t=timestamp,
+                        _name=top_proc_name, _cpu=top_proc_cpu, _mem=top_proc_mem,
+                    ):
+                        metric = _a.get('metric_name', '')
+                        if 'memory' in metric or 'mem' in metric:
+                            ok = self._groq_validate_anomaly(_a, _name, _mem, 'memory')
+                        elif 'cpu' in metric:
+                            ok = self._groq_validate_anomaly(_a, _name, _cpu, 'cpu')
+                        else:
+                            ok = self._groq_validate_anomaly(
+                                _a, None, 0.0, metric.split('.')[0] if '.' in metric else 'system'
+                            )
+                        if not ok:
+                            return
+                        self._publish_anomaly(_a, _d, _t)
+                        if self.database:
+                            self.database.store_anomaly({
+                                'anomaly_id': _a['anomaly_id'],
+                                'timestamp': _t,
+                                'device_id': _d,
+                                'metric_name': _a['metric_name'],
+                                'anomaly_type': _a['type'],
+                                'severity': _a['severity'],
+                                'value': _a['value'],
+                                'expected_value': _a.get('expected_value'),
+                                'deviation': _a.get('deviation'),
+                                'confidence': _a.get('confidence', 0.8),
+                            })
+                    threading.Thread(target=_gate, daemon=True).start()
 
         except Exception as e:
             self.logger.error(f"Error processing health metric: {e}", exc_info=True)
@@ -315,7 +481,8 @@ class AnomalyDetectionAgent(BaseAgent):
     def detect_anomalies(
         self,
         metrics: Dict[str, float],
-        timestamp: str
+        timestamp: str,
+        device_id: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Run all adaptive detection methods on the current metric snapshot.
@@ -325,6 +492,7 @@ class AnomalyDetectionAgent(BaseAgent):
         """
         now = datetime.now()
         sustained_anomalies = []
+        dev = device_id or self.device_id
 
         for metric_name, value in metrics.items():
             if not isinstance(value, (int, float)):
@@ -334,13 +502,14 @@ class AnomalyDetectionAgent(BaseAgent):
             if any(metric_name.startswith(p) for p in self.excluded_prefixes):
                 continue
 
-            if metric_name not in self._baselines:
-                self._baselines[metric_name] = AdaptiveMetricBaseline(
+            bkey = (dev, metric_name)
+            if bkey not in self._baselines:
+                self._baselines[bkey] = AdaptiveMetricBaseline(
                     window_size=self._baseline_window_size
                 )
-                self.metric_windows[metric_name] = self._baselines[metric_name].window
+                self.metric_windows[bkey] = self._baselines[bkey].window
 
-            baseline = self._baselines[metric_name]
+            baseline = self._baselines[bkey]
             baseline.push(value)
 
             if not baseline.ready:
@@ -350,14 +519,19 @@ class AnomalyDetectionAgent(BaseAgent):
             if stats is None:
                 continue
 
-            if self._metric_anomaly_active.get(metric_name, False):
+            if self._metric_anomaly_active.get(bkey, False):
                 hysteresis_band = stats['mean'] + 0.5 * stats['std']
                 if value <= hysteresis_band:
-                    self.consecutive_counts[metric_name] = 0
-                    self._metric_anomaly_active[metric_name] = False
+                    self.consecutive_counts[bkey] = 0
+                    self._metric_anomaly_active[bkey] = False
                     baseline.unfreeze()
 
             candidates = []
+
+            # Hard threshold floor — fires even when baseline is contaminated
+            hit = self._detect_hard_threshold(metric_name, value)
+            if hit:
+                candidates.append(hit)
 
             hit = self._detect_iqr_outlier(metric_name, value, stats)
             if hit:
@@ -395,18 +569,18 @@ class AnomalyDetectionAgent(BaseAgent):
                     })
 
             if candidates:
-                self.consecutive_counts[metric_name] = (
-                    self.consecutive_counts.get(metric_name, 0) + 1
+                self.consecutive_counts[bkey] = (
+                    self.consecutive_counts.get(bkey, 0) + 1
                 )
             else:
-                if not self._metric_anomaly_active.get(metric_name, False):
-                    self.consecutive_counts[metric_name] = 0
+                if not self._metric_anomaly_active.get(bkey, False):
+                    self.consecutive_counts[bkey] = 0
                 continue
 
-            if self.consecutive_counts[metric_name] < self.min_consecutive:
+            if self.consecutive_counts[bkey] < self.min_consecutive:
                 continue
 
-            last = self.last_fired.get(metric_name)
+            last = self.last_fired.get(bkey)
             if last is not None:
                 if (now - last).total_seconds() / 60 < self.cooldown_minutes:
                     continue
@@ -414,16 +588,16 @@ class AnomalyDetectionAgent(BaseAgent):
             sev_rank = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
             best = max(candidates,
                        key=lambda a: sev_rank.get(a.get('severity', 'low'), 0))
-            self.last_fired[metric_name] = now
+            self.last_fired[bkey] = now
 
-            self._metric_anomaly_active[metric_name] = True
+            self._metric_anomaly_active[bkey] = True
             baseline.freeze()
 
             sustained_anomalies.append(best)
 
         if self.ml_config.get('enabled', False) and self.isolation_forest is not None:
             for ml_a in self._detect_ml_anomalies(metrics):
-                key = 'multivariate_isolation_forest'
+                key = (dev, 'multivariate_isolation_forest')
                 last = self.last_fired.get(key)
                 if last is None or (now - last).total_seconds() / 60 >= self.cooldown_minutes:
                     self.last_fired[key] = now
@@ -432,7 +606,7 @@ class AnomalyDetectionAgent(BaseAgent):
         if self.lstm_detector is not None and self.lstm_detector.is_trained:
             lstm_a = self.lstm_detector.predict(metrics)
             if lstm_a is not None:
-                key = 'multivariate_lstm'
+                key = (dev, 'multivariate_lstm')
                 last = self.last_fired.get(key)
                 if last is None or (now - last).total_seconds() / 60 >= self.cooldown_minutes:
                     self.last_fired[key] = now
@@ -440,6 +614,36 @@ class AnomalyDetectionAgent(BaseAgent):
 
         return sustained_anomalies
 
+    def _detect_hard_threshold(self, metric_name: str, value: float):
+        """Hard threshold floor — guaranteed trigger regardless of baseline state.
+        Fires when a metric exceeds its configured absolute limit.
+        Prevents contaminated baselines from masking obvious anomalies.
+        """
+        thresh_cfg = self.methods_config.get('threshold', {})
+        if not thresh_cfg.get('enabled', False):
+            return None
+
+        # Map bare key and prefixed key to threshold config
+        bare = metric_name.split('.')[-1]
+        limit = thresh_cfg.get(metric_name) or thresh_cfg.get(bare)
+        if limit is None:
+            return None
+        if value <= limit:
+            return None
+
+        excess = (value - limit) / max(limit, 1.0)
+        severity = 'critical' if excess > 0.25 else 'high' if excess > 0.10 else 'medium'
+        return {
+            'anomaly_id': str(__import__('uuid').uuid4()),
+            'metric_name': metric_name,
+            'type': 'threshold_breach',
+            'value': value,
+            'expected_value': limit,
+            'deviation': round(excess, 3),
+            'severity': severity,
+            'confidence': 0.95,
+            'threshold': limit,
+        }
 
     def _detect_iqr_outlier(
         self,
