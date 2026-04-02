@@ -70,7 +70,7 @@ class AdaptiveMetricBaseline:
         detect sustained drift that the slower rolling window might lag on.
     """
 
-    WARMUP_SAMPLES: int = 30
+    WARMUP_SAMPLES: int = 15
 
     EMA_ALPHA: float = 0.15
 
