@@ -12,7 +12,7 @@ echo   SENTINEL AI - Remote Client Auto-Setup
 echo ================================================================
 echo.
 
-:: ── Step 1: Open Windows Firewall for outbound on port 5001 ─────────
+:: ── Step 1: Open Windows Firewall ────────────────────────────────────
 echo [1/5] Configuring Windows Firewall...
 netsh advfirewall firewall delete rule name="SentinelAI" >nul 2>&1
 netsh advfirewall firewall add rule name="SentinelAI" dir=out action=allow protocol=TCP remoteport=5001 >nul 2>&1
@@ -29,142 +29,119 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo.
         echo       ERROR: Could not auto-install Python.
-        echo       Please download and install from: https://www.python.org/downloads/
-        echo       Make sure to check "Add Python to PATH" during install.
+        echo       Please install from: https://www.python.org/downloads/
+        echo       Check "Add Python to PATH" during install.
         pause
         exit /b 1
     )
-    :: Refresh PATH
-    call refreshenv >nul 2>&1
 )
 for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo       Found: %%i
 
-:: ── Step 3: Install dependencies ────────────────────────────────────
+:: ── Step 3: Install dependencies ─────────────────────────────────────
 echo [3/5] Installing dependencies (psutil, requests)...
 python -m pip install --quiet --upgrade psutil requests 2>&1 | find /v "already"
 echo       Dependencies ready.
 
-:: ── Step 4: Find sentinel_client.py ─────────────────────────────────
+:: ── Step 4: Find sentinel_client.py ──────────────────────────────────
 echo [4/5] Locating sentinel_client.py...
 set "CLIENT="
 
-:: Check same folder as this bat file
-if exist "%~dp0sentinel_client.py" (
-    set "CLIENT=%~dp0sentinel_client.py"
-    goto :found_client
+if exist "%~dp0sentinel_client.py"                                          set "CLIENT=%~dp0sentinel_client.py"
+if not defined CLIENT if exist "%~dp0..\sentinel_client.py"                 set "CLIENT=%~dp0..\sentinel_client.py"
+if not defined CLIENT if exist "%USERPROFILE%\Desktop\sentinel_client.py"   set "CLIENT=%USERPROFILE%\Desktop\sentinel_client.py"
+if not defined CLIENT if exist "%USERPROFILE%\Downloads\sentinel_client.py" set "CLIENT=%USERPROFILE%\Downloads\sentinel_client.py"
+if not defined CLIENT if exist "%USERPROFILE%\Desktop\Sentinal_AI\sentinel_ai\sentinel_client.py" set "CLIENT=%USERPROFILE%\Desktop\Sentinal_AI\sentinel_ai\sentinel_client.py"
+if not defined CLIENT if exist "%USERPROFILE%\OneDrive\Desktop\Sentinal_AI\sentinel_ai\sentinel_client.py" set "CLIENT=%USERPROFILE%\OneDrive\Desktop\Sentinal_AI\sentinel_ai\sentinel_client.py"
+
+if not defined CLIENT (
+    echo.
+    echo       ERROR: sentinel_client.py not found.
+    echo       Place sentinel_client.py in the same folder as this bat file.
+    pause
+    exit /b 1
 )
-
-:: Check parent folder
-if exist "%~dp0..\sentinel_client.py" (
-    set "CLIENT=%~dp0..\sentinel_client.py"
-    goto :found_client
-)
-
-:: Search common locations
-for %%d in ("%USERPROFILE%\Desktop" "%USERPROFILE%\Downloads" "%USERPROFILE%\Documents") do (
-    if exist "%%~d\sentinel_client.py" (
-        set "CLIENT=%%~d\sentinel_client.py"
-        goto :found_client
-    )
-    if exist "%%~d\Sentinal_AI\sentinel_client.py" (
-        set "CLIENT=%%~d\Sentinal_AI\sentinel_client.py"
-        goto :found_client
-    )
-    if exist "%%~d\Sentinal_AI\sentinel_ai\sentinel_client.py" (
-        set "CLIENT=%%~d\Sentinal_AI\sentinel_ai\sentinel_client.py"
-        goto :found_client
-    )
-)
-
-echo.
-echo       ERROR: sentinel_client.py not found.
-echo       Place sentinel_client.py in the same folder as this bat file and run again.
-pause
-exit /b 1
-
-:found_client
 echo       Found: %CLIENT%
 
-:: ── Step 5: Auto-discover hub and start client ───────────────────────
+:: ── Step 5: Write discovery helper and launch ────────────────────────
 echo [5/5] Discovering Sentinel hub on network...
 echo.
 
-:: Use Python to discover hub via UDP beacon then launch client
-python -c "
-import socket, json, sys, os, subprocess, time
+:: Write the Python helper to a temp file to avoid batch quoting issues
+set "HELPER=%TEMP%\sentinel_launcher.py"
 
-DISCOVERY_PORT = 47474
-DISCOVERY_MSG  = b'SENTINEL_DISCOVER'
-device_name    = os.environ.get('SENTINEL_DEVICE', os.environ.get('COMPUTERNAME', 'windows-device'))
-client_path    = r'%CLIENT%'
+(
+echo import socket, json, sys, os, time
+echo.
+echo DISCOVERY_PORT = 47474
+echo DISCOVERY_MSG  = b"SENTINEL_DISCOVER"
+echo device_name = os.environ.get^("SENTINEL_DEVICE", os.environ.get^("COMPUTERNAME", "windows-device"^)^)
+echo client_path = sys.argv[1]
+echo.
+echo def discover^(timeout=5^):
+echo     try:
+echo         ls = socket.socket^(socket.AF_INET, socket.SOCK_DGRAM^)
+echo         ls.setsockopt^(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1^)
+echo         ls.settimeout^(3^)
+echo         try:
+echo             ls.bind^(^('', DISCOVERY_PORT^)^)
+echo             data, _ = ls.recvfrom^(1024^)
+echo             info = json.loads^(data.decode^(^)^)
+echo             if info.get^("sentinel_hub"^):
+echo                 return info["url"]
+echo         except Exception:
+echo             pass
+echo         finally:
+echo             ls.close^(^)
+echo     except Exception:
+echo         pass
+echo     try:
+echo         s = socket.socket^(socket.AF_INET, socket.SOCK_DGRAM^)
+echo         s.setsockopt^(socket.SOL_SOCKET, socket.SO_BROADCAST, 1^)
+echo         s.settimeout^(timeout^)
+echo         s.sendto^(DISCOVERY_MSG, ^("<broadcast>", DISCOVERY_PORT^)^)
+echo         s.sendto^(DISCOVERY_MSG, ^("255.255.255.255", DISCOVERY_PORT^)^)
+echo         data, _ = s.recvfrom^(1024^)
+echo         info = json.loads^(data.decode^(^)^)
+echo         if info.get^("sentinel_hub"^):
+echo             return info["url"]
+echo     except Exception:
+echo         pass
+echo     return None
+echo.
+echo print^("  Scanning network for Sentinel hub..."^)
+echo hub_url = None
+echo for attempt in range^(3^):
+echo     hub_url = discover^(timeout=4^)
+echo     if hub_url:
+echo         break
+echo     print^(f"  Attempt {attempt+1}/3 - retrying..."^)
+echo     time.sleep^(2^)
+echo.
+echo if not hub_url:
+echo     print^(^)
+echo     print^("  Hub not found automatically."^)
+echo     print^("  Make sure the Mac is running ./run.sh"^)
+echo     print^(^)
+echo     hub_url = input^("  Enter hub URL manually (e.g. http://10.0.0.118:5001): "^).strip^(^)
+echo.
+echo if not hub_url:
+echo     print^("No hub URL provided. Exiting."^)
+echo     sys.exit^(1^)
+echo.
+echo print^(f"  Hub: {hub_url}"^)
+echo print^(f"  Device: {device_name}"^)
+echo print^(^)
+echo print^("================================================================"^)
+echo print^("  Sentinel AI Remote Client Starting..."^)
+echo print^(f"  Hub:    {hub_url}"^)
+echo print^(f"  Device: {device_name}"^)
+echo print^("  Press Ctrl+C to stop"^)
+echo print^("================================================================"^)
+echo print^(^)
+echo os.execv^(sys.executable, [sys.executable, client_path, "--hub", hub_url, "--device", device_name]^)
+) > "%HELPER%"
 
-def discover(timeout=5):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.settimeout(timeout)
-    try:
-        # First listen for broadcast announcements (hub broadcasts every 10s)
-        listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listen_sock.settimeout(3)
-        try:
-            listen_sock.bind(('', DISCOVERY_PORT))
-            data, _ = listen_sock.recvfrom(1024)
-            info = json.loads(data.decode())
-            if info.get('sentinel_hub'):
-                return info['url']
-        except Exception:
-            pass
-        finally:
-            listen_sock.close()
-
-        # Then send a discovery probe
-        sock.sendto(DISCOVERY_MSG, ('<broadcast>', DISCOVERY_PORT))
-        sock.sendto(DISCOVERY_MSG, ('255.255.255.255', DISCOVERY_PORT))
-        data, addr = sock.recvfrom(1024)
-        info = json.loads(data.decode())
-        if info.get('sentinel_hub'):
-            return info['url']
-    except Exception:
-        pass
-    finally:
-        sock.close()
-    return None
-
-print('  Scanning network for Sentinel hub...')
-hub_url = None
-for attempt in range(3):
-    hub_url = discover(timeout=4)
-    if hub_url:
-        break
-    print(f'  Attempt {attempt+1}/3 — no response yet, retrying...')
-    time.sleep(2)
-
-if not hub_url:
-    print()
-    print('  Hub not found automatically.')
-    print('  Make sure the Sentinel hub (Mac) is running ./run.sh')
-    print()
-    manual = input('  Enter hub URL manually (e.g. http://10.0.0.118:5001): ').strip()
-    hub_url = manual if manual else None
-
-if not hub_url:
-    print('No hub URL. Exiting.')
-    sys.exit(1)
-
-print(f'  Hub found: {hub_url}')
-print(f'  Device name: {device_name}')
-print()
-print('================================================================')
-print('  Sentinel AI Remote Client Starting...')
-print(f'  Hub:    {hub_url}')
-print(f'  Device: {device_name}')
-print('  Press Ctrl+C to stop')
-print('================================================================')
-print()
-
-os.execv(sys.executable, [sys.executable, client_path, '--hub', hub_url, '--device', device_name])
-"
+python "%HELPER%" "%CLIENT%"
 
 if errorlevel 1 (
     echo.
