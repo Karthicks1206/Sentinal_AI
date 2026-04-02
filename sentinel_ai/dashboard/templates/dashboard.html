@@ -3750,22 +3750,33 @@
                 }
             } catch {}
 
-            // Recovery feed
+            // Recovery feed — API returns batches [{timestamp, actions:[{action_name,status,message}]}]
             try {
                 const r = await fetch(`/api/devices/${enc}/recoveries`);
                 if (r.ok) {
-                    const items = await r.json();
+                    const batches = await r.json();
+                    // Flatten into individual action rows, most recent first
+                    const flat = [];
+                    batches.forEach(batch => {
+                        (batch.actions || []).forEach(a => flat.push({
+                            action: a.action_name || a.action || '',
+                            status: a.status || 'skipped',
+                            message: a.message || '',
+                            timestamp: batch.timestamp,
+                        }));
+                    });
+                    flat.reverse();
                     const el = document.getElementById('distRecFeed');
                     const cnt = document.getElementById('distRecCount');
-                    if (cnt) cnt.textContent = items.length ? items.length + ' actions' : 'none';
-                    if (el) el.innerHTML = items.length ? items.map(rec => {
-                        const st = rec.status || 'skipped';
+                    if (cnt) cnt.textContent = flat.length ? flat.length + ' actions' : 'none';
+                    if (el) el.innerHTML = flat.length ? flat.map(rec => {
+                        const st = rec.status;
                         const chipCls = chipClass(st === 'queued_remote' ? 'success' : st);
-                        const stLabel = st === 'queued_remote' ? 'queued→remote' : st;
+                        const stLabel = st === 'queued_remote' ? 'sent→remote' : st;
                         return `<div style="padding:7px 10px;border-radius:6px;background:rgba(0,255,136,0.03);border-left:3px solid rgba(0,255,136,0.3);font-size:0.82em;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                                 <span class="action-chip ${chipCls}">${stLabel}</span>
-                                <span style="color:#ddd;font-weight:600;">${rec.action || ''}</span>
+                                <span style="color:#ddd;font-weight:600;">${rec.action}</span>
                                 <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(rec.timestamp)}</span>
                             </div>
                             ${rec.message ? `<div style="color:#888;">${rec.message}</div>` : ''}
