@@ -512,6 +512,24 @@ def _exec_remote_command(action):
                     pass
             _stress_procs.clear()
             _stress_threads.clear()
+            # If no tracked workers, scan for orphaned stress processes (e.g. after client restart)
+            if killed == 0:
+                try:
+                    _own = _os.getpid()
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent']):
+                        try:
+                            if proc.pid == _own:
+                                continue
+                            cmdline = ' '.join(proc.info.get('cmdline') or [])
+                            # Only kill python worker processes launched by sentinel stress commands
+                            if ('python' in (proc.info.get('name') or '').lower()
+                                    and '9999999999999937' in cmdline):
+                                proc.kill()
+                                killed += 1
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
             return {'status': 'success', 'message': 'Stopped {} CPU workers'.format(killed)}
 
         elif action == 'demo_cpu':
