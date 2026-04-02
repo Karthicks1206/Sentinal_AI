@@ -137,7 +137,7 @@ class SentinelDashboard:
         dh['net'].append(round(net, 1))
         dh['timestamps'].append(timestamp)
 
-        dl = state._device_deque(state.device_logs, device_id, 100)
+        dl = state._device_deque(state.device_logs, device_id, 200)
         dl.append({'timestamp': timestamp, 'level': 'INFO',
                    'message': f'Metrics: CPU={cpu:.1f}% MEM={mem:.1f}% DISK={disk:.1f}%'})
 
@@ -869,6 +869,17 @@ def post_command_results(device_id):
         data = request.get_json(force=True) or {}
         results = data.get('results', [])
         app.logger.info(f"Remote recovery results from {device_id}: {results}")
+        ts = now_cst()
+        for r in results:
+            action  = r.get('action', r.get('action_name', '?'))
+            status  = r.get('status', '?')
+            message = r.get('message', '')
+            level   = 'INFO' if status in ('success', 'queued_remote') else 'WARNING'
+            msg     = f"[REMOTE ACTION] {action} → {status}: {message}"
+            state._device_deque(state.device_logs, device_id, 200).append(
+                {'timestamp': ts, 'level': level, 'message': msg})
+            state.logs.append({'timestamp': ts, 'level': level,
+                                'message': f"[{device_id}] {msg}"})
         return jsonify({'status': 'ok', 'received': len(results)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

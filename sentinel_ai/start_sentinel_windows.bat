@@ -15,10 +15,11 @@ echo.
 :: ── Step 1: Open Windows Firewall ────────────────────────────────────
 echo [1/5] Configuring Windows Firewall...
 netsh advfirewall firewall delete rule name="SentinelAI" >nul 2>&1
-netsh advfirewall firewall add rule name="SentinelAI" dir=out action=allow protocol=TCP remoteport=5001 >nul 2>&1
-netsh advfirewall firewall add rule name="SentinelAI-UDP" dir=in action=allow protocol=UDP localport=47474 >nul 2>&1
-netsh advfirewall firewall add rule name="SentinelAI-UDP-out" dir=out action=allow protocol=UDP remoteport=47474 >nul 2>&1
-echo       Firewall rules set.
+netsh advfirewall firewall add rule name="SentinelAI-out-5001" dir=out action=allow protocol=TCP remoteport=5001 >nul 2>&1
+netsh advfirewall firewall add rule name="SentinelAI-in-5002"  dir=in  action=allow protocol=TCP localport=5002  >nul 2>&1
+netsh advfirewall firewall add rule name="SentinelAI-UDP-in"   dir=in  action=allow protocol=UDP localport=47474 >nul 2>&1
+netsh advfirewall firewall add rule name="SentinelAI-UDP-out"  dir=out action=allow protocol=UDP remoteport=47474 >nul 2>&1
+echo       Firewall rules set (TCP 5001 out, TCP 5002 in, UDP 47474 in/out).
 
 :: ── Step 2: Check Python ─────────────────────────────────────────────
 echo [2/5] Checking Python...

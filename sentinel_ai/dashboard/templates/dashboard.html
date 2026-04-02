@@ -3630,7 +3630,11 @@
         }
 
         async function sendRemoteCmd(action) {
-            if (!selectedDistDevice) return;
+            if (!selectedDistDevice) {
+                const res = document.getElementById('distSimResult');
+                if (res) { res.textContent = 'Select a device first'; res.style.color = '#ff4444'; }
+                return;
+            }
             const enc = encodeURIComponent(selectedDistDevice);
             const res = document.getElementById('distSimResult');
             if (res) res.textContent = action + ' sending…';
