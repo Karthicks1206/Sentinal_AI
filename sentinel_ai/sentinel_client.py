@@ -402,15 +402,12 @@ def _exec_remote_command(action):
         elif action in ('flush_dns', 'algorithmic_network_fix'):
             try:
                 if platform.system() == 'Windows':
-                    import subprocess
                     subprocess.run(['ipconfig', '/flushdns'], capture_output=True, timeout=10)
                     subprocess.run(['netsh', 'winsock', 'reset'], capture_output=True, timeout=10)
                 elif platform.system() == 'Darwin':
-                    import subprocess
                     subprocess.run(['dscacheutil', '-flushcache'], capture_output=True, timeout=5)
                     subprocess.run(['killall', '-HUP', 'mDNSResponder'], capture_output=True, timeout=5)
                 else:
-                    import subprocess
                     subprocess.run(['systemd-resolve', '--flush-caches'], capture_output=True, timeout=5)
                 return {'status': 'success', 'message': 'DNS cache flushed on {}'.format(platform.system())}
             except Exception as e:
@@ -656,7 +653,6 @@ def _exec_remote_command(action):
                         pass
                 return {'status': 'success', 'message': 'algorithmic_memory_fix: EmptyWorkingSet on {} processes'.format(freed)}
             else:
-                import subprocess
                 try:
                     subprocess.run(['sync'], capture_output=True, timeout=5)
                 except Exception:
