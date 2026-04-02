@@ -1,6 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
 title Sentinel AI - Remote Client
+:: Keep window open on any error
+if "%1"=="" (
+    cmd /k "%~f0" RUNNING
+    exit /b
+)
 
 echo ================================================================
 echo   SENTINEL AI - Remote Client Auto-Setup
