@@ -63,21 +63,34 @@ if not defined CLIENT (
 echo       Found: %CLIENT%
 
 :: ── Step 5: Write discovery helper and launch ────────────────────────
-echo [5/5] Discovering Sentinel hub on network...
+echo [5/5] Finding Sentinel hub...
 echo.
 
-:: Write the Python helper to a temp file to avoid batch quoting issues
 set "HELPER=%TEMP%\sentinel_launcher.py"
+set "SAVED_HUB=%~dp0.sentinel_hub"
 
 (
-echo import socket, json, sys, os, time
+echo import socket, json, sys, os, time, threading, concurrent.futures
+echo import urllib.request
 echo.
 echo DISCOVERY_PORT = 47474
 echo DISCOVERY_MSG  = b"SENTINEL_DISCOVER"
-echo device_name = os.environ.get^("SENTINEL_DEVICE", os.environ.get^("COMPUTERNAME", "windows-device"^)^)
-echo client_path = sys.argv[1]
+echo SAVED_FILE     = sys.argv[2]
+echo device_name    = os.environ.get^("SENTINEL_DEVICE", os.environ.get^("COMPUTERNAME", "windows-device"^)^)
+echo client_path    = sys.argv[1]
 echo.
-echo def discover^(timeout=5^):
+echo def try_http^(ip, port=5001, timeout=1^):
+echo     try:
+echo         url = f"http://{ip}:{port}/api/status"
+echo         with urllib.request.urlopen^(url, timeout=timeout^) as r:
+echo             data = json.loads^(r.read^(^)^)
+echo             if data.get^("system_status"^):
+echo                 return f"http://{ip}:{port}"
+echo     except Exception:
+echo         pass
+echo     return None
+echo.
+echo def udp_discover^(timeout=4^):
 echo     try:
 echo         ls = socket.socket^(socket.AF_INET, socket.SOCK_DGRAM^)
 echo         ls.setsockopt^(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1^)
@@ -86,8 +99,7 @@ echo         try:
 echo             ls.bind^(^('', DISCOVERY_PORT^)^)
 echo             data, _ = ls.recvfrom^(1024^)
 echo             info = json.loads^(data.decode^(^)^)
-echo             if info.get^("sentinel_hub"^):
-echo                 return info["url"]
+echo             if info.get^("sentinel_hub"^): return info["url"]
 echo         except Exception:
 echo             pass
 echo         finally:
@@ -102,37 +114,76 @@ echo         s.sendto^(DISCOVERY_MSG, ^("<broadcast>", DISCOVERY_PORT^)^)
 echo         s.sendto^(DISCOVERY_MSG, ^("255.255.255.255", DISCOVERY_PORT^)^)
 echo         data, _ = s.recvfrom^(1024^)
 echo         info = json.loads^(data.decode^(^)^)
-echo         if info.get^("sentinel_hub"^):
-echo             return info["url"]
+echo         if info.get^("sentinel_hub"^): return info["url"]
 echo     except Exception:
 echo         pass
 echo     return None
 echo.
-echo print^("  Scanning network for Sentinel hub..."^)
+echo def subnet_scan^(^):
+echo     try:
+echo         hostname = socket.gethostname^(^)
+echo         local_ip = socket.gethostbyname^(hostname^)
+echo     except Exception:
+echo         return None
+echo     prefix = ".".join^(local_ip.split^("."^)[:3]^)
+echo     print^(f"  Scanning subnet {prefix}.0/24 for hub on port 5001..."^)
+echo     candidates = []
+echo     parts = local_ip.split^("."^)
+echo     last = int^(parts[3]^)
+echo     for i in range^(1, 255^):
+echo         if i != last:
+echo             candidates.append^(f"{prefix}.{i}"^)
+echo     candidates.sort^(key=lambda ip: abs^(int^(ip.split^("."^)[3]^) - last^)^)
+echo     with concurrent.futures.ThreadPoolExecutor^(max_workers=50^) as ex:
+echo         futures = {ex.submit^(try_http, ip^): ip for ip in candidates}
+echo         for f in concurrent.futures.as_completed^(futures^):
+echo             result = f.result^(^)
+echo             if result:
+echo                 ex.shutdown^(wait=False, cancel_futures=True^)
+echo                 return result
+echo     return None
+echo.
 echo hub_url = None
-echo for attempt in range^(3^):
-echo     hub_url = discover^(timeout=4^)
+echo.
+echo if os.path.exists^(SAVED_FILE^):
+echo     with open^(SAVED_FILE^) as f:
+echo         saved = f.read^(^).strip^(^)
+echo     if saved:
+echo         print^(f"  Trying saved hub: {saved}"^)
+echo         hub_url = try_http^(saved.replace^("http://",""^).split^(":"^)[0], timeout=2^)
+echo         if hub_url:
+echo             print^(f"  Connected to saved hub: {hub_url}"^)
+echo.
+echo if not hub_url:
+echo     print^("  Step 1: UDP broadcast discovery..."^)
+echo     hub_url = udp_discover^(^)
 echo     if hub_url:
-echo         break
-echo     print^(f"  Attempt {attempt+1}/3 - retrying..."^)
-echo     time.sleep^(2^)
+echo         print^(f"  Found via UDP: {hub_url}"^)
+echo.
+echo if not hub_url:
+echo     print^("  Step 2: HTTP subnet scan (router blocks UDP - this takes ~10s)..."^)
+echo     hub_url = subnet_scan^(^)
+echo     if hub_url:
+echo         print^(f"  Found via scan: {hub_url}"^)
 echo.
 echo if not hub_url:
 echo     print^(^)
-echo     print^("  Hub not found automatically."^)
+echo     print^("  Could not find hub automatically."^)
 echo     print^("  Make sure the Mac is running ./run.sh"^)
 echo     print^(^)
-echo     hub_url = input^("  Enter hub URL manually (e.g. http://10.0.0.118:5001): "^).strip^(^)
+echo     hub_url = input^("  Enter hub URL (e.g. http://10.0.0.118:5001): "^).strip^(^)
+echo     if hub_url and not hub_url.startswith^("http"^):
+echo         hub_url = "http://" + hub_url
 echo.
 echo if not hub_url:
-echo     print^("No hub URL provided. Exiting."^)
+echo     print^("No hub URL. Exiting."^)
 echo     sys.exit^(1^)
 echo.
-echo print^(f"  Hub: {hub_url}"^)
-echo print^(f"  Device: {device_name}"^)
+echo with open^(SAVED_FILE, "w"^) as f:
+echo     f.write^(hub_url^)
+echo.
 echo print^(^)
 echo print^("================================================================"^)
-echo print^("  Sentinel AI Remote Client Starting..."^)
 echo print^(f"  Hub:    {hub_url}"^)
 echo print^(f"  Device: {device_name}"^)
 echo print^("  Press Ctrl+C to stop"^)
@@ -141,7 +192,7 @@ echo print^(^)
 echo os.execv^(sys.executable, [sys.executable, client_path, "--hub", hub_url, "--device", device_name]^)
 ) > "%HELPER%"
 
-python "%HELPER%" "%CLIENT%"
+python "%HELPER%" "%CLIENT%" "%SAVED_HUB%"
 
 if errorlevel 1 (
     echo.
