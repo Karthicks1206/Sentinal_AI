@@ -529,11 +529,24 @@ class AnomalyDetectionAgent(BaseAgent):
             baseline = self._baselines[bkey]
             baseline.push(value)
 
+            candidates = []
+
+            # Hard threshold floor fires ALWAYS — no warmup gate, no Groq gate.
+            # This guarantees demo/stress anomalies trigger immediately.
+            hit = self._detect_hard_threshold(metric_name, value)
+            if hit:
+                candidates.append(hit)
+
             if not baseline.ready:
+                # Still in warmup — only hard threshold can fire
+                if candidates:
+                    sustained_anomalies.extend(candidates)
                 continue
 
             stats = baseline.stats()
             if stats is None:
+                if candidates:
+                    sustained_anomalies.extend(candidates)
                 continue
 
             if self._metric_anomaly_active.get(bkey, False):
@@ -542,13 +555,6 @@ class AnomalyDetectionAgent(BaseAgent):
                     self.consecutive_counts[bkey] = 0
                     self._metric_anomaly_active[bkey] = False
                     baseline.unfreeze()
-
-            candidates = []
-
-            # Hard threshold floor — fires even when baseline is contaminated
-            hit = self._detect_hard_threshold(metric_name, value)
-            if hit:
-                candidates.append(hit)
 
             hit = self._detect_iqr_outlier(metric_name, value, stats)
             if hit:

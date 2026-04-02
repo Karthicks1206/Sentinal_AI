@@ -429,12 +429,19 @@ def _exec_remote_command(action):
                 for i in range(cores):
                     pid = _os.fork()
                     if pid == 0:
-                        while True: pass  # child: pure spin, killed by parent
+                        x = 1
+                        while True: x = x * x % 9999999999999937
                     _stress_procs.append(pid)
             else:
+                _popen_kw = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if platform.system() == 'Windows':
+                    _popen_kw['creationflags'] = (
+                        getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) |
+                        0x00000020  # ABOVE_NORMAL_PRIORITY_CLASS
+                    )
+                _spin = 'x=1\nwhile True:x=x*x%9999999999999937'
                 for i in range(cores):
-                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    p = subprocess.Popen([sys.executable, '-c', _spin], **_popen_kw)
                     _stress_procs.append(p)
             return {'status': 'success', 'message': 'CPU stress: {} cores pinned'.format(cores)}
 
@@ -488,18 +495,18 @@ def _exec_remote_command(action):
         elif action == 'stop_stress':
             import os as _os, signal as _sig
             _stress_stop.set()
-            alive = [t for t in _stress_threads if t.is_alive()]
             killed = 0
             for p in _stress_procs:
                 try:
                     if isinstance(p, int):
                         _os.kill(p, _sig.SIGKILL)
-                    elif p.poll() is None:
-                        p.terminate()
+                    else:
+                        p.kill()   # SIGKILL on Unix, TerminateProcess on Windows — instant
                     killed += 1
                 except Exception:
                     pass
             _stress_procs.clear()
+            _stress_threads.clear()
             return {'status': 'success', 'message': 'Stopped {} CPU workers'.format(killed)}
 
         elif action == 'demo_cpu':
@@ -510,12 +517,18 @@ def _exec_remote_command(action):
                 for i in range(cores):
                     pid = _os.fork()
                     if pid == 0:
-                        while True: pass
+                        x = 1
+                        while True: x = x * x % 9999999999999937
                     _stress_procs.append(pid)
             else:
+                _popen_kw = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if platform.system() == 'Windows':
+                    _popen_kw['creationflags'] = (
+                        getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) | 0x00000020
+                    )
+                _spin = 'x=1\nwhile True:x=x*x%9999999999999937'
                 for i in range(cores):
-                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    p = subprocess.Popen([sys.executable, '-c', _spin], **_popen_kw)
                     _stress_procs.append(p)
             return {'status': 'success',
                     'message': 'Demo CPU: {} cores pinned — watch Anomaly→Diagnosis→Recovery'.format(cores)}
@@ -549,12 +562,18 @@ def _exec_remote_command(action):
                 for i in range(cores):
                     pid = _os.fork()
                     if pid == 0:
-                        while True: pass
+                        x = 1
+                        while True: x = x * x % 9999999999999937
                     _stress_procs.append(pid)
             else:
+                _popen_kw = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if platform.system() == 'Windows':
+                    _popen_kw['creationflags'] = (
+                        getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) | 0x00000020
+                    )
+                _spin = 'x=1\nwhile True:x=x*x%9999999999999937'
                 for i in range(cores):
-                    p = subprocess.Popen([sys.executable, '-c', 'while True: pass'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    p = subprocess.Popen([sys.executable, '-c', _spin], **_popen_kw)
                     _stress_procs.append(p)
             def _demo_full_mem():
                 try:
