@@ -92,16 +92,16 @@ class GraduatedEscalationTracker:
 
     _ESCALATION_ACTIONS: Dict[str, Dict[int, List[str]]] = {
         'cpu': {
-            1: ['algorithmic_cpu_fix'],
-            2: ['throttle_cpu_process'],
-            3: ['kill_top_cpu_process'],
-            4: ['restart_service', 'compact_memory'],
+            1: ['stop_stress', 'algorithmic_cpu_fix'],
+            2: ['stop_stress', 'throttle_cpu_process'],
+            3: ['stop_stress', 'kill_top_cpu_process'],
+            4: ['stop_stress', 'restart_service', 'compact_memory'],
         },
         'memory': {
-            1: ['algorithmic_memory_fix'],
-            2: ['compact_memory'],
-            3: ['kill_top_memory_process'],
-            4: ['rotate_logs', 'emergency_disk_cleanup'],
+            1: ['stop_stress', 'algorithmic_memory_fix'],
+            2: ['stop_stress', 'compact_memory'],
+            3: ['stop_stress', 'kill_top_memory_process'],
+            4: ['stop_stress', 'rotate_logs', 'emergency_disk_cleanup'],
         },
         'disk': {
             1: ['algorithmic_disk_fix'],
@@ -550,6 +550,7 @@ class RecoveryAgent(BaseAgent):
             'flush_dns': lambda d: self._action_flush_dns(d),
             'rotate_logs': lambda d: self._action_rotate_logs(d),
             'restart_process_by_name': lambda d: self._action_restart_process_by_name(d),
+            'stop_stress': lambda d: {'success': True, 'message': 'stop_stress: no local stress running'},
         }
         handler = handlers.get(action_name)
         if not handler:

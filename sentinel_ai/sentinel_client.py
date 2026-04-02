@@ -296,6 +296,14 @@ def _exec_remote_command(action):
 
         _own_pid = _os.getpid()
 
+        # Build set of stress worker PIDs — works for both fork pids (int) and Popen objects
+        _stress_pids = set()
+        for _sp in _stress_procs:
+            if isinstance(_sp, int):
+                _stress_pids.add(_sp)
+            elif hasattr(_sp, 'pid') and _sp.pid is not None:
+                _stress_pids.add(_sp.pid)
+
         def _safe_kill(proc):
             name = proc.name().lower().replace('.exe', '')
             # Always protect this sentinel_client process
@@ -303,7 +311,7 @@ def _exec_remote_command(action):
                 return False, "protected: sentinel_client main process"
             # Allow killing Python stress worker children (fork/subprocess workers)
             if name in ('python', 'python3') or name.startswith('python3.'):
-                if proc.pid in _stress_procs:
+                if proc.pid in _stress_pids:
                     pass  # it's our stress worker — killable
                 else:
                     return False, "protected python process (pid {})".format(proc.pid)

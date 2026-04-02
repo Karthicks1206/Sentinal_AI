@@ -3580,6 +3580,11 @@
                 window._distDevices = devices;
                 renderDistSidebar(devices);
 
+                // Auto-select first device if none selected yet
+                if (!selectedDistDevice && devices.length > 0) {
+                    selectDistDevice(devices[0].device_id, devices);
+                }
+
                 if (selectedDistDevice) {
                     const d = devices.find(x => x.device_id === selectedDistDevice);
                     if (d) {
