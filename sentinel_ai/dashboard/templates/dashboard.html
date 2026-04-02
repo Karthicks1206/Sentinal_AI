@@ -3705,7 +3705,7 @@
             const _empty = (msg) => `<div style="color:#555;font-size:0.88em;padding:8px 0;text-align:center;">${msg}</div>`;
             const _ts = (t) => (t||'').slice(11,19);
 
-            // Anomaly feed
+            // Anomaly feed — API: [{anomaly:{metric_name,severity,type,value,...}, timestamp}]
             try {
                 const r = await fetch(`/api/devices/${enc}/anomalies`);
                 if (r.ok) {
@@ -3713,22 +3713,25 @@
                     const el = document.getElementById('distAnmFeed');
                     const cnt = document.getElementById('distAnmCount');
                     if (cnt) cnt.textContent = items.length ? items.length + ' detected' : 'none';
-                    if (el) el.innerHTML = items.length ? items.map(a => {
+                    if (el) el.innerHTML = items.length ? items.map(item => {
+                        const a = item.anomaly || item;
                         const sev = a.severity || 'low';
                         const leftCol = {'critical':'#ff4444','high':'#ff8800','medium':'#ffd93d','low':'#00aaff'}[sev] || '#888';
+                        const metric = a.metric_name || a.metric || a.anomaly_type || 'unknown';
+                        const val = a.value;
                         return `<div style="padding:7px 10px;border-radius:6px;background:rgba(255,255,255,0.03);border-left:3px solid ${leftCol};font-size:0.82em;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                                 ${_sevBadge(sev)}
-                                <span style="color:#ddd;font-weight:600;">${a.metric || a.anomaly_type || 'unknown'}</span>
-                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(a.timestamp)}</span>
+                                <span style="color:#ddd;font-weight:600;">${metric}</span>
+                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(item.timestamp || a.timestamp)}</span>
                             </div>
-                            ${a.value != null ? `<div style="color:#888;">value: <span style="color:#ccc;">${typeof a.value === 'number' ? a.value.toFixed(2) : a.value}</span></div>` : ''}
+                            ${val != null ? `<div style="color:#888;">value: <span style="color:#ccc;">${typeof val === 'number' ? val.toFixed(2) : val}</span></div>` : ''}
                         </div>`;
                     }).join('') : _empty('No anomalies detected yet — run a simulation to test the pipeline');
                 }
             } catch {}
 
-            // Diagnosis feed
+            // Diagnosis feed — API: [{diagnosis:{root_cause,diagnosis,confidence,...}, timestamp}]
             try {
                 const r = await fetch(`/api/devices/${enc}/diagnoses`);
                 if (r.ok) {
@@ -3736,12 +3739,13 @@
                     const el = document.getElementById('distDiagFeed');
                     const cnt = document.getElementById('distDiagCount');
                     if (cnt) cnt.textContent = items.length ? items.length + ' completed' : 'none';
-                    if (el) el.innerHTML = items.length ? items.map(d => {
+                    if (el) el.innerHTML = items.length ? items.map(item => {
+                        const d = item.diagnosis || item;
                         const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
                         return `<div style="padding:7px 10px;border-radius:6px;background:rgba(0,212,255,0.04);border-left:3px solid rgba(0,212,255,0.4);font-size:0.82em;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <span style="color:#00d4ff;font-weight:600;">${d.root_cause || 'Unknown cause'}</span>
-                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(d.timestamp)}</span>
+                                <span style="margin-left:auto;color:#555;font-size:0.9em;">${_ts(item.timestamp || d.timestamp)}</span>
                             </div>
                             <div style="color:#aaa;">${d.diagnosis || ''}</div>
                             ${conf != null ? `<div style="margin-top:3px;"><span style="font-size:0.85em;color:#666;">confidence </span><span style="color:#00d4ff;font-size:0.85em;">${conf}%</span></div>` : ''}
