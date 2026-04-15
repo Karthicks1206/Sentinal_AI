@@ -1681,7 +1681,10 @@
 
             
             <div class="card card-sec">
-                <h2>Security <span style="font-size:0.55em;color:#ef4444;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span></h2>
+                <h2>Security
+                    <span id="secDemoBadge" style="font-size:0.55em;color:#ef4444;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">DEMO</span>
+                    <span id="secClaudeBadge" style="display:none;font-size:0.55em;color:#a855f7;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);padding:2px 7px;border-radius:8px;margin-left:5px;vertical-align:middle;">Claude AI</span>
+                </h2>
 
                 <div class="sec-score-ring">
                     <div class="sec-score-circle" id="secScoreCircle">100</div>
@@ -1691,13 +1694,18 @@
                         <div class="sec-threat-count" id="secThreatCount">No threats detected</div>
                         <div class="sec-scanning">
                             <div class="sec-scan-dot"></div>
-                            Scanning every 30s
+                            <span id="secScanInterval">Scanning every 30s</span>
                         </div>
                     </div>
                 </div>
 
+                <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                    <button onclick="secForceScan()" style="flex:1;padding:6px 10px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);color:#a855f7;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:600;" title="Run all 8 threat checks now">Force Scan</button>
+                    <button id="btnSecDemo" onclick="secToggleDemo()" style="flex:1;padding:6px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;cursor:pointer;font-size:0.82em;" title="Toggle synthetic demo threats">Demo: ON</button>
+                </div>
+
                 <div style="font-size:0.75em;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Latest Threats</div>
-                <div class="sec-feed" id="secFeed" style="max-height:160px;">
+                <div class="sec-feed" id="secFeed" style="max-height:200px;">
                     <p class="sec-empty">No threats detected — system is clean.</p>
                 </div>
             </div>
@@ -1736,7 +1744,7 @@
             </div>
             <div class="agent-status">
                 <div class="agent-indicator" id="agent-security"></div>
-                <div>Security Agent <span style="font-size:0.75em;color:#cc44ff;margin-left:6px;">demo</span></div>
+                <div>Security Agent <span id="secAgentBadge" style="font-size:0.75em;color:#cc44ff;margin-left:6px;">demo</span></div>
             </div>
 
             
@@ -1833,18 +1841,27 @@
         
         <div class="card">
             <h2>Simulation Lab — Test Self-Healing</h2>
-            <p style="color:#888;font-size:0.85em;margin-bottom:14px;">
+            <p style="color:#888;font-size:0.85em;margin-bottom:10px;">
                 Inject a controlled instability and watch the AI agents detect, diagnose, and fix it automatically.
             </p>
+
+            <!-- Device selector -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <label style="font-size:0.82em;color:#888;white-space:nowrap;">Target Device:</label>
+                <select id="simDeviceSelect" style="flex:1;background:#1a1a2e;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:0.9em;">
+                    <option value="local">Local Hub (this machine)</option>
+                </select>
+            </div>
+
             <div class="sim-lab">
                 <button class="sim-btn sim-btn-cpu" id="btnCpu" onclick="startSim('cpu_spike')">
                     CPU Spike<br><small style="font-weight:normal;">Saturates all cores</small>
                 </button>
                 <button class="sim-btn sim-btn-mem" id="btnMem" onclick="startSim('memory_pressure')">
-                    Memory Pressure<br><small style="font-weight:normal;">Allocates 20% RAM</small>
+                    Memory Pressure<br><small style="font-weight:normal;">Allocates RAM</small>
                 </button>
                 <button class="sim-btn sim-btn-disk" id="btnDisk" onclick="startSim('disk_fill')">
-                    Disk Fill<br><small style="font-weight:normal;">Writes 200 MB to /tmp</small>
+                    Disk Fill<br><small style="font-weight:normal;">Writes to /tmp</small>
                 </button>
                 <button class="sim-btn sim-btn-power" id="btnPower" onclick="startSim('power_sag')">
                     Power Sag<br><small style="font-weight:normal;">Drops voltage ~0.75 V</small>
@@ -2025,6 +2042,18 @@
                                 ↑ <span id="distNetSent">—</span> &nbsp;↓ <span id="distNetRecv">—</span>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Remote Simulation Controls -->
+                    <div class="card" style="margin-top:0;padding:14px 16px;">
+                        <h2 style="font-size:1em;margin:0 0 10px;">Simulation Lab — <span id="distSimTargetLabel" style="color:#00d4ff;font-size:0.9em;">—</span></h2>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button onclick="distStartSim('cpu_spike')" style="flex:1;min-width:90px;padding:8px 6px;background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.3);color:#ff6b6b;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:600;">CPU Spike</button>
+                            <button onclick="distStartSim('memory_pressure')" style="flex:1;min-width:90px;padding:8px 6px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:600;">Memory Pressure</button>
+                            <button onclick="distStartSim('disk_fill')" style="flex:1;min-width:90px;padding:8px 6px;background:rgba(255,217,61,0.12);border:1px solid rgba(255,217,61,0.3);color:#ffd93d;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:600;">Disk Fill</button>
+                            <button onclick="distStopSim()" style="flex:1;min-width:90px;padding:8px 6px;background:rgba(100,100,100,0.12);border:1px solid rgba(100,100,100,0.3);color:#999;border-radius:6px;cursor:pointer;font-size:0.82em;">Stop All</button>
+                        </div>
+                        <div id="distSimStatus" style="font-size:0.78em;color:#666;margin-top:8px;">No simulation running on this device.</div>
                     </div>
 
                     <!-- Live chart -->
@@ -2766,12 +2795,15 @@
                         const t = item.threat || {};
                         const sev = t.severity || 'low';
                         const icon = SEC_ICONS[t.category] || SEC_ICONS.default;
+                        const ca = t.claude_analysis || null;
                         return `
                         <div class="sec-threat-item sev-${sev}">
                             <div class="sec-threat-icon">${icon}</div>
                             <div class="sec-threat-body">
-                                <div class="sec-threat-title">${t.title || 'Unknown threat'} <span class="sev-badge ${severityClass(sev)}" style="font-size:0.7em;margin-left:4px;">${sev.toUpperCase()}</span></div>
+                                <div class="sec-threat-title">${t.title || 'Unknown threat'} <span class="sev-badge ${severityClass(sev)}" style="font-size:0.7em;margin-left:4px;">${sev.toUpperCase()}</span>${ca ? `<span style="font-size:0.68em;color:#a855f7;margin-left:6px;">[Claude ${ca.confidence || ''}]</span>` : ''}</div>
                                 <div class="sec-threat-detail">${t.detail || ''}</div>
+                                ${ca && ca.analysis ? `<div style="font-size:0.82em;color:#a855f7;margin-top:3px;">AI: ${ca.analysis}</div>` : ''}
+                                ${ca && ca.recommended_action ? `<div style="font-size:0.78em;color:#888;margin-top:2px;">Action: ${ca.recommended_action}</div>` : ''}
                                 <div class="sec-threat-ts">${item.timestamp || ''}</div>
                             </div>
                         </div>`;
@@ -2895,28 +2927,53 @@
             cpu_spike: 'CPU Spike',
             memory_pressure: 'Memory Pressure',
             disk_fill: 'Disk Fill',
+            power_sag: 'Power Sag',
         };
 
         const SIM_DURATIONS = { cpu_spike: 90, memory_pressure: 90, disk_fill: 90, power_sag: 60 };
 
+        // Populate device selector with connected remote devices
+        function refreshSimDeviceSelector() {
+            fetch('/api/devices')
+                .then(r => r.json())
+                .then(devices => {
+                    const sel = document.getElementById('simDeviceSelect');
+                    if (!sel) return;
+                    const cur = sel.value;
+                    // Keep "local" option, rebuild remote options
+                    while (sel.options.length > 1) sel.remove(1);
+                    (Array.isArray(devices) ? devices : []).forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.device_id;
+                        const status = d.status === 'connected' ? '' : ` [${d.status}]`;
+                        opt.textContent = `${d.hostname || d.device_id} (${d.platform})${status}`;
+                        if (d.status !== 'connected') opt.style.color = '#666';
+                        sel.appendChild(opt);
+                    });
+                    if (cur) sel.value = cur;
+                })
+                .catch(() => {});
+        }
+
         function startSim(scenario) {
             const duration = SIM_DURATIONS[scenario] || 90;
+            const deviceSel = document.getElementById('simDeviceSelect');
+            const device_id = deviceSel ? deviceSel.value : 'local';
             fetch(`/api/simulate/start/${scenario}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({duration})
+                body: JSON.stringify({duration, device_id})
             })
             .then(r => r.json())
             .then(res => {
+                const cat = scenario.startsWith('power') ? 'power' :
+                            scenario.startsWith('cpu') ? 'cpu' :
+                            scenario.startsWith('mem') ? 'memory': 'disk';
                 if (res.success) {
-                    showToast({
-                        severity: 'high',
-                        category: scenario.startsWith('power') ? 'power' :
-                                  scenario.startsWith('cpu') ? 'cpu' :
-                                  scenario.startsWith('mem') ? 'memory': 'disk',
-                        title: `Simulation started`,
-                        body: res.message || scenario
-                    });
+                    const target = device_id === 'local' ? 'hub' : device_id;
+                    showToast({ severity: 'high', category: cat,
+                        title: `Simulation started on ${target}`,
+                        body: res.message || scenario });
                 } else {
                     showToast({ severity: 'medium', category: 'default',
                         title: 'Simulation failed', body: res.error || res.message || 'Unknown error' });
@@ -2928,16 +2985,18 @@
         }
 
         function stopAllSims() {
+            const deviceSel = document.getElementById('simDeviceSelect');
+            const device_id = deviceSel ? deviceSel.value : 'local';
             fetch('/api/simulate/stop', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({})
+                body: JSON.stringify({device_id})
             })
             .then(r => r.json())
             .then(res => {
-                const stopped = (res.stopped || []).join(', ') || 'none';
+                const stopped = (res.stopped || []).join(', ') || res.message || 'stopped';
                 showToast({ severity: 'low', category: 'default',
-                    title: 'Simulations stopped', body: `Stopped: ${stopped}` });
+                    title: 'Simulations stopped', body: stopped });
                 updateSimStatus();
             })
             .catch(() => updateSimStatus());
@@ -2946,37 +3005,149 @@
         function updateSimStatus() {
             fetch('/api/simulate/status')
                 .then(r => r.json())
-                .then(status => {
+                .then(data => {
+                    const local  = data.local  || data || {};  // backwards compat
+                    const remote = data.remote || {};
                     const chips = document.getElementById('simChips');
-                    const idle = document.getElementById('simIdleMsg');
-                    const names = Object.keys(status);
+                    const idle  = document.getElementById('simIdleMsg');
 
                     ['cpu_spike', 'memory_pressure', 'disk_fill'].forEach(s => {
                         const btn = document.getElementById(
                             s === 'cpu_spike' ? 'btnCpu' :
                             s === 'memory_pressure' ? 'btnMem' : 'btnDisk'
                         );
-                        if (btn) btn.classList.toggle('active', s in status);
+                        if (btn) btn.classList.toggle('active', s in local);
                     });
 
-                    if (!names.length) {
+                    const allSims = [
+                        ...Object.entries(local).map(([n, s]) => ({
+                            label: SIM_LABELS[n] || n,
+                            detail: `PID ${s.pid}`,
+                            remaining: s.remaining_seconds,
+                            source: 'local',
+                        })),
+                        ...Object.entries(remote).map(([k, s]) => ({
+                            label: SIM_LABELS[s.scenario] || s.scenario,
+                            detail: s.device_id,
+                            remaining: Math.max(0, Math.round(s.duration - (Date.now()/1000 - new Date(s.started_at).getTime()/1000))),
+                            source: 'remote',
+                        })),
+                    ];
+
+                    if (!allSims.length) {
                         idle.style.display = 'block';
                         chips.innerHTML = '';
                         return;
                     }
-
                     idle.style.display = 'none';
-                    chips.innerHTML = names.map(n => {
-                        const s = status[n];
-                        const pct = Math.min(100, Math.round(s.elapsed_seconds / s.duration * 100));
-                        return `
+                    chips.innerHTML = allSims.map(s => `
                         <div class="sim-status-chip">
                             <div class="sim-dot"></div>
-                            ${SIM_LABELS[n] || n}
-                            <span style="color:#aaa;font-weight:normal;">PID ${s.pid}</span>
-                            <span class="sim-duration-bar">${s.remaining_seconds}s left</span>
-                        </div>`;
-                    }).join('');
+                            ${s.label}
+                            <span style="color:#aaa;font-weight:normal;">${s.detail}</span>
+                            <span class="sim-duration-bar">${s.source === 'remote' ? 'remote · ' : ''}${s.remaining}s left</span>
+                        </div>`).join('');
+                })
+                .catch(() => {});
+        }
+
+        // ── Distributed tab simulation controls ──────────────────────────────
+        // distSelectedDeviceId is set by the device-select handler in the distributed tab
+        function distStartSim(scenario) {
+            if (!distSelectedDeviceId) return;
+            const duration = SIM_DURATIONS[scenario] || 90;
+            fetch(`/api/simulate/start/${scenario}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({duration, device_id: distSelectedDeviceId})
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    showToast({ severity: 'high', category: 'cpu',
+                        title: `Sim started on ${distSelectedDeviceId}`,
+                        body: res.message || scenario });
+                    document.getElementById('distSimStatus').textContent =
+                        `Running: ${SIM_LABELS[scenario] || scenario} for ${duration}s`;
+                    document.getElementById('distSimStatus').style.color = '#ff6b6b';
+                } else {
+                    showToast({ severity: 'medium', category: 'default',
+                        title: 'Simulation failed', body: res.error || 'Unknown error' });
+                }
+            })
+            .catch(err => showToast({ severity: 'medium', category: 'default',
+                title: 'Network error', body: String(err) }));
+        }
+
+        function distStopSim() {
+            if (!distSelectedDeviceId) return;
+            fetch('/api/simulate/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({device_id: distSelectedDeviceId})
+            })
+            .then(r => r.json())
+            .then(res => {
+                showToast({ severity: 'low', category: 'default',
+                    title: `Sim stopped on ${distSelectedDeviceId}`,
+                    body: res.message || 'stopped' });
+                document.getElementById('distSimStatus').textContent = 'No simulation running on this device.';
+                document.getElementById('distSimStatus').style.color = '#666';
+            })
+            .catch(() => {});
+        }
+
+        // ── Security panel controls ───────────────────────────────────────────
+        let _secDemoMode = true;
+
+        function secForceScan() {
+            fetch('/api/security/scan', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => {
+                    showToast({ severity: 'low', category: 'security',
+                        title: 'Security scan started', body: 'Results will appear in the threat feed' });
+                })
+                .catch(() => {});
+        }
+
+        function secToggleDemo() {
+            _secDemoMode = !_secDemoMode;
+            fetch('/api/security/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({demo_mode: _secDemoMode})
+            })
+            .then(r => r.json())
+            .then(cfg => {
+                _secDemoMode = cfg.demo_mode !== undefined ? cfg.demo_mode : _secDemoMode;
+                updateSecBadges(cfg);
+            })
+            .catch(() => {});
+        }
+
+        function updateSecBadges(cfg) {
+            const demoBadge   = document.getElementById('secDemoBadge');
+            const claudeBadge = document.getElementById('secClaudeBadge');
+            const agentBadge  = document.getElementById('secAgentBadge');
+            const demoBtn     = document.getElementById('btnSecDemo');
+            if (!cfg) return;
+            const isDemo   = cfg.demo_mode !== false;
+            const hasClaude = !!cfg.claude_enabled;
+            if (demoBadge)   demoBadge.style.display   = isDemo ? '' : 'none';
+            if (claudeBadge) claudeBadge.style.display  = hasClaude ? '' : 'none';
+            if (agentBadge)  agentBadge.textContent     = isDemo ? 'demo' : hasClaude ? 'Claude AI' : 'live';
+            if (agentBadge)  agentBadge.style.color     = hasClaude ? '#a855f7' : isDemo ? '#cc44ff' : '#00ff88';
+            if (demoBtn)     demoBtn.textContent         = `Demo: ${isDemo ? 'ON' : 'OFF'}`;
+            if (demoBtn)     demoBtn.style.color         = isDemo ? '#ef4444' : '#00ff88';
+            if (demoBtn)     demoBtn.style.borderColor   = isDemo ? 'rgba(239,68,68,0.3)' : 'rgba(0,255,136,0.3)';
+        }
+
+        function fetchSecStatus() {
+            fetch('/api/security/status')
+                .then(r => r.json())
+                .then(cfg => {
+                    _secDemoMode = cfg.demo_mode !== false;
+                    updateSecBadges(cfg);
                 })
                 .catch(() => {});
         }
@@ -3429,9 +3600,18 @@
             }).join('');
         }
 
+        // Keep distSelectedDeviceId in sync with selectedDistDevice for sim controls
+        let distSelectedDeviceId = null;
+
         function selectDistDevice(deviceId, devices) {
             try {
                 selectedDistDevice = deviceId;
+                distSelectedDeviceId = deviceId;
+                // Update sim controls label
+                const simLabel = document.getElementById('distSimTargetLabel');
+                if (simLabel) simLabel.textContent = deviceId;
+                const simStatus = document.getElementById('distSimStatus');
+                if (simStatus) { simStatus.textContent = 'No simulation running on this device.'; simStatus.style.color = '#666'; }
 
                 const noSel = document.getElementById('distNoSelection');
                 const view  = document.getElementById('distDeviceView');
@@ -3843,8 +4023,11 @@
         }
 
         setInterval(updateDistributed, 3000); // Distributed tab every 3 seconds
+        setInterval(refreshSimDeviceSelector, 8000); // Keep device selector fresh
 
         loadThresholds();
+        fetchSecStatus();        // Load Claude/demo badge on startup
+        refreshSimDeviceSelector(); // Populate sim device selector
         updateSimStatus();
         updateMetrics();
         updateAgentStatus();

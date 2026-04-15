@@ -159,11 +159,13 @@ class LearningAgent(BaseAgent):
                 executed = sum(1 for a in actions if a.get('status') in ('success', 'failed'))
 
                 if successful > 0:
-                    status = 'success' if successful == executed else 'partial'
+                    # At least one action worked — mark attempted; outcome verification
+                    # in the recovery agent will upgrade to 'resolved' once metric drops
+                    status = 'attempted'
                 elif executed > 0:
                     status = 'failed'
                 else:
-                    status = 'attempted'
+                    status = 'attempted'  # all skipped (cooldown)
 
                 self.database.update_incident(
                     diagnosis_id,

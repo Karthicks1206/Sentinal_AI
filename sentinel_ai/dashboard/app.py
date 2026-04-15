@@ -66,6 +66,8 @@ class DashboardState:
         self.device_recoveries: dict = {}
         self.device_logs: dict = {}
         self.device_history: dict = {}
+        # remote_simulations: {device_id: {scenario, started_at, duration, action_id}}
+        self.remote_simulations: dict = {}
 
     def _device_history(self, device_id: str) -> dict:
         if device_id not in self.device_history:
@@ -405,9 +407,50 @@ def get_recoveries():
 
 @app.route('/api/security/threats')
 def get_security_threats():
-    """Get recent security threats"""
+    """Get recent security threats with Claude analysis."""
     threats = getattr(state, 'security_threats', [])
     return jsonify(list(threats))
+
+
+@app.route('/api/security/status')
+def get_security_status():
+    """Return security agent status (Claude enabled, demo mode, etc.)."""
+    agent = external_agents.get('security')
+    if agent and hasattr(agent, 'get_status'):
+        return jsonify(agent.get_status())
+    return jsonify({'demo_mode': True, 'claude_enabled': False, 'threat_count': 0})
+
+
+@app.route('/api/security/config', methods=['GET', 'POST'])
+def security_config():
+    """GET current config; POST to toggle demo_mode."""
+    agent = external_agents.get('security')
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        if 'demo_mode' in data and agent and hasattr(agent, 'set_demo_mode'):
+            agent.set_demo_mode(bool(data['demo_mode']))
+    status = agent.get_status() if agent and hasattr(agent, 'get_status') else {}
+    return jsonify(status)
+
+
+@app.route('/api/security/scan', methods=['POST'])
+def security_force_scan():
+    """Trigger an immediate on-demand security scan."""
+    agent = external_agents.get('security')
+    if not agent or not hasattr(agent, 'force_scan'):
+        return jsonify({'error': 'Security agent not available'}), 503
+    ts = now_cst()
+    state.logs.append({'timestamp': ts, 'level': 'INFO',
+                       'message': 'SECURITY: Force scan triggered by user'})
+    # Run in background so we don't block the HTTP response
+    def _run():
+        findings = agent.force_scan()
+        state.logs.append({
+            'timestamp': now_cst(), 'level': 'INFO',
+            'message': f'SECURITY: Force scan complete — {len(findings)} threat(s) found'
+        })
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'scan_started'})
 
 
 @app.route('/api/alert')
@@ -511,24 +554,45 @@ def get_incidents():
         result = []
         for row in rows:
             import json as _json
-            actions_raw = row.get('recovery_actions') or '[]'
-            try:
-                actions = _json.loads(actions_raw)
-            except Exception:
-                actions = []
 
-            if any(a.get('status') == 'success' for a in actions):
+            # recovery_actions: PostgreSQL returns JSONB as a Python list/dict already;
+            # SQLite returns a JSON string. Handle both.
+            actions_raw = row.get('recovery_actions') or []
+            if isinstance(actions_raw, str):
+                try:
+                    actions = _json.loads(actions_raw)
+                except Exception:
+                    actions = []
+            else:
+                actions = actions_raw if isinstance(actions_raw, list) else []
+
+            # Only keep dict entries (filter out legacy plain-string action names)
+            actions = [a for a in actions if isinstance(a, dict)]
+
+            # Prefer the DB's recovery_status column (maintained by recovery+learning agents)
+            db_status = row.get('recovery_status') or ''
+            status_map = {
+                'resolved': 'resolved',
+                'success':  'resolved',   # legacy learning-agent name
+                'partial':  'attempted',  # some succeeded, some failed
+                'failed':   'failed',
+                'attempted': 'attempted',
+                'skipped':  'skipped',
+                'in_progress': 'in_progress',
+                'pending':  'pending',
+            }
+            if db_status in status_map:
+                status = status_map[db_status]
+            elif any(a.get('status') == 'success' for a in actions):
                 status = 'resolved'
             elif any(a.get('status') == 'failed' for a in actions):
                 status = 'failed'
-            elif all(a.get('status') == 'skipped' for a in actions) and actions:
-                status = 'attempted'
             elif actions:
                 status = 'attempted'
             else:
                 status = 'detected'
 
-            metrics_raw = row.get('metrics') or '{}'
+            metrics_raw = row.get('metrics') or {}
             try:
                 metrics = _json.loads(metrics_raw) if isinstance(metrics_raw, str) else (metrics_raw or {})
             except Exception:
@@ -596,19 +660,92 @@ def stream():
 
 @app.route('/api/simulate/start/<scenario>', methods=['POST'])
 def simulate_start(scenario):
-    """Start a controlled instability simulation."""
+    """
+    Start a controlled instability simulation on local hub or a remote device.
+
+    Body params:
+      duration   — seconds (default 60)
+      device_id  — omit or "local" for hub; remote device_id for distributed
+    """
+    import uuid as _uuid
     try:
         data = request.get_json(silent=True) or {}
-        duration = float(data.get('duration', 60))
+        duration   = float(data.get('duration', 60))
+        device_id  = (data.get('device_id') or 'local').strip()
+        ts = now_cst()
 
+        # ── Remote device simulation ──────────────────────────────────────────
+        if device_id and device_id != 'local':
+            mgr = _get_remote_manager()
+            # Map dashboard scenario names to sentinel_client action names
+            action_map = {
+                'cpu_spike':        'stress_cpu',
+                'memory_pressure':  'stress_memory',
+                'disk_fill':        'stress_disk',
+                'power_sag':        'stress_cpu',   # best available on remote
+            }
+            action = action_map.get(scenario)
+            if not action:
+                return jsonify({'success': False, 'error': f'Unknown scenario: {scenario}'}), 400
+
+            cmd = {
+                'action_id': str(_uuid.uuid4()),
+                'action': action,
+                'duration': int(duration),
+                'issued_at': datetime.now().isoformat(),
+            }
+
+            # Try direct push first, fall back to queue
+            device = mgr.get_device(device_id)
+            if not device:
+                return jsonify({'success': False, 'error': f'Device {device_id!r} not found'}), 404
+
+            import urllib.request as _ur
+            sent_direct = False
+            cmd_port = device.get('cmd_port', 5002)
+            client_ip = device.get('_remote_addr')
+            if client_ip and cmd_port:
+                try:
+                    payload = json.dumps(cmd).encode()
+                    req = _ur.Request(
+                        f'http://{client_ip}:{cmd_port}/command',
+                        data=payload,
+                        headers={'Content-Type': 'application/json'},
+                    )
+                    with _ur.urlopen(req, timeout=2) as resp:
+                        resp.read()
+                    sent_direct = True
+                except Exception:
+                    pass
+            if not sent_direct:
+                mgr.queue_command(device_id, cmd)
+
+            # Track remote simulation in state
+            state.remote_simulations[f"{device_id}:{scenario}"] = {
+                'device_id': device_id,
+                'scenario': scenario,
+                'action': action,
+                'started_at': datetime.now().isoformat(),
+                'duration': duration,
+                'method': 'direct' if sent_direct else 'queued',
+            }
+
+            msg = f"SIM START [remote:{device_id}]: {action} for {int(duration)}s ({'direct' if sent_direct else 'queued'})"
+            state.logs.append({'timestamp': ts, 'level': 'WARNING', 'message': msg})
+            return jsonify({
+                'success': True, 'device_id': device_id, 'scenario': scenario,
+                'action': action, 'duration': duration,
+                'method': 'direct' if sent_direct else 'queued',
+                'message': msg,
+            })
+
+        # ── Local simulation ──────────────────────────────────────────────────
         if scenario == 'power_sag':
             monitoring_agent = external_agents.get('monitoring')
             if monitoring_agent and hasattr(monitoring_agent, 'trigger_power_event'):
                 monitoring_agent.trigger_power_event(sag_volts=0.75, duration_seconds=duration)
-                ts = now_cst()
                 state.logs.append({
-                    'timestamp': ts,
-                    'level': 'WARNING',
+                    'timestamp': ts, 'level': 'WARNING',
                     'message': f"SIM START: Power sag simulation — voltage dropping ~0.75 V for {int(duration)}s"
                 })
                 return jsonify({'success': True, 'message': f'Power sag started for {int(duration)}s'})
@@ -619,10 +756,8 @@ def simulate_start(scenario):
         result = runner.start(scenario, duration=duration)
 
         if result.get('success'):
-            ts = now_cst()
             state.logs.append({
-                'timestamp': ts,
-                'level': 'WARNING',
+                'timestamp': ts, 'level': 'WARNING',
                 'message': f"SIM START: {result.get('message', scenario)}"
             })
         return jsonify(result)
@@ -632,18 +767,60 @@ def simulate_start(scenario):
 
 @app.route('/api/simulate/stop', methods=['POST'])
 def simulate_stop():
-    """Stop a specific simulation or all simulations."""
+    """Stop simulations — local and/or remote."""
+    import uuid as _uuid
     try:
-        from simulation.instability_runner import InstabilityRunner
         data = request.get_json(silent=True) or {}
-        scenario = data.get('scenario')
+        scenario  = data.get('scenario')
+        device_id = (data.get('device_id') or 'local').strip()
+        ts = now_cst()
+
+        # ── Stop remote simulation ────────────────────────────────────────────
+        if device_id and device_id != 'local':
+            mgr = _get_remote_manager()
+            cmd = {
+                'action_id': str(_uuid.uuid4()),
+                'action': 'stop_stress',
+                'issued_at': datetime.now().isoformat(),
+            }
+            device = mgr.get_device(device_id)
+            import urllib.request as _ur
+            sent_direct = False
+            if device:
+                cmd_port  = device.get('cmd_port', 5002)
+                client_ip = device.get('_remote_addr')
+                if client_ip and cmd_port:
+                    try:
+                        payload = json.dumps(cmd).encode()
+                        req = _ur.Request(
+                            f'http://{client_ip}:{cmd_port}/command',
+                            data=payload,
+                            headers={'Content-Type': 'application/json'},
+                        )
+                        with _ur.urlopen(req, timeout=2) as resp:
+                            resp.read()
+                        sent_direct = True
+                    except Exception:
+                        pass
+            if not sent_direct:
+                mgr.queue_command(device_id, cmd)
+
+            # Remove from remote tracking
+            keys_to_rm = [k for k in state.remote_simulations
+                          if k.startswith(f"{device_id}:")]
+            for k in keys_to_rm:
+                state.remote_simulations.pop(k, None)
+
+            msg = f"SIM STOP [remote:{device_id}]: stop_stress sent ({'direct' if sent_direct else 'queued'})"
+            state.logs.append({'timestamp': ts, 'level': 'INFO', 'message': msg})
+            return jsonify({'success': True, 'message': msg})
+
+        # ── Stop local simulation(s) ──────────────────────────────────────────
+        from simulation.instability_runner import InstabilityRunner
         runner = InstabilityRunner.get_instance()
         result = runner.stop(scenario) if scenario else runner.stop_all()
-
-        ts = now_cst()
         state.logs.append({
-            'timestamp': ts,
-            'level': 'INFO',
+            'timestamp': ts, 'level': 'INFO',
             'message': f"SIM STOP: {result.get('message', str(result))}"
         })
         return jsonify(result)
@@ -653,11 +830,26 @@ def simulate_stop():
 
 @app.route('/api/simulate/status')
 def simulate_status():
-    """Get status of all active simulations."""
+    """Return status of all active simulations — local and remote."""
     try:
         from simulation.instability_runner import InstabilityRunner
         runner = InstabilityRunner.get_instance()
-        return jsonify(runner.get_status())
+        local = runner.get_status()
+
+        # Prune stale remote entries (past their duration)
+        now = datetime.now()
+        stale = []
+        for key, rs in state.remote_simulations.items():
+            try:
+                started = datetime.fromisoformat(rs['started_at'])
+                if (now - started).total_seconds() > rs['duration'] + 30:
+                    stale.append(key)
+            except Exception:
+                stale.append(key)
+        for k in stale:
+            state.remote_simulations.pop(k, None)
+
+        return jsonify({'local': local, 'remote': dict(state.remote_simulations)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

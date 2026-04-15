@@ -567,18 +567,13 @@ class SecurityAgent(BaseAgent):
                 f'"confidence": "low|medium|high"}}'
             )
 
-            import anthropic
-            with self._claude_client.messages.stream(
-                model    = self._claude_model,
+            response = self._claude_client.messages.create(
+                model      = self._claude_model,
                 max_tokens = 512,
-                thinking   = {"type": "adaptive"},
                 messages   = [{"role": "user", "content": prompt}],
-            ) as stream:
-                response = stream.get_final_message()
+            )
 
-            text = next(
-                (b.text for b in response.content if b.type == "text"), "{}"
-            ).strip()
+            text = response.content[0].text.strip() if response.content else "{}"
 
             # Strip markdown fences if present
             if text.startswith("```"):
@@ -698,6 +693,40 @@ class SecurityAgent(BaseAgent):
             f"[SECURITY]{ai_tag} {pub['severity'].upper()} — "
             f"{pub['title']}: {pub['detail']}"
         )
+
+    def force_scan(self) -> list:
+        """
+        Run an immediate on-demand scan outside the regular interval.
+        Returns list of published threats (already sent to event bus).
+        """
+        published = []
+        try:
+            findings = self._scan_raw()
+            for threat in findings:
+                enriched = self._claude_analyse(threat)
+                self._publish_threat(enriched)
+                if not enriched.get('suppressed'):
+                    published.append({k: v for k, v in enriched.items()
+                                      if k not in ('raw_data', 'suppressed')})
+        except Exception as exc:
+            self.logger.error(f"Force scan error: {exc}", exc_info=True)
+        return published
+
+    def get_status(self) -> dict:
+        """Return current security agent status for API."""
+        return {
+            'demo_mode': self.demo_mode,
+            'claude_enabled': self._claude_client is not None,
+            'claude_model': self._claude_model if self._claude_client else None,
+            'scan_interval': self.scan_interval,
+            'threat_count': len(self.threat_history),
+            'allowlist_ports': sorted(self._expected_ports),
+        }
+
+    def set_demo_mode(self, enabled: bool):
+        """Toggle demo mode at runtime."""
+        self.demo_mode = enabled
+        self.logger.info(f"Security demo_mode set to {enabled}")
 
     def process_event(self, event):
         pass

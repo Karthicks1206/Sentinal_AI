@@ -34,11 +34,13 @@ class Database:
     def connection(self) -> sqlite3.Connection:
         """Get thread-local database connection"""
         if not hasattr(self._local, 'connection'):
-            self._local.connection = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False
-            )
-            self._local.connection.row_factory = sqlite3.Row
+            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            # WAL mode: multiple readers + writer can coexist without "database is locked"
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+            self._local.connection = conn
         return self._local.connection
 
     def _init_db(self):
@@ -158,7 +160,7 @@ class Database:
         now = datetime.utcnow().isoformat()
 
         cursor = self.connection.execute("""
-            INSERT INTO incidents (
+            INSERT OR IGNORE INTO incidents (
                 incident_id, timestamp, device_id, anomaly_type, severity,
                 metrics, diagnosis, root_cause, recovery_actions, recovery_status,
                 resolution_time_seconds, created_at, updated_at

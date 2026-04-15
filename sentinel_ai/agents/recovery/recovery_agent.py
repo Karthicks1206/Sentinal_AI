@@ -351,24 +351,48 @@ class RecoveryAgent(BaseAgent):
                     f"— adding: {extra}"
                 )
 
+            incident_id = diagnosis.get('diagnosis_id')
+
             results = self.execute_recovery_actions(
                 all_actions, diagnosis, device_id, timestamp,
                 anomaly=anomaly, escalation_level=level
             )
+
+            # ── Update incident status in DB ──────────────────────────────
+            if self.database and incident_id:
+                try:
+                    non_skipped = [r for r in results if r.get('status') != 'skipped']
+                    if not non_skipped:
+                        new_status = 'skipped'
+                    elif all(r.get('status') == 'failed' for r in non_skipped):
+                        new_status = 'failed'
+                    else:
+                        new_status = 'attempted'
+                    action_names = [r.get('action_name') for r in results
+                                    if r.get('action_name')]
+                    self.database.update_incident(incident_id, {
+                        'recovery_status': new_status,
+                        'recovery_actions': json.dumps(action_names),
+                    })
+                except Exception as db_err:
+                    self.logger.warning(f"DB status update failed: {db_err}")
+
+            # Populate recent_actions for monitoring/testing
+            self.recent_actions = results[-50:]  # keep last 50
 
             self.publish_event(
                 event_type="recovery.action",
                 data={
                     'device_id': device_id,
                     'timestamp': timestamp,
-                    'diagnosis_id': diagnosis.get('diagnosis_id'),
+                    'diagnosis_id': incident_id,
                     'actions': results,
                     'escalation_level': level,
                 },
                 priority=EventPriority.HIGH,
             )
 
-            self._schedule_verification(metric_name, anomaly, results)
+            self._schedule_verification(metric_name, anomaly, results, incident_id)
 
         except Exception as e:
             self.logger.error(f"Recovery event error: {e}", exc_info=True)
@@ -381,9 +405,13 @@ class RecoveryAgent(BaseAgent):
         metrics = event.data.get('metrics', {})
         with self._verification_lock:
             expired = []
-            for metric_name, (check_at, anomaly_value, anomaly_type) in list(
-                self._pending_verifications.items()
-            ):
+            for metric_name, entry in list(self._pending_verifications.items()):
+                # Support both old 3-tuple and new 4-tuple (with incident_id)
+                if len(entry) == 4:
+                    check_at, anomaly_value, anomaly_type, incident_id = entry
+                else:
+                    check_at, anomaly_value, anomaly_type = entry
+                    incident_id = None
                 if now < check_at:
                     continue
                 expired.append(metric_name)
@@ -396,6 +424,15 @@ class RecoveryAgent(BaseAgent):
                             f"(was {anomaly_value:.1f}, now {current_value:.1f})"
                         )
                         self.escalation.reset(metric_name)
+                        # Mark incident as fully resolved in DB
+                        if self.database and incident_id:
+                            try:
+                                self.database.update_incident(incident_id, {
+                                    'recovery_status': 'resolved',
+                                    'resolution_time_seconds': 30,
+                                })
+                            except Exception:
+                                pass
                     else:
                         self.logger.warning(
                             f"Outcome verification: '{metric_name}' NOT recovered "
@@ -1230,15 +1267,19 @@ class RecoveryAgent(BaseAgent):
         return {'success': True, 'message': f"No running '{process_name}' processes found"}
 
 
-    def _schedule_verification(self, metric_name: str, anomaly: Dict, results: List[Dict]):
-        """Schedule a 30s outcome check if at least one action succeeded."""
-        if not any(r.get('status') == 'success' for r in results):
+    def _schedule_verification(self, metric_name: str, anomaly: Dict,
+                               results: List[Dict], incident_id: str = None):
+        """Schedule a 30s outcome check if at least one action ran (not skipped)."""
+        non_skipped = [r for r in results if r.get('status') != 'skipped']
+        if not non_skipped:
             return
         anomaly_value = anomaly.get('value', 0)
         anomaly_type = anomaly.get('type', 'unknown')
         check_at = datetime.utcnow() + timedelta(seconds=30)
         with self._verification_lock:
-            self._pending_verifications[metric_name] = (check_at, anomaly_value, anomaly_type)
+            self._pending_verifications[metric_name] = (
+                check_at, anomaly_value, anomaly_type, incident_id
+            )
         self.logger.info(
             f"Outcome verification scheduled for '{metric_name}' in 30s "
             f"(anomaly value was {anomaly_value:.1f})"

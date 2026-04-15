@@ -13,6 +13,7 @@ Tests multi-agent system step-by-step:
 import sys
 import time
 import threading
+import multiprocessing
 import psutil
 from pathlib import Path
 from datetime import datetime
@@ -90,9 +91,10 @@ class TestWorkflow:
         def track_recovery(event):
             self.events_received['recovery.action'].append(event)
             print(f"\n RECOVERY ACTIONS:")
-            for action in event.data['actions']:
-                status_icon = "" if action['status'] == 'success' else ""
-                print(f" {status_icon} {action['action_name']}: {action['message']}")
+            for action in event.data.get('actions', []):
+                status_icon = "" if action.get('status') == 'success' else ""
+                msg = action.get('message') or action.get('result') or ''
+                print(f" {status_icon} {action.get('action_name', '?')}: {msg}")
 
         self.event_bus.subscribe("health.metric", track_health_metric)
         self.event_bus.subscribe("anomaly.detected", track_anomaly)
@@ -145,6 +147,37 @@ class TestWorkflow:
 
         print(" All agents initialized\n")
 
+    def _seed_baselines(self):
+        """
+        Inject 20 normal-range readings into each metric baseline so the
+        warmup gate is already satisfied before the anomaly tests run.
+        Uses current live values so the baseline matches this machine's real state.
+        This avoids the 75-second real-time wait (15 readings × 5s).
+        """
+        from agents.anomaly.anomaly_detection_agent import AdaptiveMetricBaseline
+
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        cpu_base = 15.0
+        mem_base = round(mem.percent, 1)
+        disk_base = round(disk.percent, 1)
+
+        normal_values = {
+            'cpu.cpu_percent':       [cpu_base] * 20,
+            'memory.memory_percent': [mem_base] * 20,
+            'disk.disk_percent':     [disk_base] * 20,
+        }
+        anomaly_agent = self.agents['anomaly']
+        for metric_key, values in normal_values.items():
+            bl = anomaly_agent._baselines.get(metric_key)
+            if bl is None:
+                bl = AdaptiveMetricBaseline(window_size=300)
+                anomaly_agent._baselines[metric_key] = bl
+            for v in values:
+                bl.window.append(v)
+                bl.short_window.append(v)
+        print(f" Baselines seeded — cpu={cpu_base}% mem={mem_base}% disk={disk_base}% — warmup complete")
+
     def start_agents(self):
         """Start all agents"""
         print("Starting agents...")
@@ -153,6 +186,7 @@ class TestWorkflow:
             print(f" {name} started")
         print()
         time.sleep(2)
+        self._seed_baselines()
 
     def stop_agents(self):
         """Stop all agents"""
@@ -218,7 +252,7 @@ class TestWorkflow:
 
         self.events_received['health.metric'].clear()
 
-        for i in range(15):
+        for i in range(25):
             time.sleep(1)
             count = len(self.events_received['health.metric'])
             print(f" Metrics collected: {count}/3", end='\r')
@@ -250,21 +284,19 @@ class TestWorkflow:
         self.events_received['anomaly.detected'].clear()
         self.events_received['diagnosis.complete'].clear()
 
-        stop_event = threading.Event()
-
-        def cpu_stress():
-            """CPU intensive task"""
-            while not stop_event.is_set():
-                _ = sum(i*i for i in range(100000))
-
         cpu_count = psutil.cpu_count()
-        threads = []
 
-        print(f" Starting {cpu_count} CPU stress threads...")
+        def _cpu_worker():
+            """Pure CPU burn — runs in a subprocess to bypass the GIL."""
+            while True:
+                _ = sum(i * i for i in range(200000))
+
+        procs = []
+        print(f" Starting {cpu_count} CPU stress processes (multiprocessing)...")
         for _ in range(cpu_count):
-            t = threading.Thread(target=cpu_stress, daemon=True)
-            t.start()
-            threads.append(t)
+            p = multiprocessing.Process(target=_cpu_worker, daemon=True)
+            p.start()
+            procs.append(p)
 
         print(" Waiting for anomaly detection (max 30s)...")
         detected = False
@@ -280,9 +312,10 @@ class TestWorkflow:
                 detected = True
                 break
 
-        stop_event.set()
-        for t in threads:
-            t.join(timeout=1)
+        for p in procs:
+            p.terminate()
+        for p in procs:
+            p.join(timeout=2)
 
         print(f"\n CPU stress stopped")
 
@@ -313,7 +346,8 @@ class TestWorkflow:
         mem = psutil.virtual_memory()
         available_mb = mem.available / (1024 * 1024)
 
-        target_mb = int(available_mb * 0.3)
+        # Cap at 800 MB — prevents OOM on Pi; enough to spike well above baseline
+        target_mb = min(int(available_mb * 0.3), 800)
         print(f" Allocating {target_mb}MB memory...")
 
         memory_hog = []
