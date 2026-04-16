@@ -2812,7 +2812,7 @@
                 .catch(() => {});
         }
 
-        const WARMUP_MS = 3 * 60 * 1000;
+        const WARMUP_MS = 30 * 1000; // demo: 30s warmup (was 3 min)
         const _startTime = Date.now();
         function _warmedUp() { return (Date.now() - _startTime) >= WARMUP_MS; }
 

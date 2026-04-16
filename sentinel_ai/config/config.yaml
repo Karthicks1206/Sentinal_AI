@@ -61,7 +61,7 @@ anomaly_detection:
   min_consecutive_readings: 2
 
   # Cooldown: once an anomaly fires for a metric, suppress re-fires for N min.
-  cooldown_minutes: 5
+  cooldown_minutes: 1  # demo: 1 min cooldown (was 5 min)
 
   # Statistical method tuning (all bounds still derive from learned data)
   methods:
