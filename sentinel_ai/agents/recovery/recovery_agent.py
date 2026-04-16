@@ -198,7 +198,7 @@ class RecoveryAgent(BaseAgent):
         self.retry_delay = self.recovery_config.get('retry_delay_seconds', 5)
         self.cooldown_period = self.recovery_config.get('cooldown_period_seconds', 300)
 
-        self.action_cooldowns: Dict[str, datetime] = {}
+        self.action_cooldowns: Dict[tuple, datetime] = {}  # keyed by (device_id, action_name)
         self.recent_actions: List[Dict] = []
 
         self.escalation = GraduatedEscalationTracker(
@@ -464,7 +464,7 @@ class RecoveryAgent(BaseAgent):
                 self.logger.info(f"Action '{action_name}' disabled in config — skipping")
                 continue
 
-            if self._is_in_cooldown(action_name):
+            if self._is_in_cooldown(device_id, action_name):
                 self.logger.info(f"Action '{action_name}' in cooldown — skipping")
                 results.append({
                     'action_name': action_name,
@@ -517,7 +517,7 @@ class RecoveryAgent(BaseAgent):
                 except Exception as db_err:
                     self.logger.warning(f"DB store failed (recovery still executed): {db_err}")
 
-            self._set_cooldown(action_name)
+            self._set_cooldown(device_id, action_name)
             self.logger.info(
                 f"Recovery [{action_name}] L{escalation_level}: "
                 f"{result.get('status')} — {result.get('message')}"
@@ -1298,12 +1298,12 @@ class RecoveryAgent(BaseAgent):
         return float(node) if isinstance(node, (int, float)) else None
 
 
-    def _is_in_cooldown(self, action_name: str) -> bool:
-        until = self.action_cooldowns.get(action_name)
+    def _is_in_cooldown(self, device_id: str, action_name: str) -> bool:
+        until = self.action_cooldowns.get((device_id, action_name))
         return until is not None and datetime.utcnow() < until
 
-    def _set_cooldown(self, action_name: str):
-        self.action_cooldowns[action_name] = datetime.utcnow() + timedelta(seconds=self.cooldown_period)
+    def _set_cooldown(self, device_id: str, action_name: str):
+        self.action_cooldowns[(device_id, action_name)] = datetime.utcnow() + timedelta(seconds=self.cooldown_period)
 
     def _cleanup_cooldowns(self):
         now = datetime.utcnow()

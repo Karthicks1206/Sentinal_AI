@@ -304,7 +304,7 @@ simulation:
       duration_seconds: 120
 
 database:
-  backend: "postgres"                        # "postgres" | "sqlite"
+  backend: "sqlite"                          # "postgres" | "sqlite"
   postgres:
     host:     "${PG_HOST:-localhost}"
     port:     5432
