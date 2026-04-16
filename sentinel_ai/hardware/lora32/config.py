@@ -36,6 +36,8 @@ LORA_BUSY = 13   # SX1262-specific BUSY pin
 # ── OLED display (SSD1306 128×64, I2C) ───────────────────────────────────────
 OLED_SDA = 17
 OLED_SCL = 18
+OLED_RST = 21     # OLED reset pin (active low)
+VEXT_CTRL = 36    # External power enable (LOW = on)
 OLED_WIDTH = 128
 OLED_HEIGHT = 64
 

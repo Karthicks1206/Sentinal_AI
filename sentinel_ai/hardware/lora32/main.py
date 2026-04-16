@@ -29,9 +29,23 @@ def _init_oled():
     try:
         import ssd1306
         from machine import Pin, SoftI2C
+        # Enable VEXT power rail (drives OLED VCC on Heltec V3)
+        try:
+            Pin(config.VEXT_CTRL, Pin.OUT).value(0)  # LOW = on
+        except Exception:
+            pass
+        utime.sleep_ms(200)
+        # Reset OLED (active low pulse)
+        rst = Pin(config.OLED_RST, Pin.OUT)
+        rst.value(0); utime.sleep_ms(50)
+        rst.value(1); utime.sleep_ms(50)
         i2c = SoftI2C(scl=Pin(config.OLED_SCL), sda=Pin(config.OLED_SDA))
+        if 0x3C not in i2c.scan():
+            print("[oled] SSD1306 not found on I2C bus")
+            return
         _oled = ssd1306.SSD1306_I2C(config.OLED_WIDTH, config.OLED_HEIGHT, i2c)
         _OLED = True
+        print("[oled] ready")
     except Exception as e:
         print("[oled] Init failed:", e)
 
