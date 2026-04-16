@@ -40,8 +40,9 @@ OLED_WIDTH = 128
 OLED_HEIGHT = 64
 
 # ── Sensor GPIO pins ──────────────────────────────────────────────────────────
-# DHT22 temperature + humidity sensor
-DHT_PIN = 38          # Connect DHT22 data pin here
+# AHT20 temperature + humidity sensor (I2C, address 0x38)
+AHT20_SDA = 1         # I2C SDA pin
+AHT20_SCL = 40        # I2C SCL pin
 # Analog voltage sensor (voltage divider on ADC)
 VOLTAGE_PIN = 7       # ADC pin for voltage reading
 

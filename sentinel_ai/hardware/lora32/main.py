@@ -116,24 +116,44 @@ def lora_init():
 
 
 # ── Sensors ───────────────────────────────────────────────────────────────────
-_dht = None
+_i2c_sensor = None
 
 def _init_sensors():
-    global _dht
+    global _i2c_sensor
     try:
-        import dht
-        from machine import Pin
-        _dht = dht.DHT22(Pin(config.DHT_PIN))
-        print("[sensor] DHT22 ready on GPIO", config.DHT_PIN)
+        from machine import Pin, SoftI2C
+        i2c = SoftI2C(scl=Pin(config.AHT20_SCL), sda=Pin(config.AHT20_SDA), freq=100000)
+        devs = i2c.scan()
+        if 0x38 not in devs:
+            print("[sensor] AHT20 not found on I2C bus (SDA={} SCL={})".format(
+                  config.AHT20_SDA, config.AHT20_SCL))
+            return
+        # Soft reset + calibrate
+        i2c.writeto(0x38, bytes([0xBA]))
+        utime.sleep_ms(20)
+        i2c.writeto(0x38, bytes([0xBE, 0x08, 0x00]))
+        utime.sleep_ms(10)
+        _i2c_sensor = i2c
+        print("[sensor] AHT20 ready on SDA={} SCL={}".format(
+              config.AHT20_SDA, config.AHT20_SCL))
     except Exception as e:
-        print("[sensor] DHT22 init failed:", e)
+        print("[sensor] AHT20 init failed:", e)
 
 def _read_dht():
-    if _dht is None:
+    if _i2c_sensor is None:
         return None, None
     try:
-        _dht.measure()
-        return _dht.temperature(), _dht.humidity()
+        _i2c_sensor.writeto(0x38, bytes([0xAC, 0x33, 0x00]))
+        utime.sleep_ms(80)
+        for _ in range(10):
+            d = _i2c_sensor.readfrom(0x38, 1)
+            if not (d[0] & 0x80):
+                break
+            utime.sleep_ms(10)
+        d = _i2c_sensor.readfrom(0x38, 7)
+        h = ((d[1] << 12) | (d[2] << 4) | (d[3] >> 4)) / 2**20 * 100
+        t = ((d[3] & 0x0F) << 16 | (d[4] << 8) | d[5]) / 2**20 * 200 - 50
+        return round(t, 1), round(h, 1)
     except Exception:
         return None, None
 
@@ -235,7 +255,7 @@ def push_serial(metrics):
             "timestamp": utime.time(),
             "metrics": metrics,
         })
-        print("SENTINEL:" + payload)  # Pi lora_bridge.py looks for this prefix
+        print(payload)  # Pi lora_gateway_serial.py expects raw JSON lines
         return True
     except Exception as e:
         print("[push] Serial error:", e)
