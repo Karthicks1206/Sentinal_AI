@@ -704,7 +704,7 @@ def simulate_start(scenario):
             sent_direct = False
             cmd_port = device.get('cmd_port', 5002)
             client_ip = device.get('_remote_addr')
-            if client_ip and cmd_port:
+            if client_ip and cmd_port and int(cmd_port) > 0:
                 try:
                     payload = json.dumps(cmd).encode()
                     req = _ur.Request(

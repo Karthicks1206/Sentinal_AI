@@ -78,6 +78,7 @@ def register_device(hub_url, device_id, platform="MicroPython-ESP32S3"):
                 "hostname": device_id,
                 "platform": platform,
                 "version": "Heltec LoRa32 V3",
+                "cmd_port": 0,   # 0 = no direct command endpoint; hub must use queue
             },
             timeout=5,
         )
