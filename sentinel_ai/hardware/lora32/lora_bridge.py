@@ -14,6 +14,7 @@ import json
 import logging
 import signal
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -150,6 +151,48 @@ def parse_line(line: str):
     return device_id, metrics, timestamp
 
 
+# ── Command action → serial string translation ───────────────────────────────
+def _action_to_serial(action: str, duration: int) -> str | None:
+    """Translate a hub command action into a CMD string for the LoRa32 firmware."""
+    if action in ('stress_cpu', 'cpu_spike', 'cpu_overload'):
+        return f"CMD:cpu_stress:{duration}\n"
+    if action in ('stop_stress', 'stop_simulation'):
+        return "CMD:stop_stress\n"
+    return None
+
+
+# ── Command poller — polls hub for queued commands, writes to serial ──────────
+def _command_poller(hub_url: str, device_id: str, ser_ref: list, interval: float = 3.0):
+    """
+    Background thread: polls GET /api/devices/<id>/commands every `interval` seconds.
+    Translates each command to a serial string and writes it to the LoRa32.
+    ser_ref is a list holding the current serial.Serial instance so reconnects work.
+    """
+    url = hub_url.rstrip('/') + f'/api/devices/{device_id}/commands'
+    while _running:
+        try:
+            resp = requests.get(url, timeout=3)
+            if resp.status_code == 200:
+                cmds = resp.json().get('commands', [])
+                for cmd in cmds:
+                    action   = cmd.get('action', '')
+                    duration = int(cmd.get('duration', 60))
+                    serial_cmd = _action_to_serial(action, duration)
+                    if serial_cmd:
+                        ser = ser_ref[0]
+                        if ser and ser.is_open:
+                            ser.write(serial_cmd.encode())
+                            log.info("CMD → LoRa32: %s (action=%s dur=%ds)",
+                                     serial_cmd.strip(), action, duration)
+                        else:
+                            log.warning("Serial not open, dropping cmd: %s", serial_cmd.strip())
+                    else:
+                        log.debug("Unhandled action from hub: %s", action)
+        except Exception as e:
+            log.debug("Command poll error: %s", e)
+        time.sleep(interval)
+
+
 # ── Main bridge loop ──────────────────────────────────────────────────────────
 def run_bridge(hub_url: str, port: str, baud: int):
     signal.signal(signal.SIGINT, _signal_handler)
@@ -163,6 +206,23 @@ def run_bridge(hub_url: str, port: str, baud: int):
         sys.exit(1)
 
     log.info("Bridge running. Hub: %s", hub_url)
+
+    # ser_ref: mutable container so the poller thread sees reconnected instances
+    ser_ref = [ser]
+    first_device_seen: list[str] = []
+
+    def _start_poller(device_id: str):
+        if device_id not in first_device_seen:
+            first_device_seen.append(device_id)
+            t = threading.Thread(
+                target=_command_poller,
+                args=(hub_url, device_id, ser_ref),
+                daemon=True,
+                name=f'CmdPoller-{device_id}',
+            )
+            t.start()
+            log.info("Command poller started for %s", device_id)
+
     ok_count = 0
     fail_count = 0
 
@@ -185,9 +245,10 @@ def run_bridge(hub_url: str, port: str, baud: int):
 
             device_id, metrics, timestamp = result
 
-            # Register once per device
+            # Register once per device + start command poller
             if device_id not in _registered:
                 register_device(hub_url, device_id)
+                _start_poller(device_id)
 
             ok = push_metrics(hub_url, device_id, metrics, timestamp)
             if ok:
@@ -209,6 +270,7 @@ def run_bridge(hub_url: str, port: str, baud: int):
             try:
                 ser.close()
                 ser = serial.Serial(port, baud, timeout=2)
+                ser_ref[0] = ser   # update reference for poller thread
             except Exception:
                 pass
         except Exception as e:
