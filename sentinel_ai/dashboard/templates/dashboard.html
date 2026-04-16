@@ -1946,7 +1946,7 @@
                     </div>
 
                     <!-- Live vitals strip -->
-                    <div id="distVitalsStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+                    <div id="distVitalsStrip" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">
                         <div class="card" style="padding:14px 16px;text-align:center;background:rgba(0,212,255,0.05);border-color:rgba(0,212,255,0.15);">
                             <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">CPU</div>
                             <div id="distVitalCpu" style="font-size:1.9em;font-weight:700;color:#00d4ff;font-variant-numeric:tabular-nums;">—</div>
@@ -1966,6 +1966,11 @@
                             <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Ping</div>
                             <div id="distVitalNet" style="font-size:1.9em;font-weight:700;color:#00ff88;font-variant-numeric:tabular-nums;">—</div>
                             <div id="distVitalNetSub" style="font-size:0.68em;color:#666;margin-top:2px;">—</div>
+                        </div>
+                        <div class="card" id="distVitalSensorCard" style="padding:14px 16px;text-align:center;background:rgba(255,165,0,0.05);border-color:rgba(255,165,0,0.15);display:none;">
+                            <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Temp / Hum</div>
+                            <div id="distVitalTemp" style="font-size:1.9em;font-weight:700;color:#ffa500;font-variant-numeric:tabular-nums;">—</div>
+                            <div id="distVitalHum" style="font-size:0.68em;color:#aaa;margin-top:2px;">—</div>
                         </div>
                     </div>
 
@@ -3666,6 +3671,7 @@
             const mem = m.memory || {};
             const dsk = m.disk || {};
             const net = m.network || {};
+            const sen = m.sensor || {};
             const thr = t || {};
 
             // Vitals strip — big numbers
@@ -3738,6 +3744,24 @@
             if (ndot) ndot.style.background = net.ping_success ? '#00ff88' : '#ff4444';
             _setText('distNetSent', net.bytes_sent_mb != null ? net.bytes_sent_mb.toFixed(1) + ' MB' : '—');
             _setText('distNetRecv', net.bytes_recv_mb != null ? net.bytes_recv_mb.toFixed(1) + ' MB' : '—');
+
+            // AHT20 sensor tile — only shown when device has sensor data
+            const tempC = sen.temperature_c;
+            const humPct = sen.humidity_pct;
+            const sensorCard = document.getElementById('distVitalSensorCard');
+            if (sensorCard) {
+                if (tempC != null || humPct != null) {
+                    sensorCard.style.display = '';
+                    const tempEl = document.getElementById('distVitalTemp');
+                    if (tempEl) {
+                        tempEl.textContent = tempC != null ? tempC.toFixed(1) + '°C' : '—';
+                        tempEl.style.color = tempC != null && tempC > 35 ? '#ff6b6b' : '#ffa500';
+                    }
+                    _setText('distVitalHum', humPct != null ? humPct.toFixed(1) + '% RH' : '—');
+                } else {
+                    sensorCard.style.display = 'none';
+                }
+            }
         }
 
         async function updateDistributed() {

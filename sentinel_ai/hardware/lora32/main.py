@@ -131,44 +131,95 @@ def lora_init():
 
 # ── Sensors ───────────────────────────────────────────────────────────────────
 _i2c_sensor = None
+_AHT20_ADDR = 0x38
+_sensor_init_attempts = 0
 
 def _init_sensors():
-    global _i2c_sensor
+    """
+    Initialise AHT20 on configured I2C pins.
+    Prints full I2C scan so wiring faults are visible on serial.
+    Called at boot AND retried from collect_metrics() if sensor not found.
+    """
+    global _i2c_sensor, _sensor_init_attempts
+    _sensor_init_attempts += 1
     try:
         from machine import Pin, SoftI2C
         i2c = SoftI2C(scl=Pin(config.AHT20_SCL), sda=Pin(config.AHT20_SDA), freq=100000)
         devs = i2c.scan()
-        if 0x38 not in devs:
-            print("[sensor] AHT20 not found on I2C bus (SDA={} SCL={})".format(
-                  config.AHT20_SDA, config.AHT20_SCL))
-            return
-        # Soft reset + calibrate
-        i2c.writeto(0x38, bytes([0xBA]))
-        utime.sleep_ms(20)
-        i2c.writeto(0x38, bytes([0xBE, 0x08, 0x00]))
-        utime.sleep_ms(10)
+        print("[sensor] I2C scan SDA={} SCL={}: {}".format(
+              config.AHT20_SDA, config.AHT20_SCL,
+              [hex(d) for d in devs]))
+
+        if _AHT20_ADDR not in devs:
+            print("[sensor] AHT20 (0x38) not found — check wiring")
+            return False
+
+        # Power-on delay then soft reset
+        utime.sleep_ms(40)
+        i2c.writeto(_AHT20_ADDR, bytes([0xBA]))   # soft reset
+        utime.sleep_ms(40)
+
+        # Check calibration status bit (bit 3 of status byte)
+        status = i2c.readfrom(_AHT20_ADDR, 1)[0]
+        if not (status & 0x08):
+            # Not calibrated — send init/calibrate command
+            i2c.writeto(_AHT20_ADDR, bytes([0xBE, 0x08, 0x00]))
+            utime.sleep_ms(20)
+            status = i2c.readfrom(_AHT20_ADDR, 1)[0]
+
+        if not (status & 0x08):
+            print("[sensor] AHT20 calibration failed (status=0x{:02X})".format(status))
+            return False
+
         _i2c_sensor = i2c
-        print("[sensor] AHT20 ready on SDA={} SCL={}".format(
-              config.AHT20_SDA, config.AHT20_SCL))
+        print("[sensor] AHT20 ready on SDA={} SCL={} (status=0x{:02X})".format(
+              config.AHT20_SDA, config.AHT20_SCL, status))
+        return True
+
     except Exception as e:
         print("[sensor] AHT20 init failed:", e)
+        return False
 
 def _read_dht():
+    global _i2c_sensor
+    # Auto-retry init if sensor was never found (up to once per call)
     if _i2c_sensor is None:
-        return None, None
+        if not _init_sensors():
+            return None, None
     try:
-        _i2c_sensor.writeto(0x38, bytes([0xAC, 0x33, 0x00]))
+        # Trigger measurement
+        _i2c_sensor.writeto(_AHT20_ADDR, bytes([0xAC, 0x33, 0x00]))
         utime.sleep_ms(80)
+        # Wait for busy bit to clear (max 100ms extra)
         for _ in range(10):
-            d = _i2c_sensor.readfrom(0x38, 1)
+            d = _i2c_sensor.readfrom(_AHT20_ADDR, 1)
             if not (d[0] & 0x80):
                 break
             utime.sleep_ms(10)
-        d = _i2c_sensor.readfrom(0x38, 7)
-        h = ((d[1] << 12) | (d[2] << 4) | (d[3] >> 4)) / 2**20 * 100
-        t = ((d[3] & 0x0F) << 16 | (d[4] << 8) | d[5]) / 2**20 * 200 - 50
-        return round(t, 1), round(h, 1)
-    except Exception:
+        else:
+            print("[sensor] AHT20 busy timeout")
+            return None, None
+
+        # Read 7 bytes: status + 3 humidity + 3 temperature (last is CRC)
+        d = _i2c_sensor.readfrom(_AHT20_ADDR, 7)
+        if d[0] & 0x80:   # still busy — discard
+            return None, None
+
+        raw_h = (d[1] << 12) | (d[2] << 4) | (d[3] >> 4)
+        raw_t = ((d[3] & 0x0F) << 16) | (d[4] << 8) | d[5]
+        humidity = raw_h / (1 << 20) * 100.0
+        temp     = raw_t / (1 << 20) * 200.0 - 50.0
+
+        # Sanity check — discard obviously wrong readings
+        if not (-10 <= temp <= 85) or not (0 <= humidity <= 100):
+            print("[sensor] AHT20 out-of-range: T={} H={}".format(temp, humidity))
+            return None, None
+
+        return round(temp, 1), round(humidity, 1)
+
+    except Exception as e:
+        print("[sensor] AHT20 read error:", e)
+        _i2c_sensor = None   # force re-init on next call
         return None, None
 
 def _read_voltage():
