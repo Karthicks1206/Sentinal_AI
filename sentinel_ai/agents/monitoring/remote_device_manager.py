@@ -31,6 +31,7 @@ class RemoteDevice:
         self.status = 'connected'
         self.cmd_port = info.get('cmd_port', 5002)
         self.remote_addr = info.get('_remote_addr', '')
+        self.is_local = info.get('_is_local', False)
 
 
     def record_push(self, metrics: dict):
@@ -63,6 +64,7 @@ class RemoteDevice:
             'age_seconds': round(self.age_seconds, 1),
             'cmd_port': self.cmd_port,
             '_remote_addr': self.remote_addr,
+            'is_local': self.is_local,
         }
 
 
@@ -111,6 +113,42 @@ class RemoteDeviceManager:
                 f"({info.get('hostname', '?')} / {info.get('platform', '?')})"
             )
         return True
+
+    def register_local_device(self, device_id: str, info: dict) -> None:
+        """Register the hub's own local device so it appears in /api/devices.
+
+        Unlike push_metrics, this does NOT publish an event — the MonitoringAgent
+        already publishes health.metric events for local data.  We just track the
+        device record so /api/devices includes the local machine.
+        """
+        import platform as _platform
+        import sys as _sys
+        local_info = {
+            'hostname': _platform.node(),
+            'platform': _platform.system() + '-' + _platform.machine(),
+            'version': _platform.version(),
+            'python': _sys.version.split()[0],
+            '_is_local': True,
+        }
+        local_info.update(info)
+        with self._lock:
+            is_new = device_id not in self._devices
+            self._devices[device_id] = RemoteDevice(device_id, local_info)
+            self.logger.info(
+                f"Local device {'registered' if is_new else 're-registered'}: {device_id} "
+                f"({local_info.get('hostname')} / {local_info.get('platform')})"
+            )
+
+    def observe_local_metric(self, device_id: str, metrics: dict) -> None:
+        """Update the local device record when a health.metric event arrives.
+
+        This does NOT publish a new event — it only updates last_seen / last_metrics
+        so the device shows as 'connected' in /api/devices.
+        """
+        with self._lock:
+            device = self._devices.get(device_id)
+            if device and device.is_local:
+                device.record_push(metrics)
 
     def push_metrics(self, device_id: str, timestamp: str, metrics: dict) -> bool:
         """

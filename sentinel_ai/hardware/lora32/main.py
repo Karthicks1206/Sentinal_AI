@@ -183,6 +183,38 @@ def _read_voltage():
         return None
 
 
+# ── CPU stress simulation ──────────────────────────────────────────────────────
+_stress_until = 0   # utime.time() value when stress ends
+
+def check_serial_commands():
+    """Non-blocking read of USB stdin for bridge→firmware commands.
+
+    Supported commands (sent as a single newline-terminated line):
+      CMD:cpu_stress:<seconds>   — simulate CPU spike for N seconds
+      CMD:stop_stress            — cancel any active stress
+    """
+    global _stress_until
+    try:
+        import sys as _sys
+        import uselect as _sel
+        p = _sel.poll()
+        p.register(_sys.stdin, _sel.POLLIN)
+        if p.poll(0):                        # 0 ms → non-blocking
+            line = _sys.stdin.readline().strip()
+            if line.startswith("CMD:cpu_stress:"):
+                try:
+                    dur = int(line.split(":")[2])
+                    _stress_until = utime.time() + dur
+                    print("[cmd] CPU stress: {}s".format(dur))
+                except Exception:
+                    pass
+            elif line.startswith("CMD:stop_stress"):
+                _stress_until = 0
+                print("[cmd] Stress stopped")
+    except Exception:
+        pass
+
+
 # ── Metrics collection ────────────────────────────────────────────────────────
 _cpu_calibration = None
 
@@ -209,9 +241,20 @@ def collect_metrics():
     temp_c, humidity = _read_dht()
     voltage = _read_voltage()
 
+    # Genuine CPU load measurement; overridden below if stress is active
+    cpu_pct = _read_cpu_load()
+    if _stress_until and utime.time() < _stress_until:
+        # Simulate high CPU by running a tight busy-loop, then report the result
+        _t0 = utime.ticks_us()
+        for _i in range(200_000):
+            pass
+        _elapsed = utime.ticks_diff(utime.ticks_us(), _t0)
+        # Also return a clearly elevated value so it registers on baseline
+        cpu_pct = min(100.0, max(85.0, round(_elapsed / 1000.0 % 15 + 85, 1)))
+
     metrics = {
         "cpu": {
-            "cpu_percent": _read_cpu_load(),
+            "cpu_percent": cpu_pct,
             "cpu_freq_mhz": machine.freq() // 1_000_000,
         },
         "memory": {
@@ -344,6 +387,8 @@ def main():
 
     while True:
         try:
+            check_serial_commands()
+
             if config.TRANSPORT == "wifi" and not _wlan.isconnected():
                 wifi_connect()
 

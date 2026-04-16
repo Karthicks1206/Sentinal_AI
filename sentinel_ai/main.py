@@ -166,6 +166,20 @@ class SentinelAI:
             self.remote_device_manager.start()
             self.logger.info(" Remote Device Manager started (listening for client connections)")
 
+            # Register the hub itself as a local device so it appears in /api/devices
+            self.remote_device_manager.register_local_device(
+                self.config.device_id,
+                {'hostname': self.config.device_id},
+            )
+
+            # Keep the local device record fresh — update last_seen on every metric event
+            _local_id = self.config.device_id
+            _rdm = self.remote_device_manager
+            def _on_local_metric(event):
+                if event.data.get('device_id', _local_id) == _local_id:
+                    _rdm.observe_local_metric(_local_id, event.data.get('metrics', {}))
+            self.event_bus.subscribe('health.metric', _on_local_metric)
+
             self.discovery_beacon.start()
             self.logger.info(" Discovery Beacon started — clients can auto-discover this hub")
 
