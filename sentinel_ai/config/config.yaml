@@ -125,7 +125,7 @@ recovery:
   auto_recovery: true
   max_retries: 3
   retry_delay_seconds: 5
-  cooldown_period_seconds: 300
+  cooldown_period_seconds: 20   # 20s — fast enough to re-fire during tests
 
   # Graduated escalation: window (minutes) for counting repeated incidents
   escalation_window_minutes: 30

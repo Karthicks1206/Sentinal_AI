@@ -1,531 +1,141 @@
-# Sentinel AI - System Architecture
+# Sentinel AI — System Architecture
 
 ## Overview
 
-Sentinel AI is a distributed, multi-agent system designed for autonomous monitoring, anomaly detection, diagnosis, and recovery of IoT infrastructure. The architecture combines edge computing with cloud services to achieve real-time self-healing at scale.
+Sentinel AI is a four-layer distributed system: physical IoT sensors feed into a Raspberry Pi gateway, which streams to an AI hub running a multi-agent pipeline, all visualised through a real-time web dashboard.
 
-## Design Principles
+---
 
-1. **Loose Coupling**: Agents communicate through events, not direct calls
-2. **Scalability**: Designed to run on resource-constrained devices (Raspberry Pi)
-3. **Resilience**: Self-healing capabilities at multiple levels
-4. **Modularity**: Each agent is independent and replaceable
-5. **Observability**: Comprehensive logging and metrics
-6. **Adaptability**: Learning from incidents to improve over time
+## Layer 1 — Sensing & Actuation
 
-## System Components
+Physical hardware connected to the ESP32-S3 (Heltec board):
 
-### 1. Core Infrastructure
+| Sensor / Actuator | GPIO | Data |
+|-------------------|------|------|
+| Soil Moisture (capacitive) | 4 (ADC) | Raw ADC count, moisture % |
+| Voltage Sensor Module | 5 (ADC) | Pump supply voltage (V) |
+| Relay Module IN | 6 (OUT) | Pump ON / OFF |
+| 5V Water Pump | via Relay NO | Irrigation actuation |
 
-#### Event Bus
-**Purpose**: Internal publish-subscribe messaging system
+**ESP32 Firmware** (`hardware/raspberry_pi/esp32_main_v3.py`):
+- MicroPython asyncio — two concurrent tasks: `sensor_task` (reads + outputs every 2s) and `cmd_task` (awaits serial commands)
+- Autonomous irrigation: soil < 40% → relay HIGH → pump ON
+- Manual override via `PUMP:ON` / `PUMP:OFF` serial commands (5-minute window)
+- Outputs human-readable labeled lines over USB serial at 115200 baud
 
-**Implementation**: In-memory with thread-safe operations
-- Supports synchronous and asynchronous event handlers
-- Priority-based event routing
-- Event buffering for persistence/replay
-- Retry logic for failed handlers
+---
 
-**Event Types**:
-- `health.metric`: Health monitoring data
-- `anomaly.detected`: Anomaly detection results
-- `diagnosis.complete`: Diagnosis results with recommended actions
-- `recovery.action`: Recovery action execution results
-- `learning.updated`: Learning/adaptation updates
+## Layer 2 — Gateway (Raspberry Pi 5)
 
-**Why Event Bus?**
-- Decouples agents from each other
-- Enables dynamic subscription at runtime
-- Provides audit trail of all system events
-- Allows easy integration of new agents
+**`sentinel_client.py`** runs on the Pi as a systemd user service.
 
-#### Configuration Manager
-**Purpose**: Centralized configuration with environment variable support
+Responsibilities:
+- Opens `/dev/ttyUSB0` at 115200 baud and parses ESP32 output in a background thread
+- Collects Pi system metrics (CPU, memory, disk, network) via psutil every 5s
+- Merges IoT sensor data into the metrics payload
+- HTTP POSTs to hub `/api/metrics/push` every 5s
+- Polls hub `/api/devices/<id>/commands` for recovery actions to execute locally
+- Executes actions: renice, kill, sync, purge, DNS flush, `PUMP:ON`/`PUMP:OFF` serial commands
 
-**Features**:
-- YAML-based configuration
-- Environment variable substitution (`${VAR:-default}`)
-- Dot-notation access (`config.get('monitoring.interval')`)
-- Runtime reloading
-- Validation and error handling
+The sentinel_client sends commands to the ESP32 **twice** with a 600ms gap to ensure the asyncio reader catches them.
 
-**Configuration Hierarchy**:
+---
+
+## Layer 3 — Hub Multi-Agent Pipeline
+
+All agents communicate through `core/event_bus.py` (in-memory pub/sub).
+
+### MonitoringAgent
+- Collects local metrics every 5s, publishes `health.metric` events
+- `RemoteDeviceManager` — accepts pushes from remote clients, injects into event bus with `device_id`
+
+### AnomalyDetectionAgent
+Three detection layers running concurrently:
+
+1. **Adaptive Z-score** — per-metric adaptive baselines with EMA drift detection; hysteresis prevents oscillation; baseline frozen during anomalies
+2. **Isolation Forest** (sklearn) — multivariate point-in-time detection, fires as `ml_isolation_forest`
+3. **Keras LSTM Autoencoder** (PyTorch backend) — trains after 60+ sequences (~6.5 min), detects time-series patterns
+
+Anomaly gate: Groq validates before pipeline entry to filter false positives.
+
+### DiagnosisAgent
+Runs in a background thread (non-blocking). Priority:
+1. Groq API — `llama-3.3-70b-versatile` (fast cloud inference)
+2. Ollama — `llama3.2:3b` (local, air-gapped fallback)
+3. Rule-based — 14 rules in `config/diagnosis_rules.yaml` (always available)
+
+Publishes `diagnosis.complete` with root cause, severity, and recommended actions.
+
+### RecoveryAgent
+- Consumes `diagnosis.complete` events
+- **Graduated escalation** L1 (gentle) → L4 (critical) tracked per metric category
+- **Algorithmic Engine** (`agents/recovery/algorithmic_engine.py`):
+  - Profiles root cause: `COMPUTE_BOUND` / `IO_WAIT_BOUND` / `MEMORY_THRASH` / `TRANSIENT_SPIKE` / `MULTI_PROCESS`
+  - Applies targeted algorithm (renice, ionice, cache drop, OOM adjustment)
+- Remote actions queued for Pi/other devices to execute
+- **Zero-skip policy**: algorithmic fixes are cooldown-exempt; all other skips escalate to an alternative action
+- 30-second outcome verification; re-escalates if metric not recovered
+
+### LearningAgent
+Observes resolved incidents and adjusts detection thresholds over time.
+
+### SecurityAgent
+Demo/stub mode — scans open ports, connections, privileged processes. 4% chance of synthetic threat per scan for demo visibility.
+
+---
+
+## Layer 4 — Dashboard
+
+Flask app (`dashboard/app.py`) on port 5001.
+
+**Local Device tab** — hub machine metrics, power card, simulation lab, incident timeline, activity log, ML anomaly feeds.
+
+**Distributed Devices & IoT Nodes tab** — device selector sidebar, per-device metrics, IoT Sensors card, agent pipeline status, remote simulation controls, anomaly/diagnosis/recovery feeds.
+
+**IoT Sensors card** (`distIotSensorCard`) — always visible for distributed devices, populated by `updateIotCard()` which polls `/api/devices/<id>/metrics` independently every 2 seconds.
+
+---
+
+## Event Flow
+
 ```
-config.yaml
-  ├─ system (device ID, environment)
-  ├─ monitoring (metrics, intervals)
-  ├─ anomaly_detection (methods, thresholds)
-  ├─ diagnosis (rules, LLM settings)
-  ├─ recovery (actions, retry logic)
-  ├─ learning (persistence, adaptation)
-  └─ aws (IoT Core, CloudWatch, Bedrock)
-```
-
-#### Logging Infrastructure
-**Purpose**: Structured, production-grade logging
-
-**Features**:
-- JSON-formatted logs for machine parsing
-- Multiple handlers (console, file, CloudWatch)
-- Automatic log rotation
-- Context injection (device_id, environment)
-- Exception tracking with stack traces
-
-**Log Levels**:
-- DEBUG: Detailed diagnostic information
-- INFO: General system operation
-- WARNING: Potential issues
-- ERROR: Runtime errors
-- CRITICAL: System-critical failures
-
-#### Database Layer
-**Purpose**: Local persistence with SQLite
-
-**Tables**:
-- `incidents`: Complete incident records
-- `metrics_history`: Time-series metric data
-- `anomalies`: Detected anomalies
-- `recovery_actions`: Action execution history
-- `learning_data`: Adaptive thresholds and patterns
-
-**Features**:
-- Thread-safe operations
-- Automatic schema creation
-- Indexed queries for performance
-- Retention policy enforcement
-- Cloud sync tracking
-
-### 2. Agent Architecture
-
-#### Base Agent Class
-All agents inherit from `BaseAgent`:
-
-```python
-class BaseAgent(ABC):
-    - start(): Start agent thread
-    - stop(): Graceful shutdown
-    - _run(): Main agent loop (abstract)
-    - process_event(): Event handler (abstract)
-    - publish_event(): Publish to event bus
-```
-
-**Lifecycle**:
-1. Initialize with config, event bus, logger
-2. Subscribe to relevant events
-3. Start background thread
-4. Process events or run periodic tasks
-5. Graceful shutdown on stop signal
-
-#### MonitoringAgent
-
-**Responsibility**: Collect real-time health metrics
-
-**Architecture**:
-```
-┌─────────────────────────────┐
-│    MonitoringAgent          │
-│                             │
-│  ┌────────────────────────┐ │
-│  │  Metric Collectors     │ │
-│  │                        │ │
-│  │  - CPUCollector        │ │
-│  │  - MemoryCollector     │ │
-│  │  - DiskCollector       │ │
-│  │  - NetworkCollector    │ │
-│  │  - MQTTCollector       │ │
-│  │  - SensorCollector     │ │
-│  └────────────────────────┘ │
-│            ↓                │
-│  ┌────────────────────────┐ │
-│  │   Publish Event        │ │
-│  │   "health.metric"      │ │
-│  └────────────────────────┘ │
-└─────────────────────────────┘
+Pi push → /api/metrics/push
+    └──► RemoteDeviceManager.push_metrics()
+              └──► event_bus.create_event('health.metric', device_id=...)
+                        │
+              ┌─────────┘
+              ▼
+    AnomalyDetectionAgent._on_metric()
+    (Z-score + IsoForest + LSTM)
+              │ anomaly.detected
+              ▼
+    DiagnosisAgent._on_anomaly() [background thread]
+    (Groq → Ollama → rules)
+              │ diagnosis.complete
+              ▼
+    RecoveryAgent._on_diagnosis()
+    (algorithmic engine → execute / queue remote)
+              │ recovery.action
+              ▼
+    DashboardState._on_recovery() → activity log
 ```
 
-**Metrics Collected**:
-- **CPU**: Utilization, frequency, load average, top process
-- **Memory**: Usage, swap, top process by memory
-- **Disk**: Space utilization, I/O statistics
-- **Network**: Packet loss, latency, bandwidth
-- **MQTT**: Connection status, publish latency
-- **Sensors**: Read latency, success rate
+---
 
-**Collection Strategy**:
-- Runs every 5 seconds (configurable)
-- Non-blocking metric collection
-- Graceful degradation if collector fails
-- Store in database + publish to event bus
+## Configuration
 
-#### AnomalyDetectionAgent
+`config/config.yaml` controls all tunable parameters:
 
-**Responsibility**: Detect abnormal behavior in metrics
+```yaml
+anomaly:
+  min_consecutive_readings: 2
+  cooldown_minutes: 1
 
-**Architecture**:
+recovery:
+  cooldown_period_seconds: 20     # Algorithmic actions exempt from cooldown
+  escalation_window_minutes: 30
+  max_retries: 3
+
+monitoring:
+  interval_seconds: 5
 ```
-┌──────────────────────────────────────┐
-│    AnomalyDetectionAgent             │
-│                                      │
-│  ┌─────────────────────────────────┐│
-│  │  Statistical Methods            ││
-│  │                                 ││
-│  │  1. Threshold Detection         ││
-│  │     - Static thresholds         ││
-│  │                                 ││
-│  │  2. Z-Score Analysis            ││
-│  │     - Rolling window (N=100)    ││
-│  │     - Deviation threshold=3.0   ││
-│  │                                 ││
-│  │  3. Spike Detection             ││
-│  │     - Sudden increases (2.5x)   ││
-│  │                                 ││
-│  │  4. Rolling Baseline            ││
-│  │     - Adaptive mean/std         ││
-│  └─────────────────────────────────┘│
-│                                      │
-│  ┌─────────────────────────────────┐│
-│  │  Machine Learning               ││
-│  │                                 ││
-│  │  - Isolation Forest             ││
-│  │  - Multivariate analysis        ││
-│  │  - Auto-retraining (24h)        ││
-│  │  - Contamination: 10%           ││
-│  └─────────────────────────────────┘│
-│                                      │
-│           ↓                          │
-│  ┌─────────────────────────────────┐│
-│  │   Publish Event                 ││
-│  │   "anomaly.detected"            ││
-│  └─────────────────────────────────┘│
-└──────────────────────────────────────┘
-```
-
-**Anomaly Types**:
-- `threshold`: Exceeds static threshold
-- `statistical_zscore`: Z-score deviation > 3.0
-- `spike`: Sudden increase > 2.5x baseline
-- `ml_isolation_forest`: ML-detected multivariate anomaly
-
-**Severity Levels**:
-- `low`: Minor deviation
-- `medium`: Moderate anomaly
-- `high`: Significant issue
-- `critical`: System-threatening condition
-
-**Why Multiple Methods?**
-- **Threshold**: Fast, simple, catches obvious issues
-- **Z-Score**: Adapts to normal variation, catches statistical outliers
-- **Spike**: Detects sudden changes that might be missed by others
-- **Isolation Forest**: Finds complex, multivariate patterns
-
-#### DiagnosisAgent
-
-**Responsibility**: Determine root cause of anomalies
-
-**Architecture**:
-```
-┌────────────────────────────────────────┐
-│       DiagnosisAgent                   │
-│                                        │
-│  ┌───────────────────────────────────┐│
-│  │   Rule-Based Diagnosis            ││
-│  │                                   ││
-│  │   1. Load diagnosis_rules.yaml   ││
-│  │   2. Match conditions             ││
-│  │   3. Select best rule             ││
-│  │   4. Format diagnosis             ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   LLM-Powered Diagnosis           ││
-│  │   (AWS Bedrock)                   ││
-│  │                                   ││
-│  │   1. Build context                ││
-│  │      - Current anomaly            ││
-│  │      - Recent metrics             ││
-│  │      - Historical incidents       ││
-│  │                                   ││
-│  │   2. Construct prompt             ││
-│  │   3. Invoke AWS Bedrock LLM        ││
-│  │   4. Parse JSON response          ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   Merge & Prioritize              ││
-│  │   - Use rule if confident         ││
-│  │   - Enhance with LLM insights     ││
-│  │   - Recommend actions             ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   Publish Event                   ││
-│  │   "diagnosis.complete"            ││
-│  └───────────────────────────────────┘│
-└────────────────────────────────────────┘
-```
-
-**Diagnosis Output**:
-```json
-{
-  "diagnosis_id": "uuid",
-  "diagnosis": "High CPU caused by process X",
-  "root_cause": "Memory leak in service Y",
-  "confidence": 0.85,
-  "recommended_actions": ["kill_process", "restart_service"],
-  "severity": "high",
-  "methods_used": ["rule_based", "llm_powered"]
-}
-```
-
-**Why Hybrid Approach?**
-- **Rules**: Fast, deterministic, no API calls
-- **LLM**: Handles complex, novel scenarios
-- **Combination**: Best of both worlds
-
-#### RecoveryAgent
-
-**Responsibility**: Execute corrective actions autonomously
-
-**Architecture**:
-```
-┌────────────────────────────────────────┐
-│       RecoveryAgent                    │
-│                                        │
-│  ┌───────────────────────────────────┐│
-│  │   Action Dispatcher               ││
-│  │                                   ││
-│  │   1. Check if action enabled      ││
-│  │   2. Verify cooldown              ││
-│  │   3. Execute with retry (3x)      ││
-│  │   4. Log result                   ││
-│  │   5. Set cooldown (5min)          ││
-│  └───────────────────────────────────┘│
-│                                        │
-│  ┌───────────────────────────────────┐│
-│  │   Available Actions               ││
-│  │                                   ││
-│  │   - restart_mqtt                  ││
-│  │   - kill_process                  ││
-│  │   - reconnect_sensor              ││
-│  │   - failover                      ││
-│  │   - clear_cache                   ││
-│  │   - restart_service               ││
-│  │   - check_network                 ││
-│  │   - full_system_restart           ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   Publish Event                   ││
-│  │   "recovery.action"               ││
-│  └───────────────────────────────────┘│
-└────────────────────────────────────────┘
-```
-
-**Retry Logic**:
-```python
-for attempt in range(1, max_retries + 1):
-    result = execute_action()
-    if result.success:
-        return success
-    sleep(retry_delay)
-return failure
-```
-
-**Safety Mechanisms**:
-- Cooldown periods prevent loops
-- Action whitelisting
-- Critical process protection
-- Execution timeouts
-- Comprehensive logging
-
-#### LearningAgent
-
-**Responsibility**: Learn from incidents and adapt
-
-**Architecture**:
-```
-┌────────────────────────────────────────┐
-│       LearningAgent                    │
-│                                        │
-│  ┌───────────────────────────────────┐│
-│  │   Local Persistence               ││
-│  │   (SQLite)                        ││
-│  │                                   ││
-│  │   - Store all incidents           ││
-│  │   - Track recovery results        ││
-│  │   - Maintain metrics history      ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   Cloud Sync                      ││
-│  │                                   ││
-│  │   - DynamoDB (incidents)          ││
-│  │   - S3 (logs, archives)           ││
-│  │   - Sync every 15 min             ││
-│  └───────────────────────────────────┘│
-│                ↓                       │
-│  ┌───────────────────────────────────┐│
-│  │   Adaptive Learning               ││
-│  │                                   ││
-│  │   1. Threshold Adjustment         ││
-│  │      - Reduce false positives     ││
-│  │      - Increase sensitivity       ││
-│  │                                   ││
-│  │   2. Strategy Refinement          ││
-│  │      - Track success rates        ││
-│  │      - Optimize action selection  ││
-│  └───────────────────────────────────┘│
-└────────────────────────────────────────┘
-```
-
-**Learning Mechanisms**:
-
-1. **Threshold Adjustment**:
-   - If many low-severity incidents: increase threshold 5%
-   - If many critical incidents: decrease threshold 5%
-   - Store adjustments in database
-   - Apply globally to anomaly detection
-
-2. **Strategy Refinement**:
-   - Track success rate per action type
-   - Recommend more successful actions
-   - Flag low-performing actions
-
-### 3. AWS Cloud Integration
-
-#### IoT Core Integration
-```
-Edge Device                  AWS IoT Core
-    │                              │
-    ├─ Telemetry ───────────────→ │
-    ├─ Anomalies ───────────────→ │
-    ├─ Recovery ────────────────→ │
-    │                              │
-    │ ←──────────── Policy ────────┤
-```
-
-**Topics**:
-- `sentinel/telemetry/{device_id}`: Health metrics
-- `sentinel/anomalies/{device_id}`: Detected anomalies
-- `sentinel/recovery/{device_id}`: Recovery actions
-- `sentinel/policy/{device_id}`: Configuration updates
-
-#### CloudWatch Integration
-- Publishes metrics in batches
-- Custom namespace: `SentinelAI`
-- Dimensions: `DeviceId`
-- Enables fleet-wide dashboards
-
-#### Bedrock Integration
-- Model: `anthropic.claude-3-sonnet-20240229-v1:0`
-- Use case: Advanced root cause analysis
-- Fallback: Rule-based diagnosis if unavailable
-
-## Data Flow
-
-### Normal Operation
-```
-1. MonitoringAgent collects metrics
-   ↓
-2. Publishes "health.metric" event
-   ↓
-3. AnomalyDetectionAgent receives event
-   ↓
-4. If anomaly detected:
-   - Publishes "anomaly.detected" event
-   ↓
-5. DiagnosisAgent receives anomaly
-   - Runs rule-based diagnosis
-   - Optionally queries LLM
-   - Publishes "diagnosis.complete"
-   ↓
-6. RecoveryAgent receives diagnosis
-   - Executes recommended actions
-   - Publishes "recovery.action"
-   ↓
-7. LearningAgent stores incident
-   - Saves to SQLite
-   - Syncs to cloud
-   - Adapts thresholds
-```
-
-## Scalability
-
-### Edge Scalability
-- Lightweight: Runs on Raspberry Pi 1GB RAM
-- Efficient: 5-10% CPU, 100-200MB memory
-- Local-first: Works offline, syncs when online
-
-### Cloud Scalability
-```
-100+ Devices
-     ↓
-AWS IoT Core (handles millions of devices)
-     ↓
-Lambda Orchestrator (auto-scales)
-     ↓
-DynamoDB (pay-per-request)
-     ↓
-S3 (unlimited storage)
-     ↓
-CloudWatch (aggregated metrics)
-```
-
-## Performance
-
-### Latency
-- Metric collection: <100ms
-- Anomaly detection: <500ms
-- Diagnosis (rule-based): <200ms
-- Diagnosis (LLM): 2-5 seconds
-- Recovery action: 1-30 seconds
-
-### Throughput
-- 1 device: 200 metrics/second
-- 100 devices: 20,000 metrics/second (cloud)
-
-### Resource Usage (Per Device)
-- CPU: 5-10%
-- Memory: 100-200MB
-- Disk: ~100MB/day (with retention)
-- Network: ~10 KB/s
-
-## Security
-
-### Edge Security
-- No hardcoded credentials
-- Certificate-based auth (AWS IoT)
-- Encrypted storage (optional)
-- Minimal attack surface
-
-### Cloud Security
-- TLS 1.2+ for all communication
-- IAM roles with least privilege
-- VPC isolation (optional)
-- CloudTrail audit logging
-
-## Resilience
-
-### Edge Resilience
-- Agents run independently
-- Event bus retries failed handlers
-- Database persistence survives restarts
-- Works offline (local-only mode)
-
-### Cloud Resilience
-- Multi-region deployment (optional)
-- DynamoDB on-demand scaling
-- S3 durability: 99.999999999%
-- IoT Core: Managed, highly available
-
-## Future Enhancements
-
-1. **Federated Learning**: Share patterns across devices
-2. **Predictive Maintenance**: Forecast failures before they occur
-3. **Fleet Coordination**: Cross-device anomaly correlation
-4. **Custom ML Models**: Train device-specific models
-5. **Edge ML**: Run models locally (TensorFlow Lite)
-
-## Conclusion
-
-Sentinel AI's architecture balances edge autonomy with cloud coordination, providing a scalable, resilient, and adaptive self-healing system for IoT infrastructure. The multi-agent design ensures modularity and maintainability, while the learning capabilities enable continuous improvement over time.

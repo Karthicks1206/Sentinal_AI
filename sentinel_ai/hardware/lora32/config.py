@@ -3,8 +3,8 @@
 # Flash this file to the device alongside main.py and boot.py
 
 # ── WiFi credentials ──────────────────────────────────────────────────────────
-WIFI_SSID = "YOUR_WIFI_SSID"
-WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"
+WIFI_SSID = "A2B"
+WIFI_PASSWORD = "3159boys*"
 
 # Sentinel AI hub address (LAN IP of Pi #1 running main.py)
 HUB_URL = "http://192.168.1.100:5001"
@@ -52,4 +52,4 @@ VOLTAGE_PIN = 7       # ADC pin for voltage reading
 # "wifi"   — HTTP POST directly to hub (recommended, no extra hardware)
 # "serial" — send JSON over USB serial → Pi reads and forwards to hub
 # "lora"   — LoRa radio → needs Adafruit LoRa/second LoRa receiver on Pi side
-TRANSPORT = "wifi"
+TRANSPORT = "serial"

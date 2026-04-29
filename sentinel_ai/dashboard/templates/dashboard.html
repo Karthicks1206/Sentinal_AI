@@ -1531,7 +1531,7 @@
         </div>
         <div class="tab-bar">
             <button class="tab-btn active" id="tabBtnLocal" onclick="switchTab('local')">Local Device</button>
-            <button class="tab-btn" id="tabBtnDistributed" onclick="switchTab('distributed')">Distributed Devices</button>
+            <button class="tab-btn" id="tabBtnDistributed" onclick="switchTab('distributed')">Distributed Devices &amp; IoT Nodes</button>
         </div>
     </div>
 
@@ -1908,7 +1908,7 @@
 
             
             <div class="dist-sidebar">
-                <div class="dist-sidebar-title">Connected Devices</div>
+                <div class="dist-sidebar-title">Connected Devices &amp; IoT Nodes</div>
                 <div id="distDeviceList">
                     <div class="dist-no-devices">
                         <div class="nd-icon">--</div>
@@ -1971,6 +1971,63 @@
                             <div style="font-size:0.65em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Temp / Hum</div>
                             <div id="distVitalTemp" style="font-size:1.9em;font-weight:700;color:#ffa500;font-variant-numeric:tabular-nums;">—</div>
                             <div id="distVitalHum" style="font-size:0.68em;color:#aaa;margin-top:2px;">—</div>
+                        </div>
+                    </div>
+
+                    <!-- IoT Sensor card — always visible for distributed devices -->
+                    <div class="card" id="distIotSensorCard" style="margin-bottom:16px;background:rgba(0,200,100,0.04);border-color:rgba(0,200,100,0.2);">
+                        <h2 style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                            🌱 IoT Sensors — ESP32
+                            <span style="font-size:0.62em;padding:2px 8px;border-radius:10px;background:rgba(0,200,100,0.15);border:1px solid rgba(0,200,100,0.3);color:#00c864;font-weight:600;">LIVE</span>
+                        </h2>
+                        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+                            <div style="text-align:center;background:rgba(0,200,100,0.06);border-radius:8px;padding:12px 6px;">
+                                <div style="font-size:0.63em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Soil Moisture</div>
+                                <div id="distIotSoilMoisture" style="font-size:1.9em;font-weight:700;color:#00c864;font-variant-numeric:tabular-nums;">—</div>
+                                <div id="distIotSoilStatus" style="font-size:0.7em;color:#aaa;margin-top:4px;">—</div>
+                            </div>
+                            <div style="text-align:center;background:rgba(255,217,61,0.06);border-radius:8px;padding:12px 6px;">
+                                <div style="font-size:0.63em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Pump Voltage</div>
+                                <div id="distIotPumpVoltage" style="font-size:1.9em;font-weight:700;color:#ffd93d;font-variant-numeric:tabular-nums;">—</div>
+                                <div style="font-size:0.7em;color:#666;margin-top:4px;">Supply V</div>
+                            </div>
+                            <div style="text-align:center;background:rgba(0,212,255,0.06);border-radius:8px;padding:12px 6px;">
+                                <div style="font-size:0.63em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Relay / Pump</div>
+                                <div id="distIotPumpStatus" style="font-size:1.9em;font-weight:700;color:#888;font-variant-numeric:tabular-nums;">—</div>
+                                <div style="font-size:0.7em;color:#666;margin-top:4px;">Motor State</div>
+                            </div>
+                            <div style="text-align:center;background:rgba(168,85,247,0.06);border-radius:8px;padding:12px 6px;">
+                                <div style="font-size:0.63em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Soil ADC</div>
+                                <div id="distIotSoilRaw" style="font-size:1.9em;font-weight:700;color:#a855f7;font-variant-numeric:tabular-nums;">—</div>
+                                <div style="font-size:0.7em;color:#666;margin-top:4px;">Raw Count</div>
+                            </div>
+                            <div style="text-align:center;background:rgba(255,107,107,0.06);border-radius:8px;padding:12px 6px;">
+                                <div style="font-size:0.63em;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Soil Health</div>
+                                <div id="distIotSoilHealth" style="font-size:1.3em;font-weight:700;color:#00c864;margin-top:6px;">—</div>
+                                <div style="font-size:0.7em;color:#666;margin-top:4px;">Status</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:12px;">
+                            <div style="display:flex;justify-content:space-between;font-size:0.71em;color:#666;margin-bottom:5px;">
+                                <span>Soil Moisture Level</span>
+                                <span id="distIotSoilPct2" style="color:#aaa;">—</span>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.06);border-radius:4px;height:10px;overflow:hidden;">
+                                <div id="distIotSoilBar" style="height:100%;width:0%;background:linear-gradient(90deg,#ff4444,#ffd93d 40%,#00c864 80%);border-radius:4px;transition:width 0.6s ease;"></div>
+                            </div>
+                        </div>
+                        <!-- Pump control -->
+                        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:12px;">
+                            <span style="font-size:0.75em;color:#888;flex:1;">Manual Pump Control</span>
+                            <button id="iotPumpOnBtn" onclick="iotPumpControl('pump_on')"
+                                style="padding:7px 20px;background:rgba(0,255,136,0.12);border:1px solid rgba(0,255,136,0.35);color:#00ff88;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:700;">
+                                ▶ ON
+                            </button>
+                            <button id="iotPumpOffBtn" onclick="iotPumpControl('pump_off')"
+                                style="padding:7px 20px;background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.35);color:#ff6b6b;border-radius:6px;cursor:pointer;font-size:0.82em;font-weight:700;">
+                                ■ OFF
+                            </button>
+                            <span id="iotPumpCmdStatus" style="font-size:0.72em;color:#666;"></span>
                         </div>
                     </div>
 
@@ -3349,12 +3406,25 @@
                 const ageStr = age < 60 ? `${Math.round(age)}s ago`
                              : age < 3600 ? `${Math.round(age/60)}m ago`
                              : `${Math.round(age/3600)}h ago`;
+                const tempC = m.sensor?.temperature_c;
+                const humPct = m.sensor?.humidity_pct;
+                const rssi = m.network?.wifi_rssi_dbm;
+                const voltage = m.power?.power_voltage_v;
+                const isIot = tempC != null || humPct != null || rssi != null || (d.platform || '').toLowerCase().includes('micropython');
+                const iotSensorSection = isIot ? `
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,165,0,0.15);display:flex;flex-wrap:wrap;gap:6px;font-size:0.75em;">
+                        <span style="color:#888;font-size:0.85em;width:100%;text-transform:uppercase;letter-spacing:.07em;">IoT Sensors</span>
+                        ${tempC != null ? `<span style="background:rgba(255,165,0,0.1);border:1px solid rgba(255,165,0,0.25);padding:2px 7px;border-radius:8px;">🌡️ <b style="color:#ffa500">${tempC.toFixed(1)}°C</b></span>` : ''}
+                        ${humPct != null ? `<span style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);padding:2px 7px;border-radius:8px;">💧 <b style="color:#00d4ff">${humPct.toFixed(0)}% RH</b></span>` : ''}
+                        ${voltage != null ? `<span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);padding:2px 7px;border-radius:8px;">⚡ <b style="color:#00ff88">${voltage.toFixed(2)}V</b></span>` : ''}
+                        ${rssi != null ? `<span style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);padding:2px 7px;border-radius:8px;">📶 <b style="color:#a855f7">${rssi} dBm</b></span>` : ''}
+                    </div>` : '';
 
                 return `
                 <div class="device-card status-${d.status}">
                     <div class="device-header" onclick="openDeviceModal('${d.device_id}')" style="cursor:pointer">
                         <div class="device-dot ${d.status}"></div>
-                        <div class="device-name" title="${d.device_id}">${d.device_id}</div>
+                        <div class="device-name" title="${d.device_id}">${d.device_id}${isIot ? ' <span style="font-size:0.6em;padding:1px 5px;border-radius:7px;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.3);color:#ffa500;vertical-align:middle;">IoT</span>' : ''}</div>
                         <div class="device-platform">${d.platform || '?'}</div>
                     </div>
                     <div class="device-bars">
@@ -3362,6 +3432,7 @@
                         ${deviceBar('MEM', mem, 'mem')}
                         ${deviceBar('DISK', dsk, 'disk')}
                     </div>
+                    ${iotSensorSection}
                     <div class="device-footer">
                         <span class="device-status-text ${d.status}">${d.status.toUpperCase()}</span>
                         <span>Updated ${ageStr}</span>
@@ -3590,10 +3661,24 @@
                 const cpu = d.metrics?.cpu?.cpu_percent ?? 0;
                 const mem = d.metrics?.memory?.memory_percent ?? 0;
                 const disk = d.metrics?.disk?.disk_percent ?? 0;
+                const tempC = d.metrics?.sensor?.temperature_c;
+                const humPct = d.metrics?.sensor?.humidity_pct;
+                const rssi = d.metrics?.network?.wifi_rssi_dbm;
+                const isIot = tempC != null || humPct != null || rssi != null || (d.platform || '').toLowerCase().includes('micropython');
+                const iotBadge = isIot ? `<span style="font-size:0.7em;padding:1px 5px;border-radius:8px;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.3);color:#ffa500;margin-left:4px;">IoT</span>` : '';
+                const soilMoisture = d.metrics?.sensor?.soil_moisture_pct;
+                const soilStatus = d.metrics?.sensor?.soil_status;
+                const pumpStatus = d.metrics?.sensor?.pump_status;
+                const sensorRow = isIot ? `<div style="display:flex;gap:8px;font-size:0.73em;color:#aaa;margin-top:4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:4px;flex-wrap:wrap;">
+                        ${soilMoisture != null ? `<span>🌱 <b style="color:${soilMoisture < 30 ? '#ff6b6b' : soilMoisture < 60 ? '#ffd93d' : '#00c864'}">${soilMoisture.toFixed(0)}% soil</b></span>` : ''}
+                        ${pumpStatus != null ? `<span>💧 pump <b style="color:${pumpStatus === 'ON' ? '#00ff88' : '#888'}">${pumpStatus}</b></span>` : ''}
+                        ${tempC != null ? `<span>🌡️ <b style="color:#ffa500">${tempC.toFixed(1)}°C</b></span>` : ''}
+                        ${rssi != null ? `<span>📶 <b style="color:${rssi > -60 ? '#00ff88' : rssi > -75 ? '#ffd93d' : '#ff6b6b'}">${rssi}dBm</b></span>` : ''}
+                    </div>` : '';
                 return `<div class="dist-device-pill${active ? ' selected' : ''}" data-devid="${d.device_id.replace(/"/g,'&quot;')}" style="cursor:pointer;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                         <span style="width:9px;height:9px;border-radius:50%;background:${statusDot};display:inline-block;flex-shrink:0;"></span>
-                        <span style="font-weight:600;font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.device_id}">${d.device_id}</span>
+                        <span style="font-weight:600;font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.device_id}">${d.device_id}${iotBadge}</span>
                         <span style="margin-left:auto;font-size:0.75em;color:#888;">${d.platform || ''}</span>
                     </div>
                     <div style="display:flex;gap:6px;font-size:0.75em;color:#aaa;">
@@ -3601,6 +3686,7 @@
                         <span>MEM <b style="color:#ff6b6b">${mem.toFixed(0)}%</b></span>
                         <span>DISK <b style="color:#ffd93d">${disk.toFixed(0)}%</b></span>
                     </div>
+                    ${sensorRow}
                 </div>`;
             }).join('');
         }
@@ -3639,6 +3725,7 @@
 
                 const m = d.metrics || {};
                 try { _updateDistMetrics(m, window._distThresholds || {}); } catch(e) { console.error('metrics:', e); }
+                setTimeout(updateIotCard, 100);
 
                 const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
                 try {
@@ -3745,7 +3832,7 @@
             _setText('distNetSent', net.bytes_sent_mb != null ? net.bytes_sent_mb.toFixed(1) + ' MB' : '—');
             _setText('distNetRecv', net.bytes_recv_mb != null ? net.bytes_recv_mb.toFixed(1) + ' MB' : '—');
 
-            // AHT20 sensor tile — only shown when device has sensor data
+            // AHT20 vitals strip tile
             const tempC = sen.temperature_c;
             const humPct = sen.humidity_pct;
             const sensorCard = document.getElementById('distVitalSensorCard');
@@ -3762,6 +3849,8 @@
                     sensorCard.style.display = 'none';
                 }
             }
+
+            // IoT card is updated by updateIotCard() — independent poller below
         }
 
         async function updateDistributed() {
@@ -3819,6 +3908,87 @@
             if (pill) selectDistDevice(pill.dataset.devid, window._distDevices);
         });
 
+
+        // ── Pump manual control ───────────────────────────────────────────────────
+        async function iotPumpControl(action) {
+            const deviceId = selectedDistDevice;
+            if (!deviceId) return;
+            const statusEl = document.getElementById('iotPumpCmdStatus');
+            const onBtn  = document.getElementById('iotPumpOnBtn');
+            const offBtn = document.getElementById('iotPumpOffBtn');
+            if (statusEl) { statusEl.textContent = 'Sending…'; statusEl.style.color = '#aaa'; }
+            if (onBtn)  onBtn.disabled  = true;
+            if (offBtn) offBtn.disabled = true;
+            try {
+                // Send command — retry once if first attempt fails
+                let ok = false;
+                for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+                    try {
+                        const r = await fetch('/api/devices/' + encodeURIComponent(deviceId) + '/queue_command', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({action: action})
+                        });
+                        const d = r.ok ? await r.json() : {};
+                        // API returns status:'queued' or status:'sent' — both are success
+                        ok = r.ok && (d.status === 'queued' || d.status === 'sent' || d.status === 'success');
+                        if (!ok && attempt === 0) await new Promise(res => setTimeout(res, 800));
+                    } catch(e) { if (attempt === 0) await new Promise(res => setTimeout(res, 800)); }
+                }
+                if (statusEl) {
+                    statusEl.textContent = action === 'pump_on' ? '✓ Pump ON' : '✓ Pump OFF';
+                    statusEl.style.color = ok ? '#00ff88' : '#ffd93d';
+                    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000);
+                }
+                // Poll for actual state change
+                setTimeout(updateIotCard, 1500);
+                setTimeout(updateIotCard, 4000);
+                setTimeout(updateIotCard, 7000);
+            } catch(e) {
+                if (statusEl) { statusEl.textContent = 'Error — try again'; statusEl.style.color = '#ff4444'; }
+            } finally {
+                setTimeout(() => {
+                    if (onBtn)  onBtn.disabled  = false;
+                    if (offBtn) offBtn.disabled = false;
+                }, 2000);
+            }
+        }
+
+        // ── IoT sensor card poller — always runs, no show/hide logic ─────────────
+        async function updateIotCard() {
+            if (!selectedDistDevice) return;
+            let sen = {};
+            try {
+                const r = await fetch('/api/devices/' + encodeURIComponent(selectedDistDevice) + '/metrics');
+                if (r.ok) { const m = await r.json(); sen = m.sensor || {}; }
+            } catch(e) {}
+
+            const sm  = sen.soil_moisture_pct != null ? +sen.soil_moisture_pct : null;
+            const raw = sen.soil_raw_adc      != null ? +sen.soil_raw_adc      : null;
+            const st  = sen.soil_status  || null;
+            const pv  = sen.pump_voltage_v != null ? +sen.pump_voltage_v : null;
+            const ps  = sen.pump_status  || null;
+
+            const el  = id => document.getElementById(id);
+            const set = (id, v) => { const e = el(id); if (e) e.textContent = v; };
+            const col = (id, c) => { const e = el(id); if (e) e.style.color  = c; };
+
+            set('distIotSoilMoisture', sm  != null ? sm.toFixed(0)  + '%'  : '—');
+            col('distIotSoilMoisture', sm  == null ? '#555' : sm < 30 ? '#ff4444' : sm < 60 ? '#ffd93d' : '#00c864');
+            set('distIotSoilStatus',   st  || '—');
+            set('distIotSoilPct2',     sm  != null ? sm.toFixed(0) + '%'  : '—');
+            set('distIotSoilRaw',      raw != null ? raw : '—');
+            set('distIotPumpVoltage',  pv  != null ? pv.toFixed(2) + 'V'  : '—');
+            col('distIotPumpVoltage',  pv  == null ? '#555' : pv < 4.5 ? '#ff4444' : '#ffd93d');
+            set('distIotPumpStatus',   ps  || '—');
+            col('distIotPumpStatus',   ps === 'ON' ? '#00ff88' : ps === 'OFF' ? '#ff6b6b' : '#555');
+            set('distIotSoilHealth',   st  || '—');
+            col('distIotSoilHealth',   st && st.includes('WET') ? '#00c864' : st && st.includes('DRY') ? '#ff4444' : '#555');
+            const bar = el('distIotSoilBar');
+            if (bar) bar.style.width = Math.min(100, sm || 0) + '%';
+        }
+        setInterval(updateIotCard, 2000);
+        updateIotCard();
 
         setInterval(updateMetrics, 2000); // Every 2 seconds
         setInterval(updateAgentStatus, 3000); // Every 3 seconds

@@ -365,6 +365,15 @@ class DiagnosisAgent(BaseAgent):
         for k, v in anomaly.get('context', {}).items():
             recent_data.setdefault(k, v)
 
+        # Pull top-process fields directly from anomaly metrics payload so
+        # template vars like {top_process_name} always resolve on remote devices.
+        raw_metrics = anomaly.get('metrics', {})
+        for section_key, section_val in raw_metrics.items() if isinstance(raw_metrics, dict) else []:
+            if isinstance(section_val, dict):
+                for mk, mv in section_val.items():
+                    recent_data.setdefault(mk, mv)
+                    recent_data.setdefault(f"{section_key}.{mk}", mv)
+
         for rule in self.rules:
             if self._match_rule(rule, metric_name, value, recent_data, device_id):
                 diagnosis = rule.get('diagnosis', 'Unknown issue')
@@ -450,6 +459,9 @@ class DiagnosisAgent(BaseAgent):
                 else:
                     diagnosis = diagnosis.replace(placeholder, str(value))
 
+        # Replace any remaining unfilled {placeholders} with a readable fallback
+        import re as _re
+        diagnosis = _re.sub(r'\{[^}]+\}', 'N/A', diagnosis)
         return diagnosis
 
     def _check_trend(self, metric_name: str, trend_type: str, device_id: str = None) -> bool:

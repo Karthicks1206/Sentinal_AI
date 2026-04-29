@@ -1,191 +1,116 @@
 # Sentinel AI — Autonomous Self-Healing IoT Infrastructure
 
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![MicroPython](https://img.shields.io/badge/MicroPython-ESP32--S3-orange.svg)](https://micropython.org/)
 [![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Ollama%20%7C%20Isolation%20Forest-purple.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **Production-ready multi-agent AI framework for autonomous monitoring, anomaly detection, LLM-powered diagnosis, and self-healing recovery across distributed IoT edge devices.**
-
----
-
-## What is Sentinel AI?
-
-Sentinel AI is an intelligent distributed system that monitors IoT infrastructure in real-time, detects anomalies using adaptive statistical methods and machine learning, diagnoses root causes with AI assistance (Groq / Ollama), and autonomously executes recovery actions — all while learning and adapting from every incident.
+> **Multi-agent AI system for real-time monitoring, anomaly detection, LLM-powered diagnosis, and autonomous self-healing across distributed computers and physical IoT hardware — featuring a live smart irrigation node (ESP32 + Raspberry Pi 5).**
 
 ---
 
-## Quick Start (Hub Machine)
+## What It Does
 
-```bash
-cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
-kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
-source venv/bin/activate
-brew services start ollama
-python main.py
-```
-
-Dashboard: **http://localhost:5001**
-
-Or use the single script at the project root:
-
-```bash
-./run.sh
-```
-
----
-
-## Connect a Remote Device
-
-On any machine on the same network:
-
-```bash
-# Auto-connect script (recommended)
-bash connect.sh
-
-# Or manually
-pip install psutil requests
-python sentinel_client.py --hub http://<HUB_IP>:5001 --device <name>
-
-# Run connectivity diagnostics
-python sentinel_client.py --hub http://<HUB_IP>:5001 --test
-```
-
-Find your hub IP on macOS: `ipconfig getifaddr en0`
-
----
-
-## Key Capabilities
-
-### Monitoring
-- Real-time health metrics: CPU, memory, disk, network, power
-- 5-second collection intervals
-- Power monitoring: voltage, current, watts, quality score
-- Security threat scanning every 30 seconds
-- Lightweight — runs on Raspberry Pi
-
-### Anomaly Detection (Adaptive — No Hardcoded Thresholds)
-- **Adaptive IQR + Z-score**: All detection bounds learned from live data stream
-- **Isolation Forest**: Multivariate point-in-time anomaly detection
-- **LSTM Autoencoder**: Time-series sequence anomaly detection (Keras + PyTorch)
-- Baseline freeze during anomalies + hysteresis reset
-- 5-minute cooldown per metric, 2+ consecutive readings required
-- Warmup gate: anomaly alerts suppressed for first 3 minutes (baseline settling)
-
-### Intelligent Diagnosis
-- Rule-based engine (fast, deterministic)
-- **Groq llama-3.3-70b** (primary AI — free tier, fast)
-- **Ollama llama3.2:3b** (local fallback — offline capable)
-- Runs in background thread to avoid blocking the event bus
-
-### Autonomous Recovery (15+ Actions, Graduated Escalation)
-- **Level 1** — gentle: throttle CPU process, compact memory, flush DNS
-- **Level 2** — moderate: clear cache, rotate logs, reset network interface
-- **Level 3** — aggressive: kill top CPU/memory process, emergency disk cleanup
-- **Level 4** — critical: restart services
-- Outcome verification 30 seconds after each action
-- Escalation resets per metric when issue resolves
-
-### Distributed Device Monitoring
-- Connect any number of remote machines via `sentinel_client.py`
-- Per-device full panel: metrics, chart, anomaly/diagnosis/recovery feeds, incident timeline
-- Direct HTTP command push to remote devices (port 5002, <50ms) with queue fallback
-- Controlled instability (CPU spike, memory pressure, disk fill, stop) on any remote device
-- Live adaptive threshold indicators on remote device metric cards
-
-### Adaptive Learning
-- Incident persistence (SQLite)
-- Threshold optimization based on false positive rates
-- Strategy refinement based on recovery action success rates
-
-### Security Monitoring
-- Open port scanning, connection flood detection, privileged process checks
-- Demo mode: synthetic threats for visibility
-- Purple security alerts bypass warmup gate (always shown immediately)
+1. **Monitors** — collects CPU, memory, disk, network, power, and IoT sensor metrics every 5 seconds from any connected device
+2. **Detects** — finds anomalies using Z-score adaptive baselines, Isolation Forest, and a Keras LSTM autoencoder
+3. **Diagnoses** — Groq cloud LLM (llama-3.3-70b) or local Ollama (llama3.2:3b) performs root-cause analysis
+4. **Recovers** — executes 15+ targeted recovery actions (renice, kill, purge, log-rotate, remote commands) with graduated escalation
+5. **Controls IoT hardware** — soil moisture triggers autonomous pump on/off; dashboard has manual pump override buttons
 
 ---
 
 ## Architecture
 
 ```
-+----------------------------------------------------------+
-|                  Sentinel AI Hub (main.py)               |
-|                                                          |
-|  MonitoringAgent --> AnomalyAgent --> DiagnosisAgent     |
-|        |                                   |             |
-|  SecurityAgent             Groq AI / Ollama AI           |
-|        |                                   |             |
-|  RemoteDeviceManager           RecoveryAgent (L1-L4)     |
-|        |                                   |             |
-|  Event Bus (in-memory)         LearningAgent             |
-|        |                                   |             |
-|  Flask Dashboard (port 5001)   SQLite                    |
-+----------------------------------------------------------+
-          ^ HTTP POST metrics every 5s
-          | HTTP command push (port 5002) v
-+--------------------------+
-|  Remote Machines         |
-|  (sentinel_client.py)    |
-|  macOS / Linux / Windows |
-+--------------------------+
+LAYER 1 — SENSING & ACTUATION
+  Soil Moisture Sensor ──► ESP32-S3/Heltec ──USB Serial──► Raspberry Pi 5
+  Voltage Sensor       ──►    (GPIO 4,5,6)                    (gateway)
+  Relay + 5V Pump    ◄──┘
+
+LAYER 2 — GATEWAY (Raspberry Pi 5)
+  sentinel_client.py — reads ESP32 serial, streams metrics via HTTP POST
+
+LAYER 3 — HUB (Mac / Server, port 5001)
+  MonitoringAgent ──► AnomalyAgent ──► DiagnosisAgent ──► RecoveryAgent
+                                                              │
+                                                         (local + remote)
+
+LAYER 4 — DASHBOARD
+  http://localhost:5001  —  real-time UI for all devices and IoT sensors
 ```
 
 ---
 
-## Dashboard Tabs
+## Quick Start
 
-| Tab | Description |
-|-----|-------------|
-| Overview | Live gauges, agent status, real-time chart, toast notifications |
-| Incidents | Full incident timeline with diagnosis + recovery detail |
-| Simulation Lab | Trigger CPU spike, memory pressure, disk fill, power sag |
-| Distributed Devices | Per-device panels for all connected remote machines |
-| Security | Threat feed, open ports, connection stats |
+```bash
+# 1. Start hub
+cd sentinel_ai
+kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
+source venv/bin/activate && brew services start ollama
+python main.py
+# Dashboard → http://localhost:5001
 
----
+# 2. Connect Raspberry Pi (run on the Pi)
+python3 sentinel_client.py --hub http://<HUB_IP>:5001 --device raspberry-pi-ECE510
 
-## Simulation Lab
-
-Trigger scenarios from the dashboard UI or directly via API:
-
-| Scenario | API |
-|---|---|
-| CPU Spike (95%) | `POST /api/simulate/start/cpu_overload` |
-| Memory Pressure (90%) | `POST /api/simulate/start/memory_spike` |
-| Disk Fill | `POST /api/simulate/start/disk_fill` |
-| Power Sag (-0.75V) | `POST /api/simulate/start/power_sag` |
-| Stop all | `POST /api/simulate/stop` |
-
----
-
-## AI Stack
-
-| Provider | Model | Role | Cost |
-|---|---|---|---|
-| **Groq** | llama-3.3-70b-versatile | Primary AI diagnosis | Free tier |
-| **Ollama** | llama3.2:3b | Local fallback | Free (local) |
-| Isolation Forest | sklearn | Multivariate anomaly | Free (local) |
-| LSTM Autoencoder | Keras + PyTorch | Time-series anomaly | Free (local) |
-
-Configure in `config/config.yaml`.
-
----
-
-## Configuration
-
-```yaml
-# config/config.yaml
-anomaly_detection:
-  min_consecutive_readings: 2   # 2+ consecutive before alert fires
-  cooldown_minutes: 5           # per-metric cooldown after alert
-
-groq:
-  enabled: true
-  model: "llama-3.3-70b-versatile"
-
-recovery:
-  escalation_window_minutes: 30
-  max_retries: 3
+# 3. Flash ESP32 firmware (MicroPython asyncio irrigation controller)
+mpremote connect /dev/ttyUSB0 cp hardware/raspberry_pi/esp32_main_v3.py :main.py + reset
 ```
+
+---
+
+## Dashboard
+
+**Local Device tab** — hub machine metrics + simulation lab (trigger CPU/memory/power stress)
+
+**Distributed Devices & IoT Nodes tab:**
+- Sidebar shows all connected devices and IoT nodes with live readings
+- **IoT Sensors card** — soil moisture %, pump voltage, relay state, ADC raw, moisture progress bar
+- **▶ ON / ■ OFF** — manual pump buttons, 5-minute override then autonomous mode resumes
+- Agent Pipeline view — Monitor → Anomaly → Diagnosis → Recovery per device
+- Anomaly / Diagnosis / Recovery event feeds
+
+---
+
+## IoT Hardware (ECE-510 Group 3)
+
+| Component | Connection | Role |
+|-----------|-----------|------|
+| Soil Moisture Sensor | ESP32 GPIO 4 (ADC) | Measures soil water content |
+| Voltage Sensor Module | ESP32 GPIO 5 (ADC) | Monitors pump supply voltage |
+| Relay Module IN | ESP32 GPIO 6 (OUT) | Switches 5V pump circuit |
+| 5V Water Pump | Relay NO contact | Irrigation actuation |
+| Raspberry Pi 5 | USB serial (/dev/ttyUSB0) | Gateway to Sentinel AI hub |
+
+**Autonomous logic:** soil < 40% → pump ON · soil ≥ 40% → pump OFF
+**Manual override:** 5-minute window via dashboard buttons, then reverts to auto
+
+---
+
+## Self-Healing Pipeline
+
+```
+Every 5s: metric push
+    │
+    ▼ AnomalyDetectionAgent
+    ├── Adaptive Z-score (per metric, EMA drift, hysteresis)
+    ├── Isolation Forest (sklearn, multivariate)
+    └── Keras LSTM Autoencoder (sequence, PyTorch backend)
+    │
+    ▼ DiagnosisAgent (runs in background thread)
+    ├── Groq LLM — llama-3.3-70b (fast cloud, default)
+    ├── Ollama — llama3.2:3b (local, no data sent out)
+    └── Rule-based — 14 rules, instant fallback
+    │
+    ▼ RecoveryAgent
+    ├── Graduated escalation L1 → L4
+    ├── Algorithmic engine: profile → classify → targeted fix
+    ├── Remote action queue (Pi executes locally)
+    └── 30s outcome verification → re-escalate if needed
+```
+
+**Zero skips** — every recovery action either executes or escalates to an alternative. Algorithmic fixes are cooldown-exempt and always produce a real action.
 
 ---
 
@@ -193,80 +118,52 @@ recovery:
 
 ```
 sentinel_ai/
-+-- main.py                          # Master orchestrator
-+-- sentinel_client.py               # Remote device client
-+-- run.sh                           # One-command startup (project root)
-+-- connect.sh                       # Remote device auto-connect script
-+-- config/
-|   +-- config.yaml                  # Main configuration
-|   +-- diagnosis_rules.yaml         # Rule-based diagnosis rules
-+-- agents/
-|   +-- monitoring/                  # CPU/memory/disk/network/power collection
-|   |   +-- remote_device_manager.py # Manages connected remote devices
-|   +-- anomaly/                     # Adaptive IQR + z-score + ML detection
-|   |   +-- keras_lstm_detector.py   # LSTM Autoencoder
-|   +-- diagnosis/                   # Groq AI + Ollama + rule-based
-|   +-- recovery/                    # 15+ actions, graduated escalation L1-L4
-|   +-- learning/                    # SQLite persistence + threshold adaptation
-|   +-- security/                    # Threat scanning (demo mode)
-+-- dashboard/
-|   +-- app.py                       # Flask API (port 5001)
-|   +-- templates/dashboard.html     # Glassmorphism dark UI
-+-- simulation/                      # InstabilityRunner (cpu/memory/disk/power)
-+-- core/
-|   +-- event_bus.py                 # In-memory event bus connecting all agents
-+-- tests/
-|   +-- test_unit.py                 # 52-test unit suite
-+-- docs/                            # Architecture, deployment, testing guides
+├── main.py                        # Orchestrator — starts all agents + dashboard
+├── sentinel_client.py             # Remote client for Pi / laptops
+├── config/
+│   ├── config.yaml                # Thresholds, cooldowns, escalation config
+│   └── diagnosis_rules.yaml       # 14 rule-based diagnosis rules
+├── agents/
+│   ├── monitoring/                # Metric collection, remote device manager
+│   ├── anomaly/                   # Z-score + Isolation Forest + LSTM
+│   ├── diagnosis/                 # Groq / Ollama / rule-based AI
+│   ├── recovery/                  # Recovery engine + algorithmic healer
+│   ├── learning/                  # Adaptive threshold learning
+│   └── security/                  # Security threat detection (demo mode)
+├── dashboard/
+│   ├── app.py                     # Flask app (port 5001)
+│   └── templates/dashboard.html  # Full UI — local + distributed + IoT
+├── hardware/
+│   ├── lora32/                    # Heltec LoRa32 V3 MicroPython client
+│   └── raspberry_pi/              # Pi sentinel client + ESP32 firmware
+│       └── esp32_main_v3.py       # Asyncio irrigation controller (MicroPython)
+├── simulation/                    # CPU / memory / disk / power stress runners
+├── core/event_bus.py              # In-memory pub/sub event bus
+└── docs/                          # Architecture, deployment, testing guides
 ```
 
 ---
 
-## Unit Tests
+## Key API Endpoints
 
 ```bash
-cd sentinel_ai
-source venv/bin/activate
-python -m pytest tests/test_unit.py -v
-# 52 tests covering all core components
+GET  /api/metrics                           # Local hub metrics
+GET  /api/devices                           # All connected devices
+GET  /api/devices/<id>/metrics              # Device-specific metrics
+POST /api/devices/<id>/queue_command        # Send action to device
+POST /api/simulate/start/<scenario>         # cpu_spike | memory_pressure | power_sag
+POST /api/simulate/stop                     # Stop all simulations
+GET  /api/logs?limit=100                    # Activity log
+GET  /api/anomalies                         # Detected anomalies
+GET  /api/recoveries                        # Recovery actions taken
 ```
 
 ---
 
-## Deployment
+## Requirements
 
-### Raspberry Pi
-```bash
-pip3 install -r requirements.txt
-python3 main.py
-```
+**Hub:** Python 3.9+, Ollama, see `requirements.txt`
 
-### systemd service (Linux)
-```bash
-sudo cp deployment/systemd/sentinel-ai.service /etc/systemd/system/
-sudo systemctl enable sentinel-ai
-sudo systemctl start sentinel-ai
-```
+**Raspberry Pi:** `pip install psutil requests pyserial`
 
----
-
-## Security Notes
-
-- No hardcoded credentials — all secrets via environment variables (`.env`)
-- `.env` is in `.gitignore` and never committed
-- AP Isolation: if remote clients cannot connect on WiFi, disable "AP Isolation" / "Client Isolation" in router settings
-
----
-
-## Performance (Raspberry Pi 3B+)
-
-- CPU overhead: 5-10%
-- Memory: 100-200 MB
-- Metric collection latency: <100ms
-- Anomaly detection latency: <500ms
-- Recovery action: 1-30s
-- Remote command push latency: <50ms (direct) / ~1s (queue fallback)
-
----
-
-**Built for autonomous IoT infrastructure monitoring.**
+**ESP32-S3:** MicroPython v1.24+ (flash with `esptool.py`)

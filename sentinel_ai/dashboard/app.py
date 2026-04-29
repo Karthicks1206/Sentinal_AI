@@ -342,7 +342,12 @@ external_agents = {}
 @app.route('/')
 def index():
     """Render dashboard"""
-    return render_template('dashboard.html')
+    from flask import make_response
+    resp = make_response(render_template('dashboard.html'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/api/status')

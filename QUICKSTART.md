@@ -2,138 +2,99 @@
 
 ## Start the Hub (2 minutes)
 
-### Step 1 — Start the system
-
 ```bash
-cd /Users/karthi/Desktop/Sentinal_AI/sentinel_ai
+cd sentinel_ai
 kill $(lsof -ti :5001) 2>/dev/null; pkill -f "python.*main.py" 2>/dev/null
 source venv/bin/activate
 brew services start ollama
 python main.py
 ```
 
-Or from the project root:
-
-```bash
-./run.sh
-```
-
-### Step 2 — Open the dashboard
-
-```
-http://localhost:5001
-```
-
-Wait ~3 minutes for the anomaly baseline to settle (warmup gate).
+Open **http://localhost:5001**
 
 ---
 
-## Trigger a Test Anomaly
+## Connect the Raspberry Pi
 
-Use the **Simulation Lab** tab in the dashboard:
+SSH into the Pi and run:
 
-- Click **CPU Spike** to drive CPU to 95% for 60 seconds
-- Click **Memory Pressure** to hold 250 MB for 60 seconds
-- Click **Disk Fill** to write 100 MB temporarily
-- Click **Power Sag** to simulate a -0.75V voltage drop
-- Click **Stop All** to cancel any running simulation
+```bash
+python3 sentinel_client.py --hub http://<HUB_IP>:5001 --device raspberry-pi-ECE510
+```
 
-After ~10-15 seconds you will see:
-1. Metric card turns red (anomaly threshold breached)
-2. Toast notification appears top-right with severity color
-3. Diagnosis fires (rule-based + Groq AI)
-4. Recovery action executes automatically
-5. Incident appears in the Incidents tab
+Or start it permanently via systemd (auto-restarts on crash/reboot):
+
+```bash
+systemctl --user start sentinel-client
+```
+
+The Pi streams CPU, memory, disk, network, and **ESP32 IoT sensor data** (soil moisture, pump voltage, relay state) to the hub every 5 seconds.
 
 ---
 
-## Connect a Remote Device
+## View IoT Sensor Data
 
-### On the remote machine (macOS / Linux)
+1. Go to dashboard → **Distributed Devices & IoT Nodes** tab
+2. Click **raspberry-pi-ECE510** in the sidebar
+3. Scroll up to the **🌱 IoT Sensors — ESP32** card
 
-```bash
-# Copy sentinel_client.py and connect.sh to the remote machine, then:
-bash connect.sh
-```
-
-The script will:
-1. Ask for (or remember) the hub IP
-2. Install `psutil` and `requests` automatically
-3. Test connectivity before connecting
-4. Auto-reconnect if disconnected
-
-### Manual connection
-
-```bash
-pip install psutil requests
-python sentinel_client.py --hub http://<HUB_IP>:5001 --device <device-name>
-```
-
-### Find your hub IP (on the hub machine)
-
-```bash
-ipconfig getifaddr en0
-```
-
-### Test connectivity before connecting
-
-```bash
-python sentinel_client.py --hub http://<HUB_IP>:5001 --test
-```
+Readings update every 2 seconds:
+- **Soil Moisture %** — color-coded: green (wet), yellow (moderate), red (dry)
+- **Pump Voltage** — supply voltage from the external 5V PSU
+- **Relay / Pump** — ON or OFF
+- **Soil ADC Raw** — raw 12-bit ADC reading
+- **Moisture progress bar**
 
 ---
 
-## View Remote Devices
+## Control the Pump
 
-1. Open the dashboard at http://localhost:5001
-2. Click the **Distributed Devices** tab
-3. Click any device name in the left sidebar
-4. The full per-device panel opens: metrics, live chart, anomaly/diagnosis/recovery feeds, incident timeline
-5. Use **Controlled Instability** buttons to stress-test the remote device directly
+In the IoT Sensors card at the bottom:
 
----
+| Button | Action |
+|--------|--------|
+| **▶ ON** | Forces pump relay ON for 5 minutes |
+| **■ OFF** | Forces pump relay OFF for 5 minutes |
 
-## API Quick Reference
-
-```bash
-# Hub status
-curl http://localhost:5001/api/status | python3 -m json.tool
-
-# Current metrics (local device)
-curl http://localhost:5001/api/metrics | python3 -m json.tool
-
-# Connected remote devices
-curl http://localhost:5001/api/devices | python3 -m json.tool
-
-# Recent incidents
-curl http://localhost:5001/api/incidents | python3 -m json.tool
-
-# Adaptive thresholds (learned from live data)
-curl http://localhost:5001/api/thresholds | python3 -m json.tool
-```
+After the 5-minute override, the ESP32 returns to **autonomous mode**: soil < 40% → pump ON, soil ≥ 40% → pump OFF.
 
 ---
 
-## Troubleshooting
+## Run a Stress Test (Full Pipeline Demo)
 
-**Port already in use:**
 ```bash
-kill $(lsof -ti :5001)
+# Trigger CPU spike on hub machine
+curl -X POST http://localhost:5001/api/simulate/start/cpu_spike
+
+# Trigger on Pi
+curl -X POST http://localhost:5001/api/devices/raspberry-pi-ECE510/queue_command \
+  -H "Content-Type: application/json" -d '{"action":"stress_cpu"}'
+
+# Watch the pipeline fire:
+# Anomaly → AI Diagnosis → Recovery actions
+# Check: http://localhost:5001 → Activity Log
 ```
 
-**Remote client cannot connect:**
-- Check hub IP: `ipconfig getifaddr en0`
-- Use `--test` flag to diagnose
-- Disable AP/Client Isolation on your router if on WiFi
+Within 30–60 seconds you'll see:
+1. **Anomaly detected** — CPU/memory spike flagged
+2. **AI Diagnosis** — Groq LLM identifies root cause
+3. **Recovery** — algorithmic fix applied (renice, throttle, kill, purge)
 
-**No anomalies firing:**
-- Wait 3 minutes for baseline warmup
-- CPU and memory need 2 consecutive high readings to trigger
-- Run a simulation from the Simulation Lab tab
+---
 
-**Ollama not found:**
+## Power Sag Test (IoT Power Monitoring)
+
 ```bash
-brew install ollama
-brew services start ollama
-ollama pull llama3.2:3b
+curl -X POST http://localhost:5001/api/simulate/start/power_sag
+```
+
+Simulates a -0.75V voltage drop on the hub's simulated power metrics. The anomaly detector fires a **critical** power anomaly within one detection cycle.
+
+---
+
+## Stop Everything
+
+```bash
+curl -X POST http://localhost:5001/api/simulate/stop
+pkill -f "python.*main.py"
 ```
